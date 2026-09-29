@@ -65,7 +65,8 @@ const {
   handleSignalementInteraction,
 } = require("./signalements");
 const { registerSlashCommands } = require("./commands");
-const { handleLevelMessage, handleLevelCommand, startLeaderboardScheduler } = require("./levels");
+const { handleLevelMessage, handleLevelCommand } = require("./levels");
+const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
 const { setupCreditTable, handleCreditInteraction } = require("./credit");
 const { setupMissionPanel, handleMissionInteraction } = require("./missions");
@@ -513,7 +514,7 @@ client.once("ready", async () => {
   startBudgetScheduler(client);
   await setupSignalementPanel(client);
   await registerSlashCommands(client, TOKEN);
-  startLeaderboardScheduler(client);
+  await setupRichestLeaderboard(client);
   await setupShopPanel(client);
   await setupCreditTable(client);
   await setupMissionPanel(client);
@@ -531,6 +532,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (await handleLevelCommand(interaction)) return;
+  if (await handleEconomieInteraction(interaction, client)) return;
   if (await handleCreditInteraction(interaction, client)) return;
   if (await handleMissionInteraction(interaction, client)) return;
   if (await handleShopInteraction(interaction, client)) return;

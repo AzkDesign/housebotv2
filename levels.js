@@ -1,11 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const cron = require("node-cron");
 const { EmbedBuilder } = require("discord.js");
 
 const LEVEL_CHANNEL_ID = "1510693589070647416";
-const LEADERBOARD_CHANNEL_ID = "1510702663535296623";
-const LEADERBOARD_TOP = 3;
 
 const INSULT_ROLE_ID = "1510692182099624058";
 const INSULT_THRESHOLD = 3;
@@ -158,129 +155,6 @@ function buildProgressEmbed(member, userData, guild) {
   return embed;
 }
 
-const RANK_MEDALS = ["🥇", "🥈", "🥉"];
-
-function getSortedLeaderboard(state) {
-  return Object.entries(state.users)
-    .map(([userId, data]) => ({ userId, messages: data.messages || 0 }))
-    .filter((e) => e.messages > 0)
-    .sort((a, b) => b.messages - a.messages)
-    .slice(0, LEADERBOARD_TOP);
-}
-
-function buildLeaderboardEmbed(guild, state) {
-  const ranked = getSortedLeaderboard(state);
-
-  let body;
-  if (!ranked.length) {
-    body = "*Aucun message comptabilisé pour le moment.*";
-  } else {
-    body = ranked
-      .map((entry, i) => {
-        const medal = RANK_MEDALS[i] ?? `**${i + 1}.**`;
-        const member = guild.members.cache.get(entry.userId);
-        const name = member ? `${member}` : `<@${entry.userId}>`;
-        return `${medal} ${name} — **${entry.messages.toLocaleString("fr-FR")}** message(s)`;
-      })
-      .join("\n");
-  }
-
-  return new EmbedBuilder()
-    .setColor(0x3498db)
-    .setTitle("🏆 Classement — Plus actifs")
-    .setDescription(
-      "Membres ayant écrit le **plus de messages** sur le serveur.\n\n" + body
-    )
-    .setFooter({
-      text: `Top ${LEADERBOARD_TOP} • Classement hebdomadaire (chaque dimanche)`,
-    })
-    .setTimestamp();
-}
-
-async function sendLeaderboard(guild, client, replacePrevious = false) {
-  const channel = await client.channels
-    .fetch(LEADERBOARD_CHANNEL_ID)
-    .catch(() => null);
-  if (!channel?.isTextBased()) return false;
-
-  await guild.members.fetch().catch(() => null);
-
-  const state = loadState();
-  const embed = buildLeaderboardEmbed(guild, state);
-
-  if (replacePrevious && state.leaderboardMessageId) {
-    const old = await channel.messages
-      .fetch(state.leaderboardMessageId)
-      .catch(() => null);
-    if (old) await old.delete().catch(() => null);
-  }
-
-  const sent = await channel.send({ embeds: [embed] });
-  state.leaderboardMessageId = sent.id;
-  saveState(state);
-
-  return true;
-}
-
-async function leaderboardExists(channel, client, state) {
-  if (state.leaderboardMessageId) {
-    const msg = await channel.messages
-      .fetch(state.leaderboardMessageId)
-      .catch(() => null);
-    if (msg) return true;
-  }
-
-  const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
-  return (
-    messages?.some(
-      (m) =>
-        m.author.id === client.user.id &&
-        m.embeds[0]?.title === "🏆 Classement — Plus actifs"
-    ) ?? false
-  );
-}
-
-async function ensureLeaderboard(client) {
-  for (const guild of client.guilds.cache.values()) {
-    const channel = await client.channels
-      .fetch(LEADERBOARD_CHANNEL_ID)
-      .catch(() => null);
-    if (!channel?.isTextBased()) continue;
-
-    const state = loadState();
-    const exists = await leaderboardExists(channel, client, state);
-
-    if (!exists) {
-      await sendLeaderboard(guild, client, false);
-      console.log(`[${guild.name}] Classement initial publié (aucun tableau détecté)`);
-    }
-  }
-}
-
-async function publishWeeklyLeaderboard(guild, client) {
-  const ok = await sendLeaderboard(guild, client, true);
-  if (ok) console.log(`[${guild.name}] Classement hebdomadaire publié`);
-}
-
-function startLeaderboardScheduler(client) {
-  ensureLeaderboard(client).catch((err) =>
-    console.error("Classement initial:", err.message)
-  );
-
-  cron.schedule(
-    "0 9 * * 0",
-    () => {
-      for (const guild of client.guilds.cache.values()) {
-        publishWeeklyLeaderboard(guild, client).catch((err) =>
-          console.error("Classement dimanche:", err.message)
-        );
-      }
-    },
-    { timezone: "Europe/Paris" }
-  );
-  console.log("Classement : envoi programmé chaque dimanche à 9h00 (Paris)");
-}
-
 async function announceLevelUp(guild, member, level) {
   const channel = await guild.channels.fetch(LEVEL_CHANNEL_ID).catch(() => null);
   if (!channel?.isTextBased()) return;
@@ -374,8 +248,6 @@ async function handleLevelCommand(interaction) {
 module.exports = {
   handleLevelMessage,
   handleLevelCommand,
-  startLeaderboardScheduler,
   LEVEL_CHANNEL_ID,
-  LEADERBOARD_CHANNEL_ID,
   MESSAGE_LEVELS,
 };
