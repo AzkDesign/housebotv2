@@ -70,6 +70,7 @@ const { setupShopPanel, handleShopInteraction } = require("./boutique");
 const { setupCreditTable, handleCreditInteraction } = require("./credit");
 const { setupMissionPanel, handleMissionInteraction } = require("./missions");
 const { setupReopeningAnnouncement } = require("./annonce");
+const { buildRulesEmbeds } = require("./reglement");
 
 const TICKET_TYPES = {
   question: {
@@ -97,66 +98,6 @@ const TICKET_TYPES = {
     description: "Confirmer votre identité",
   },
 };
-
-const RULES_TEXT = `Merci de lire attentivement ce règlement avant d'accéder au serveur.
-Le respect de ces règles permet de garder une bonne ambiance pour tout le monde.
-
----
-
-## 🤝 Respect & Comportement
-
-• Le respect entre tous les membres est obligatoire.
-• Les insultes, provocations, conflits et attaques personnelles sont interdits.
-• Un comportement mature, calme et respectueux est attendu en permanence.
-• Le respect du staff et des décisions prises est obligatoire.
-
----
-
-## 🔒 Confidentialité & Sécurité
-
-• Il est interdit de partager des informations personnelles appartenant à une autre personne.
-• Tout harcèlement, menace ou intimidation entraînera une sanction immédiate.
-• Les contenus illégaux, violents, choquants ou inappropriés sont strictement interdits.
-
----
-
-## 🏠 Vie dans la Maison
-
-• L'hébergement est un privilège, pas un droit acquis.
-• Chaque membre doit contribuer à maintenir un environnement sain et bienveillant.
-• L'accès est autorisé uniquement à votre propre chambre.
-• Toute absence de plus de 7 jours sans prévenir peut entraîner la perte de votre place.
-
----
-
-## 🚫 Contenus & Actions Interdites
-
-• Le spam, les dramas et les provocations sont interdits.
-• Toute publicité sans autorisation est interdite.
-• Les relations sexuelles au sein de la Maison sont interdites.
-• Les nudes et contenus sexuels sont strictement interdits.
-
----
-
-## ⏰ Horaires & Organisation
-
-### Sorties autorisées :
-
-• Mineurs : jusqu'à 21h00
-• Majeurs : jusqu'à 00h00
-
-Après ces horaires, les portes de la Maison sont considérées comme fermées.
-
----
-
-## ⚖️ Sanctions
-
-• Les sanctions sont appliquées selon la gravité des faits.
-• La décision finale revient à la Propriétaire.
-
----
-
-✅ En restant sur ce serveur, vous acceptez l'ensemble du règlement.`;
 
 const WELCOME_DM = `🏠 Bienvenue dans la maison.
 
@@ -190,13 +131,6 @@ function buildWelcomeEmbed(member) {
     .setTimestamp();
 }
 
-function buildRulesEmbed() {
-  return new EmbedBuilder()
-    .setColor(0x8b0000)
-    .setTitle("📖 Règlement Officiel — Maison")
-    .setDescription(RULES_TEXT);
-}
-
 function buildRulesAcceptRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -214,25 +148,33 @@ async function setupRulesMessage(client) {
     return;
   }
 
-  const messages = await channel.messages.fetch({ limit: 25 });
-  const existing = messages.find(
-    (m) =>
-      m.author.id === client.user.id &&
-      m.components.some((row) =>
-        row.components.some((c) => c.customId === ACCEPT_RULES_BUTTON_ID)
-      )
-  );
+  const embeds = buildRulesEmbeds();
+  const messages = await channel.messages.fetch({ limit: 50 });
+  const botMessages = [...messages.values()]
+    .filter((m) => m.author.id === client.user.id)
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
-  if (existing) {
-    console.log("Message règlement déjà présent");
+  // Republie seulement si le texte du règlement a changé
+  const upToDate =
+    botMessages.length === embeds.length &&
+    botMessages.every(
+      (m, i) => m.embeds[0]?.description === embeds[i].data.description
+    );
+  if (upToDate) {
+    console.log("Message règlement déjà à jour");
     return;
   }
 
-  await channel.send({
-    embeds: [buildRulesEmbed()],
-    components: [buildRulesAcceptRow()],
-  });
-  console.log("Message règlement publié");
+  for (const m of botMessages) await m.delete().catch(() => {});
+
+  for (let i = 0; i < embeds.length; i++) {
+    const isLast = i === embeds.length - 1;
+    await channel.send({
+      embeds: [embeds[i]],
+      components: isLast ? [buildRulesAcceptRow()] : [],
+    });
+  }
+  console.log(`Message règlement publié (${embeds.length} parties)`);
 }
 
 function slugifyUsername(username) {
