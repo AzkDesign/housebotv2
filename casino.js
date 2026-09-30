@@ -296,6 +296,7 @@ async function refreshPanel(client) {
 }
 
 async function setupCasino(client) {
+  await refundPendingBets(client);
   lastOpen = getSchedule().open;
   await refreshPanel(client);
 
@@ -626,9 +627,44 @@ function blackjackButtons(game) {
 }
 
 // Termine la partie : le croupier tire jusqu'à 17, puis on paie.
+// Mises des parties de blackjack en cours, enregistrées pour être
+// remboursées si le bot redémarre avant la fin de la partie.
+function trackBet(userId, amount) {
+  const state = loadState();
+  state.pendingBets = { ...(state.pendingBets ?? {}), [userId]: amount };
+  saveState(state);
+}
+
+function clearBet(userId) {
+  const state = loadState();
+  if (!state.pendingBets?.[userId]) return;
+  delete state.pendingBets[userId];
+  saveState(state);
+}
+
+async function refundPendingBets(client) {
+  const state = loadState();
+  const pending = Object.entries(state.pendingBets ?? {});
+  if (!pending.length) return;
+  for (const [userId, amount] of pending) {
+    changeBalance(userId, amount, "Casino — mise remboursée (redémarrage du bot)", { force: true });
+    addToTreasury("casinoMises", -amount); // la mise n'a finalement pas été jouée
+    const user = await client.users.fetch(userId).catch(() => null);
+    await user
+      ?.send(`🃏 Le bot a redémarré pendant votre partie de blackjack : votre mise de **${formatEuro(amount)}** vous a été remboursée.`)
+      .catch(() => null);
+  }
+  const fresh = loadState();
+  fresh.pendingBets = {};
+  saveState(fresh);
+  markBalancesDirty();
+  console.log(`Casino : ${pending.length} mise(s) de blackjack remboursée(s)`);
+}
+
 function finishBlackjack(game) {
   clearTimeout(game.timeout);
   blackjackGames.delete(game.userId);
+  clearBet(game.userId);
 
   const player = handValue(game.player);
   let result;
@@ -684,6 +720,7 @@ async function startBlackjack(interaction, bet) {
   }
 
   blackjackGames.set(userId, game);
+  trackBet(userId, bet);
   await interaction.reply({
     embeds: [blackjackEmbed(game)],
     components: blackjackButtons(game),
@@ -715,6 +752,7 @@ async function handleBlackjackAction(interaction, action) {
     addToTreasury("casinoMises", game.bet);
     markBalancesDirty();
     game.bet *= 2;
+    trackBet(game.userId, game.bet);
     game.player.push(drawCard());
     const result = finishBlackjack(game);
     await interaction.update({ embeds: [blackjackEmbed(game, result)], components: [] });
