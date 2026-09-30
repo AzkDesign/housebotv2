@@ -15,13 +15,22 @@ const OLD_LEADERBOARD_TITLE = "🏆 Classement — Plus actifs";
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const STATE_FILE = path.join(DATA_DIR, "economie-state.json");
 
+const TRANSACTIONS_KEPT = 30;
+
+function normalizeState(data) {
+  data.balances ??= {};
+  data.transactions ??= {}; // userId -> [{ at, delta, after, label }]
+  data.frozen ??= {}; // userId -> { by, reason, at }
+  data.treasury ??= {}; // clé -> montant cumulé (amendes, licences, casino…)
+  return data;
+}
+
 function loadState() {
   try {
     const data = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    if (!data.balances) data.balances = {};
-    return data;
+    return normalizeState(data);
   } catch {
-    return { balances: {}, leaderboardMessageId: null };
+    return normalizeState({ leaderboardMessageId: null });
   }
 }
 
@@ -51,15 +60,41 @@ function getBalance(state, userId) {
   return state.balances[userId] ?? 0;
 }
 
+function recordTransaction(state, userId, delta, after, label) {
+  const list = (state.transactions[userId] ??= []);
+  list.push({ at: Date.now(), delta, after, label });
+  if (list.length > TRANSACTIONS_KEPT) list.splice(0, list.length - TRANSACTIONS_KEPT);
+}
+
 // Ajoute (ou retire si négatif) un montant au solde d'un membre.
-// Renvoie le nouveau solde, ou null si le solde serait négatif.
-function changeBalance(userId, delta) {
+// Renvoie le nouveau solde, ou null si le solde serait négatif
+// ou si le compte est gelé (sauf avec force).
+function changeBalance(userId, delta, label = "—", { force = false } = {}) {
   const state = loadState();
+  if (state.frozen[userId] && !force) return null;
   const after = Math.round((getBalance(state, userId) + delta) * 100) / 100;
   if (after < 0) return null;
   state.balances[userId] = after;
+  recordTransaction(state, userId, delta, after, label);
   saveState(state);
   return after;
+}
+
+function addToTreasury(key, amount) {
+  const state = loadState();
+  state.treasury[key] = Math.round(((state.treasury[key] ?? 0) + amount) * 100) / 100;
+  saveState(state);
+}
+
+function isFrozen(userId) {
+  return Boolean(loadState().frozen[userId]);
+}
+
+function setFrozen(userId, info) {
+  const state = loadState();
+  if (info) state.frozen[userId] = info;
+  else delete state.frozen[userId];
+  saveState(state);
 }
 
 function readBalance(userId) {
@@ -197,6 +232,13 @@ async function handleArgent(interaction, client) {
   }
 
   const state = loadState();
+  if (state.frozen[target.id]) {
+    await interaction.reply({
+      content: `🔒 Le compte de ${target} est **gelé** par l'IRF : aucune modification possible.`,
+      ephemeral: true,
+    });
+    return;
+  }
   const before = getBalance(state, target.id);
   let after;
   if (action === "ajouter") after = before + amount;
@@ -212,6 +254,7 @@ async function handleArgent(interaction, client) {
   }
 
   state.balances[target.id] = after;
+  recordTransaction(state, target.id, after - before, after, `/argent par ${interaction.user.tag} — ${reason}`.slice(0, 120));
   saveState(state);
 
   const actionLabel = { ajouter: "➕ Ajout", retirer: "➖ Retrait", definir: "✏️ Nouveau solde" }[action];
@@ -254,8 +297,12 @@ module.exports = {
   setupRichestLeaderboard,
   refreshRichestLeaderboard,
   handleEconomieInteraction,
+  loadState,
   changeBalance,
   readBalance,
+  addToTreasury,
+  isFrozen,
+  setFrozen,
   formatEuro,
   isGerant,
   ECONOMIE_LOG_CHANNEL_ID,

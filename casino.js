@@ -19,6 +19,8 @@ const {
   isGerant,
   refreshRichestLeaderboard,
   ECONOMIE_LOG_CHANNEL_ID,
+  addToTreasury,
+  isFrozen,
 } = require("./economie");
 
 const CASINO_CHANNEL_ID = "1527054335928827954";
@@ -27,6 +29,8 @@ const ENTREPRENEUR_ROLE_ID = "1554940569732517909";
 const SITUATION_DELICATE_ROLE_ID = "1554940813522505778";
 const IRF_ROLE_ID = "1527525759793762586";
 const TICKET_CATEGORY_ID = "1509977402485510345";
+const LICENCE_ROLE_ID = "1527364017583030503";
+const LICENCE_PRICE = 1000;
 
 const PANEL_TITLE = "🎰 Casino de la Maison";
 const MIN_BET = 10;
@@ -126,6 +130,9 @@ function playError(member) {
   if (!open) {
     return `🔒 Le casino est **fermé**. Réouverture <t:${Math.floor(until / 1000)}:R> (${SCHEDULE_TEXT}).`;
   }
+  if (isFrozen(member.id)) {
+    return "🔒 Votre compte est **gelé** par l'IRF. Vous ne pouvez pas jouer pour le moment.";
+  }
   if (!hasAccess(member)) {
     return "🎟️ Vous n'avez pas encore accès au casino. Cliquez sur **Demander l'accès au casino**.";
   }
@@ -138,18 +145,21 @@ function parseBet(raw) {
 }
 
 // Débite la mise ; renvoie un message d'erreur ou null.
-function takeBet(userId, amount) {
+function takeBet(userId, amount, game) {
   if (amount < MIN_BET) return `❌ Mise minimum : **${formatEuro(MIN_BET)}**.`;
-  if (changeBalance(userId, -amount) === null) {
+  if (changeBalance(userId, -amount, `Casino — ${game} (mise)`) === null) {
     return `❌ Solde insuffisant (vous avez **${formatEuro(readBalance(userId))}**).`;
   }
+  addToTreasury("casinoMises", amount);
   markBalancesDirty();
   return null;
 }
 
-function pay(userId, amount) {
+// Paie les gains d'une partie déjà lancée (même si le compte a été gelé entre-temps).
+function pay(userId, amount, game) {
   if (amount > 0) {
-    changeBalance(userId, round2(amount));
+    changeBalance(userId, round2(amount), `Casino — ${game} (gain)`, { force: true });
+    addToTreasury("casinoGains", round2(amount));
     markBalancesDirty();
   }
 }
@@ -228,6 +238,11 @@ function buildPanelComponents() {
         .setCustomId("casino_access_request")
         .setLabel("Demander l'accès au casino")
         .setEmoji("🎟️")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("casino_licence_buy")
+        .setLabel(`Acheter une licence (${formatEuro(LICENCE_PRICE)})`)
+        .setEmoji("🪪")
         .setStyle(ButtonStyle.Secondary)
     ),
   ];
@@ -471,6 +486,57 @@ async function handleAccessDecision(interaction, accepted, userId, client) {
   setTimeout(() => channel.delete("Demande casino traitée").catch(() => null), 60 * 1000);
 }
 
+// --- Licence ---
+
+async function handleLicencePurchase(interaction, client) {
+  const member = interaction.member;
+  if (member.roles.cache.has(LICENCE_ROLE_ID)) {
+    await interaction.reply({ content: "🪪 Vous avez déjà une licence.", ephemeral: true });
+    return;
+  }
+  if (isFrozen(member.id)) {
+    await interaction.reply({ content: "🔒 Votre compte est **gelé** par l'IRF.", ephemeral: true });
+    return;
+  }
+  if (changeBalance(member.id, -LICENCE_PRICE, "Achat d'une licence") === null) {
+    await interaction.reply({
+      content: `❌ La licence coûte **${formatEuro(LICENCE_PRICE)}** — vous avez **${formatEuro(readBalance(member.id))}**.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const added = await member.roles.add(LICENCE_ROLE_ID).then(() => true).catch(() => false);
+  if (!added) {
+    changeBalance(member.id, LICENCE_PRICE, "Licence — remboursement (erreur)", { force: true });
+    await interaction.reply({ content: "❌ Impossible de donner le rôle licence. Vous avez été remboursé(e).", ephemeral: true });
+    return;
+  }
+
+  addToTreasury("licences", LICENCE_PRICE);
+  recordLicence(member.id);
+  markBalancesDirty();
+  await interaction.reply({
+    content: `🪪 Licence achetée pour **${formatEuro(LICENCE_PRICE)}** ! Nouveau solde : **${formatEuro(readBalance(member.id))}**.`,
+    ephemeral: true,
+  });
+
+  const log = await client.channels.fetch(ECONOMIE_LOG_CHANNEL_ID).catch(() => null);
+  await log
+    ?.send(`🪪 ${member} a acheté une **licence** (${formatEuro(LICENCE_PRICE)}).`)
+    .catch(() => null);
+}
+
+function recordLicence(userId) {
+  const state = loadState();
+  state.licences = { ...(state.licences ?? {}), [userId]: Date.now() };
+  saveState(state);
+}
+
+function getLicenceDates() {
+  return loadState().licences ?? {};
+}
+
 // --- Modale de mise ---
 
 function betModal(customId, title, userId, extraInput) {
@@ -578,7 +644,7 @@ function finishBlackjack(game) {
       result = { payout: 0, text: `😔 Le croupier gagne — vous perdez ${formatEuro(game.bet)}.` };
     }
   }
-  pay(game.userId, result.payout);
+  pay(game.userId, result.payout, "blackjack");
   return result;
 }
 
@@ -588,7 +654,7 @@ async function startBlackjack(interaction, bet) {
     await interaction.reply({ content: "🃏 Terminez d'abord votre partie en cours.", ephemeral: true });
     return;
   }
-  const err = takeBet(userId, bet);
+  const err = takeBet(userId, bet, "blackjack");
   if (err) {
     await interaction.reply({ content: err, ephemeral: true });
     return;
@@ -611,7 +677,7 @@ async function startBlackjack(interaction, bet) {
     } else {
       result = { payout: 0, text: `😔 Blackjack du croupier — vous perdez ${formatEuro(bet)}.` };
     }
-    pay(userId, result.payout);
+    pay(userId, result.payout, "blackjack");
     await interaction.reply({ embeds: [blackjackEmbed(game, result)], ephemeral: true });
     return;
   }
@@ -641,10 +707,11 @@ async function handleBlackjackAction(interaction, action) {
   }
 
   if (action === "double") {
-    if (changeBalance(game.userId, -game.bet) === null) {
+    if (changeBalance(game.userId, -game.bet, "Casino — blackjack (double)") === null) {
       await interaction.reply({ content: "❌ Solde insuffisant pour doubler.", ephemeral: true });
       return;
     }
+    addToTreasury("casinoMises", game.bet);
     markBalancesDirty();
     game.bet *= 2;
     game.player.push(drawCard());
@@ -681,7 +748,7 @@ function rouletteColor(n) {
 
 async function playRoulette(interaction, color, bet) {
   const userId = interaction.user.id;
-  const err = takeBet(userId, bet);
+  const err = takeBet(userId, bet, "roulette");
   if (err) {
     await interaction.reply({ content: err, ephemeral: true });
     return;
@@ -692,7 +759,7 @@ async function playRoulette(interaction, color, bet) {
   const choice = ROULETTE_BETS[color];
   const won = landed === color;
   const payout = won ? bet * choice.multiplier : 0;
-  pay(userId, payout);
+  pay(userId, payout, "roulette");
 
   const embed = new EmbedBuilder()
     .setColor(won ? 0x2ecc71 : 0xe74c3c)
@@ -732,7 +799,7 @@ function spinSymbol() {
 
 async function playSlots(interaction, spins, bet, client) {
   const userId = interaction.user.id;
-  const err = takeBet(userId, bet * spins);
+  const err = takeBet(userId, bet * spins, "machine à sous");
   if (err) {
     await interaction.reply({
       content: spins > 1 ? `${err}\n*(${spins} tours × ${formatEuro(bet)} = ${formatEuro(bet * spins)})*` : err,
@@ -774,7 +841,7 @@ async function playSlots(interaction, spins, bet, client) {
     lines.push(`${display}${gain > 0 ? ` **+${formatEuro(round2(gain))}**${note}` : ""}`);
   }
 
-  pay(userId, total);
+  pay(userId, total, "machine à sous");
   const spent = bet * spins;
 
   const embed = new EmbedBuilder()
@@ -811,6 +878,10 @@ async function createDuel(interaction, opponentId, bet, client) {
   const opponent = await interaction.guild.members.fetch(opponentId).catch(() => null);
   if (!opponent || opponent.user.bot) {
     await interaction.reply({ content: "❌ Membre introuvable.", ephemeral: true });
+    return;
+  }
+  if (isFrozen(challenger.id) || isFrozen(opponentId)) {
+    await interaction.reply({ content: "🔒 Un des deux comptes est gelé par l'IRF.", ephemeral: true });
     return;
   }
   if (!hasAccess(opponent)) {
@@ -895,12 +966,12 @@ async function handleDuelResponse(interaction, accepted, id) {
   }
 
   // Débit des deux joueurs
-  if (changeBalance(duel.opponentId, -duel.bet) === null) {
+  if (changeBalance(duel.opponentId, -duel.bet, "Casino — défi (mise)") === null) {
     await interaction.reply({ content: "❌ Solde insuffisant pour accepter ce défi.", ephemeral: true });
     return;
   }
-  if (changeBalance(duel.challengerId, -duel.bet) === null) {
-    changeBalance(duel.opponentId, duel.bet);
+  if (changeBalance(duel.challengerId, -duel.bet, "Casino — défi (mise)") === null) {
+    changeBalance(duel.opponentId, duel.bet, "Casino — défi annulé (remboursement)", { force: true });
     clearTimeout(duel.timeout);
     duels.delete(id);
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
@@ -918,7 +989,8 @@ async function handleDuelResponse(interaction, accepted, id) {
   const tax = round2(pot * DUEL_TAX);
   const winnerId = Math.random() < 0.5 ? duel.challengerId : duel.opponentId;
   const loserId = winnerId === duel.challengerId ? duel.opponentId : duel.challengerId;
-  pay(winnerId, pot - tax);
+  changeBalance(winnerId, pot - tax, "Casino — défi (gain)", { force: true });
+  addToTreasury("taxesDefis", tax);
   addToJackpot(tax);
 
   const embed = new EmbedBuilder()
@@ -937,6 +1009,11 @@ async function handleDuelResponse(interaction, accepted, id) {
 async function handleCasinoInteraction(interaction, client) {
   const id = interaction.customId;
   if (typeof id !== "string" || !id.startsWith("casino_")) return false;
+
+  if (interaction.isButton() && id === "casino_licence_buy") {
+    await handleLicencePurchase(interaction, client);
+    return true;
+  }
 
   // Demandes d'accès
   if (interaction.isButton() && id === "casino_access_request") {
@@ -1051,6 +1128,10 @@ async function handleCasinoInteraction(interaction, client) {
 
 module.exports = {
   setupCasino,
+  getLicenceDates,
+  LICENCE_ROLE_ID,
+  IRF_ROLE_ID,
+  TICKET_CATEGORY_ID,
   handleCasinoInteraction,
   CASINO_ACCESS_ROLE_ID,
   ENTREPRENEUR_ROLE_ID,
