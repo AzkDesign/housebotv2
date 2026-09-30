@@ -1571,6 +1571,7 @@ async function setupEntreprises(client) {
   await refreshRegistry(client);
   for (const company of Object.values(state.companies)) {
     if (company.channelId && ["active", "frozen", "bankrupt"].includes(company.status)) {
+      await updateChannelAccess(client, company); // salon réservé à l'équipe
       await refreshCompanyPanel(client, company);
     }
   }

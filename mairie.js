@@ -194,6 +194,11 @@ async function ensureSetup(client) {
   ]) {
     const channel = await findOrCreateChannel(guild, { id: s[key], name, parent: category.id, permissionOverwrites: perms });
     s[key] = channel.id;
+    // Le bureau reste privé même si ses permissions ont été modifiées entre-temps
+    if (key === "bureauChannelId") {
+      await channel.permissionOverwrites.set(perms).catch((err) => console.error("Permissions bureau:", err.message));
+      if (!channel.topic?.startsWith("privé:")) await channel.setTopic("privé: bureau du maire et de son adjoint").catch(() => null);
+    }
   }
   save();
   return guild;
@@ -213,8 +218,14 @@ async function journal(client, title, description, color = 0xf1c40f) {
     .catch(() => null);
 }
 
+const lastPanels = new Map();
+
 async function upsertPanel(client, key, messageKey, title, payload) {
   const s = load();
+  // Ne modifier le message que si son contenu a changé (sinon « (modifié) » toutes les minutes)
+  const signature = JSON.stringify(payload);
+  if (s[messageKey] && lastPanels.get(messageKey) === signature) return;
+  lastPanels.set(messageKey, signature);
   const c = await channel(client, key);
   if (!c) return;
   let msg = s[messageKey] ? await c.messages.fetch(s[messageKey]).catch(() => null) : null;
@@ -724,8 +735,11 @@ async function weeklyBudget(client) {
         lines.push(`❌ ${label} : budget insuffisant (${formatEuro(cost)} nécessaires), non versée`);
         continue;
       }
-      for (const m of members) changeBalance(m.id, amount, label.replace(/^\S+ /, ""));
-      lines.push(`${label} : ${members.length} × ${formatEuro(amount)} = **${formatEuro(cost)}**`);
+      let paid = 0;
+      for (const m of members) if (changeBalance(m.id, amount, label.replace(/^\S+ /, "")) !== null) paid++;
+      // Comptes gelés : non versé, donc rendu au budget
+      if (paid < members.length) budgetMove(round2(amount * (members.length - paid)), `${label} non versée (${members.length - paid} compte(s) gelé(s))`);
+      lines.push(`${label} : ${paid} × ${formatEuro(amount)} = **${formatEuro(round2(amount * paid))}**`);
     }
   }
 
@@ -1026,8 +1040,9 @@ async function handleMairieInteraction(interaction, client) {
     const value = amount(interaction);
     const motif = interaction.fields.getTextInputValue("motif").trim();
     if (value <= 0 || target === userId) { await interaction.reply({ content: "❌ Prime impossible (vous ne pouvez pas vous verser de prime).", ephemeral: true }); return true; }
+    if (isFrozen(target)) { await interaction.reply({ content: "🔒 Ce compte est gelé par l'IRF : aucune prime possible.", ephemeral: true }); return true; }
     if (!budgetMove(-value, `Prime à ${target}`)) { await interaction.reply({ content: `❌ Budget insuffisant (${formatEuro(s.budget)}).`, ephemeral: true }); return true; }
-    changeBalance(target, value, `Prime de la Mairie — ${motif}`.slice(0, 120), { force: true });
+    changeBalance(target, value, `Prime de la Mairie — ${motif}`.slice(0, 120));
     count("bonuses");
     await journal(client, "🎁 Prime", `**${formatEuro(value)}** versés à <@${target}>.\nMotif : ${motif}\n\n— <@${userId}>`);
     await refreshPanels(client);
@@ -1106,10 +1121,11 @@ async function handleMairieInteraction(interaction, client) {
     const [, , , eid, target] = id.split("_");
     const e = s.events[eid];
     const value = amount(interaction);
+    if (e && isFrozen(target)) { await interaction.reply({ content: "🔒 Ce compte est gelé par l'IRF : aucun gain possible.", ephemeral: true }); return true; }
     if (!e || value <= 0 || value > e.remaining) { await interaction.reply({ content: `❌ Montant invalide (reste ${formatEuro(e?.remaining ?? 0)}).`, ephemeral: true }); return true; }
     e.remaining = round2(e.remaining - value);
     save();
-    changeBalance(target, value, `Gain — ${e.title}`.slice(0, 120), { force: true });
+    changeBalance(target, value, `Gain — ${e.title}`.slice(0, 120));
     await journal(client, `🏆 ${e.title}`, `<@${target}> remporte **${formatEuro(value)}** !`, 0x9b59b6);
     await refreshRichestLeaderboard(client).catch(() => null);
     await interaction.reply({ content: `🏆 ${formatEuro(value)} versés à <@${target}>. Reste : ${formatEuro(e.remaining)}.`, ephemeral: true });

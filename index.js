@@ -47,6 +47,8 @@ const {
   handleCandidatureVote,
   setupCandidatureCategoryPermissions,
   restoreCandidatureReminders,
+  restoreCandidatureSessions,
+  handleCandidatureResume,
 } = require("./candidature");
 const {
   refreshHierarchy,
@@ -464,6 +466,8 @@ async function setupGuildPermissions(guild) {
     if (channel.id === CANDIDATURE_CATEGORY_ID) continue;
     if (channel.parentId === TICKET_CATEGORY_ID) continue;
     if (channel.parentId === CANDIDATURE_CATEGORY_ID) continue;
+    // Salons privés (entreprises, bureau du maire, ou sujet commençant par « privé: ») : ne pas les ouvrir à tous
+    if (channel.topic?.startsWith("entreprise:") || channel.topic?.startsWith("privé:")) continue;
     if (!channelTypes.includes(channel.type)) continue;
 
     try {
@@ -508,7 +512,7 @@ async function step(name, fn) {
   }
 }
 
-client.once("ready", async () => {
+client.once(Events.ClientReady, async () => {
   console.log(`Connecté en tant que ${client.user.tag}`);
   // Les commandes slash en premier, pour qu'elles soient toujours disponibles.
   await step("commandes slash", () => registerSlashCommands(client, TOKEN));
@@ -520,6 +524,7 @@ client.once("ready", async () => {
   }
 
   await step("rappels candidature", () => restoreCandidatureReminders(client));
+  await step("questionnaires interrompus", () => restoreCandidatureSessions(client));
 
   for (const guild of client.guilds.cache.values()) {
     await step(`hiérarchie ${guild.name}`, () => refreshHierarchy(guild, client));
@@ -551,7 +556,21 @@ client.on(Events.MessageCreate, async (message) => {
   );
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
+// Une erreur dans un bouton ne doit jamais arrêter le bot : on la note et on prévient le membre.
+client.on(Events.InteractionCreate, (interaction) => {
+  onInteraction(interaction).catch(async (err) => {
+    console.error(`Interaction ${interaction.customId ?? interaction.commandName ?? "?"}:`, err);
+    if (!interaction.isRepliable()) return;
+    const payload = { content: "❌ Une erreur est survenue. Réessayez, ou contactez le staff si ça continue.", ephemeral: true };
+    await (interaction.replied || interaction.deferred ? interaction.followUp(payload) : interaction.reply(payload)).catch(() => null);
+  });
+});
+
+async function onInteraction(interaction) {
+  if (interaction.isButton() && interaction.customId === "candidature_resume") {
+    await handleCandidatureResume(interaction);
+    return;
+  }
   if (await handleClearCommand(interaction)) return;
   if (await handleCasinoInteraction(interaction, client)) return;
   if (await handleIrfInteraction(interaction, client)) return;
@@ -710,7 +729,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }, 3000);
   }
-});
+}
+
+// Dernier filet : une erreur oubliée est notée au lieu d'arrêter le bot.
+client.on(Events.Error, (err) => console.error("Client Discord:", err));
+process.on("unhandledRejection", (err) => console.error("Erreur non gérée:", err));
 
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
   if (

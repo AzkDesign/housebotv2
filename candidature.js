@@ -1,3 +1,4 @@
+const fs = require("fs");
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -121,6 +122,36 @@ const CANDIDATURE_QUESTIONS = [
 const activeSessions = new Map();
 const candidatureVotes = new Map();
 const reminderTimeouts = new Map();
+
+// Progression des questionnaires et votes enregistrés sur disque,
+// pour survivre aux redémarrages du bot.
+const STATE_FILE = require("./data").dataFile("candidature-state.json");
+let saved = { sessions: {}, votes: {} };
+try {
+  saved = { sessions: {}, votes: {}, ...JSON.parse(fs.readFileSync(STATE_FILE, "utf8")) };
+} catch {
+  // premier démarrage
+}
+for (const [channelId, v] of Object.entries(saved.votes)) {
+  candidatureVotes.set(channelId, { ...v, pour: new Set(v.pour), contre: new Set(v.contre) });
+}
+
+function persist() {
+  saved.votes = Object.fromEntries(
+    [...candidatureVotes.entries()].map(([id, v]) => [id, { ...v, pour: [...v.pour], contre: [...v.contre] }])
+  );
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(saved, null, 2));
+  } catch (err) {
+    console.error("Sauvegarde candidatures:", err.message);
+  }
+}
+
+function saveProgress(channelId, memberId, index, answers) {
+  if (index === null) delete saved.sessions[channelId];
+  else saved.sessions[channelId] = { memberId, index, answers };
+  persist();
+}
 
 function voteButtonIds(channelId, chef = false) {
   const prefix = chef ? "candidature_chef" : "candidature";
@@ -374,6 +405,7 @@ async function assignProfileRoles(guild, stats) {
 
 async function finalizeCandidature(channel, guild, stats, accepted, reason) {
   stats.status = accepted ? "accepted" : "rejected";
+  persist();
   if (accepted) await assignProfileRoles(guild, stats);
   await notifyCandidateResult(channel, accepted, reason);
   await updateLogVoteMessage(
@@ -557,10 +589,11 @@ async function askNextQuestion(channel, member, index, answers) {
     .catch(() => null);
 
   if (!collected?.size) {
-    await channel.send(
-      "⏱️ Temps écoulé. Candidature annulée — vous pouvez rouvrir un ticket candidature."
-    );
     activeSessions.delete(channel.id);
+    await channel.send({
+      content: `⏱️ Temps écoulé. Votre progression est gardée (question ${index + 1} / ${total}) : cliquez pour reprendre quand vous êtes prêt(e).`,
+      components: [resumeRow()],
+    });
     return;
   }
 
@@ -588,6 +621,7 @@ async function askNextQuestion(channel, member, index, answers) {
   }
 
   answers[question.key] = value;
+  saveProgress(channel.id, member.id, index + 1, answers);
 
   if (index + 1 < total) {
     return askNextQuestion(channel, member, index + 1, answers);
@@ -598,6 +632,7 @@ async function askNextQuestion(channel, member, index, answers) {
 
 async function finishCandidature(channel, member, answers) {
   activeSessions.delete(channel.id);
+  saveProgress(channel.id, null, null);
 
   await channel.send("✅ Formulaire terminé — préparation de votre candidature…");
   await clearChannel(channel);
@@ -629,13 +664,74 @@ async function finishCandidature(channel, member, answers) {
     });
     stats.logMessageId = logMsg.id;
   }
+  persist();
 
   scheduleCandidatureReminder(channel, member);
+}
+
+function resumeRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("candidature_resume")
+      .setLabel("Reprendre ma candidature")
+      .setEmoji("🔁")
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+// Reprend le questionnaire là où il s'était arrêté (redémarrage du bot, temps écoulé).
+async function resumeQuestionnaire(channel, member) {
+  if (activeSessions.has(channel.id)) return;
+  const progress = saved.sessions[channel.id];
+  const index = progress?.memberId === member.id ? progress.index : 0;
+  const answers = progress?.memberId === member.id ? progress.answers : {};
+  activeSessions.set(channel.id, { memberId: member.id });
+  try {
+    await askNextQuestion(channel, member, Math.min(index, CANDIDATURE_QUESTIONS.length - 1), answers);
+  } catch (err) {
+    console.error("Erreur questionnaire candidature:", err.message);
+    activeSessions.delete(channel.id);
+    await channel.send("❌ Une erreur est survenue. Contactez le staff.").catch(() => null);
+  }
+}
+
+async function handleCandidatureResume(interaction) {
+  const channel = interaction.channel;
+  if (channel?.topic !== `candidature:${interaction.user.id}`) {
+    await interaction.reply({ content: "❌ Ce bouton est réservé au candidat de ce ticket.", ephemeral: true });
+    return;
+  }
+  if (activeSessions.has(channel.id)) {
+    await interaction.reply({ content: "📋 Le questionnaire est déjà en cours.", ephemeral: true });
+    return;
+  }
+  await interaction.update({ components: [] }).catch(() => null);
+  await resumeQuestionnaire(channel, interaction.member);
+}
+
+// Au démarrage : les questionnaires interrompus proposent de reprendre.
+async function restoreCandidatureSessions(client) {
+  for (const guild of client.guilds.cache.values()) {
+    for (const channel of guild.channels.cache.values()) {
+      if (channel.parentId !== CANDIDATURE_CATEGORY_ID || channel.type !== ChannelType.GuildText) continue;
+      const match = channel.topic?.match(/^candidature:(\d+)$/);
+      if (!match || activeSessions.has(channel.id)) continue;
+      const progress = saved.sessions[channel.id];
+      const at = progress ? ` à la question ${progress.index + 1} / ${CANDIDATURE_QUESTIONS.length}` : "";
+      await channel
+        .send({
+          content: `<@${match[1]}> 🔄 Le bot a redémarré pendant votre candidature. Cliquez pour reprendre${at}.`,
+          components: [resumeRow()],
+        })
+        .catch(() => null);
+    }
+  }
 }
 
 async function startCandidatureQuestionnaire(channel, member) {
   if (activeSessions.has(channel.id)) return;
   activeSessions.set(channel.id, { memberId: member.id });
+  saveProgress(channel.id, member.id, 0, {});
 
   const intro = new EmbedBuilder()
     .setColor(0x800020)
@@ -760,6 +856,7 @@ async function handleCandidatureVote(interaction) {
     .fetch(stats.memberId)
     .catch(() => null);
   if (member) await evaluateVotes(channel, interaction.guild, stats, member);
+  persist();
 
   return true;
 }
@@ -785,6 +882,8 @@ async function setupCandidatureCategoryPermissions(
 }
 
 module.exports = {
+  handleCandidatureResume,
+  restoreCandidatureSessions,
   CANDIDATURE_CATEGORY_ID,
   CANDIDATURE_LOG_CHANNEL_ID,
   ADMIN_VOTE_ROLE_ID,
