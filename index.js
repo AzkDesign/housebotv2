@@ -65,6 +65,7 @@ const {
   handleSignalementInteraction,
 } = require("./signalements");
 const { registerSlashCommands } = require("./commands");
+const { handleClearCommand } = require("./clear");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -531,6 +532,7 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (await handleClearCommand(interaction)) return;
   if (await handleLevelCommand(interaction)) return;
   if (await handleEconomieInteraction(interaction, client)) return;
   if (await handleCreditInteraction(interaction, client)) return;

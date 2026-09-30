@@ -1,4 +1,5 @@
 const { REST, Routes, SlashCommandBuilder } = require("discord.js");
+const { clearCommand } = require("./clear");
 
 async function registerSlashCommands(client, token) {
   const commands = [
@@ -57,6 +58,7 @@ async function registerSlashCommands(client, token) {
         o.setName("raison").setDescription("Pourquoi (visible dans les logs)").setMaxLength(200)
       )
       .toJSON(),
+    clearCommand,
   ];
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -69,7 +71,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde et /argent enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent et /clear enregistrées");
 }
 
 module.exports = { registerSlashCommands };
