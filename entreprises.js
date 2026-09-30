@@ -27,6 +27,7 @@ const { ENTREPRENEUR_ROLE_ID, LICENCE_ROLE_ID, IRF_ROLE_ID } = require("./casino
 const { randomPerson } = require("./airbnb");
 // Taux réglés par le maire : impôt sur les sociétés, dividendes, salaire minimum, frais…
 const { P, sectorBoost } = require("./politique");
+const { findOrCreateChannel } = require("./salons");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 
@@ -239,11 +240,8 @@ async function ensureChannels(client) {
   ) ?? client.guilds.cache.first();
   if (!guild) return null;
 
-  let category = s.categoryId ? await guild.channels.fetch(s.categoryId).catch(() => null) : null;
-  if (!category) {
-    category = await guild.channels.create({ name: "🏛️ Entreprises", type: ChannelType.GuildCategory });
-    s.categoryId = category.id;
-  }
+  const category = await findOrCreateChannel(guild, { id: s.categoryId, name: "🏛️ Entreprises", type: ChannelType.GuildCategory });
+  s.categoryId = category.id;
 
   const readOnly = [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.SendMessages] },
@@ -254,16 +252,8 @@ async function ensureChannels(client) {
     ["recruitmentChannelId", "📢・recrutement"],
     ["invoicesChannelId", "🧾・factures"],
   ]) {
-    let channel = s[key] ? await guild.channels.fetch(s[key]).catch(() => null) : null;
-    if (!channel) {
-      channel = await guild.channels.create({
-        name,
-        type: ChannelType.GuildText,
-        parent: category.id,
-        permissionOverwrites: readOnly,
-      });
-      s[key] = channel.id;
-    }
+    const channel = await findOrCreateChannel(guild, { id: s[key], name, parent: category.id, permissionOverwrites: readOnly });
+    s[key] = channel.id;
   }
   save();
   return guild;

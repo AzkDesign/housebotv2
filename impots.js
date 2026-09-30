@@ -29,6 +29,7 @@ const { IRF_ROLE_ID, SITUATION_DELICATE_ROLE_ID } = require("./casino");
 const { hasJob, getCategoryId } = require("./entreprises");
 // Multiplicateurs de taxe d'habitation et d'impôt sur la fortune réglés par le maire
 const { P, formatLever } = require("./politique");
+const { findOrCreateChannel } = require("./salons");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 const CHAMBRES_STATE_FILE = path.join(__dirname, "chambres-state.json");
@@ -184,10 +185,9 @@ async function ensureChannel(client) {
   const irfChannel = await client.channels.fetch(IRF_CHANNEL_ID).catch(() => null);
   const guild = irfChannel?.guild ?? client.guilds.cache.first();
   if (!guild) return null;
-  channel = await guild.channels.create({
+  channel = await findOrCreateChannel(guild, {
     name: "🧾・centre-des-impôts",
-    type: ChannelType.GuildText,
-    parent: getCategoryId() ?? undefined,
+    parent: getCategoryId(),
     permissionOverwrites: [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.SendMessages] },
       { id: client.user.id, allow: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks] },

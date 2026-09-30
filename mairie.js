@@ -29,6 +29,7 @@ const {
 const { SITUATION_DELICATE_ROLE_ID } = require("./casino");
 const { listActiveCompanies, creditCompany, SECTORS } = require("./entreprises");
 const { LEVERS, P, setLever, formatLever, boostSector } = require("./politique");
+const { findOrCreateChannel, findOrCreateRole } = require("./salons");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 
@@ -169,18 +170,12 @@ async function ensureSetup(client) {
     ["maireRoleId", "👑 Maire", 0xf1c40f],
     ["adjointRoleId", "🎖️ Adjoint au maire", 0xe67e22],
   ]) {
-    let role = s[key] ? await guild.roles.fetch(s[key]).catch(() => null) : null;
-    if (!role) {
-      role = await guild.roles.create({ name, color, hoist: true, reason: "Mairie" });
-      s[key] = role.id;
-    }
+    const role = await findOrCreateRole(guild, { id: s[key], name, color, hoist: true });
+    s[key] = role.id;
   }
 
-  let category = s.categoryId ? await guild.channels.fetch(s.categoryId).catch(() => null) : null;
-  if (!category) {
-    category = await guild.channels.create({ name: "🏛️ Mairie", type: ChannelType.GuildCategory });
-    s.categoryId = category.id;
-  }
+  const category = await findOrCreateChannel(guild, { id: s.categoryId, name: "🏛️ Mairie", type: ChannelType.GuildCategory });
+  s.categoryId = category.id;
 
   const readOnly = [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.SendMessages] },
@@ -197,11 +192,8 @@ async function ensureSetup(client) {
     ["journalChannelId", "📜・journal-officiel", readOnly],
     ["bureauChannelId", "🏛️・bureau-du-maire", bureau],
   ]) {
-    let channel = s[key] ? await guild.channels.fetch(s[key]).catch(() => null) : null;
-    if (!channel) {
-      channel = await guild.channels.create({ name, type: ChannelType.GuildText, parent: category.id, permissionOverwrites: perms });
-      s[key] = channel.id;
-    }
+    const channel = await findOrCreateChannel(guild, { id: s[key], name, parent: category.id, permissionOverwrites: perms });
+    s[key] = channel.id;
   }
   save();
   return guild;
