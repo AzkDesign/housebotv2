@@ -494,32 +494,42 @@ const client = new Client({
   partials: [Partials.GuildMember, Partials.Channel, Partials.Message],
 });
 
+// Chaque étape est isolée : une erreur dans l'une ne bloque pas les suivantes.
+async function step(name, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`Démarrage (${name}):`, err);
+  }
+}
+
 client.once("ready", async () => {
   console.log(`Connecté en tant que ${client.user.tag}`);
-  await setupRulesMessage(client);
-  await setupTicketPanel(client);
+  // Les commandes slash en premier, pour qu'elles soient toujours disponibles.
+  await step("commandes slash", () => registerSlashCommands(client, TOKEN));
+  await step("règlement", () => setupRulesMessage(client));
+  await step("tickets", () => setupTicketPanel(client));
 
   for (const guild of client.guilds.cache.values()) {
-    await setupGuildPermissions(guild);
+    await step(`permissions ${guild.name}`, () => setupGuildPermissions(guild));
   }
 
-  await restoreCandidatureReminders(client);
+  await step("rappels candidature", () => restoreCandidatureReminders(client));
 
   for (const guild of client.guilds.cache.values()) {
-    await refreshHierarchy(guild, client);
+    await step(`hiérarchie ${guild.name}`, () => refreshHierarchy(guild, client));
   }
 
-  startRepasScheduler(client);
-  await setupChambresPanel(client);
-  await setupBudgetPanel(client);
-  startBudgetScheduler(client);
-  await setupSignalementPanel(client);
-  await registerSlashCommands(client, TOKEN);
-  await setupRichestLeaderboard(client);
-  await setupShopPanel(client);
-  await setupCreditTable(client);
-  await setupMissionPanel(client);
-  await setupReopeningAnnouncement(client);
+  await step("repas", () => startRepasScheduler(client));
+  await step("chambres", () => setupChambresPanel(client));
+  await step("budget", () => setupBudgetPanel(client));
+  await step("budget (planificateur)", () => startBudgetScheduler(client));
+  await step("signalements", () => setupSignalementPanel(client));
+  await step("classement", () => setupRichestLeaderboard(client));
+  await step("boutique", () => setupShopPanel(client));
+  await step("crédit", () => setupCreditTable(client));
+  await step("missions", () => setupMissionPanel(client));
+  await step("annonce", () => setupReopeningAnnouncement(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {
