@@ -21,6 +21,20 @@ const CANDIDATURE_QUESTIONS = [
     prompt:
       "Êtes-vous prêt(e) à payer **1 000 € par an** pour l'hébergement à la Maison ? (Oui / Non)",
   },
+  {
+    key: "profil",
+    prompt:
+      "Venez-vous en tant que **personne en situation délicate** ou en tant qu'**entrepreneur** ? (Situation délicate / Entrepreneur)",
+    choices: [
+      { value: "Personne en situation délicate", match: /d[ée]licat/i },
+      { value: "Entrepreneur", match: /entrepren/i },
+    ],
+  },
+  {
+    key: "parrainage",
+    prompt:
+      "Avez-vous été **parrainé(e)** par quelqu'un de la Maison ? Si oui, **par qui** ? (sinon répondez `Non`)",
+  },
   { key: "prenom", prompt: "Quel est votre **prénom** ?" },
   { key: "age", prompt: "Quel est votre **âge** ?" },
   { key: "sexe", prompt: "Quel est votre **sexe** ?" },
@@ -185,6 +199,13 @@ function buildCandidatureResultEmbed(member, answers) {
       {
         name: "💶 Engagement financier",
         value: fieldBlock([["Paiement 1 000 € / an", answers.paiement_annuel]]),
+      },
+      {
+        name: "🤝 Profil & parrainage",
+        value: fieldBlock([
+          ["Vient en tant que", answers.profil],
+          ["Parrainé(e) par", answers.parrainage],
+        ]),
       },
       {
         name: "👤 Informations personnelles",
@@ -534,6 +555,17 @@ async function askNextQuestion(channel, member, index, answers) {
   } else if (!value && !question.optional) {
     await channel.send("❌ Réponse vide. Merci de répondre à la question.");
     return askNextQuestion(channel, member, index, answers);
+  }
+
+  if (question.choices) {
+    const choice = question.choices.find((c) => c.match.test(value));
+    if (!choice) {
+      await channel.send(
+        `❌ Merci de répondre par : ${question.choices.map((c) => `**${c.value}**`).join(" ou ")}.`
+      );
+      return askNextQuestion(channel, member, index, answers);
+    }
+    value = choice.value;
   }
 
   answers[question.key] = value;
