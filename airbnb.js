@@ -36,20 +36,27 @@ const CHECKOUT_HOUR = 11;
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const STATE_FILE = path.join(DATA_DIR, "airbnb-state.json");
 
+// Une seule copie en mémoire : la boucle automatique et les boutons
+// modifient le même objet, sans s'écraser mutuellement.
+let cache = null;
+
 function loadState() {
+  if (cache) return cache;
   try {
     const data = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
     data.listings ??= {};
     data.hosts ??= {};
     data.requests ??= {};
     data.counter ??= 0;
-    return data;
+    cache = data;
   } catch {
-    return { listings: {}, hosts: {}, requests: {}, counter: 0, panelMessageId: null };
+    cache = { listings: {}, hosts: {}, requests: {}, counter: 0, panelMessageId: null };
   }
+  return cache;
 }
 
 function saveState(state) {
+  cache = state;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
@@ -255,6 +262,20 @@ const PROFILES = [
     },
   },
 ];
+
+// Personnage fictif réutilisable par les autres modules (entreprises…).
+function randomPerson() {
+  const origin = pick(ORIGINS);
+  const female = Math.random() < 0.5;
+  return {
+    first: pick(female ? origin.female : origin.male),
+    last: pick(origin.last),
+    female,
+    age: randBetween(19, 70),
+    place: origin.place,
+    flag: origin.flag,
+  };
+}
 
 function generateGuest(capacity) {
   const fitting = PROFILES.filter((p) => (Array.isArray(p.guests) ? p.guests[0] : p.guests) <= capacity);
@@ -943,4 +964,4 @@ async function handleAirbnbInteraction(interaction, client) {
   return false;
 }
 
-module.exports = { setupAirbnb, handleAirbnbInteraction };
+module.exports = { setupAirbnb, handleAirbnbInteraction, randomPerson };
