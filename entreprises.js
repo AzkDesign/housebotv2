@@ -1589,4 +1589,14 @@ async function setupEntreprises(client) {
   console.log("Entreprises prêtes");
 }
 
-module.exports = { setupEntreprises, handleEntreprisesInteraction, showIrfCompanies };
+// Pour les impôts : le membre a-t-il un emploi ou une entreprise ?
+function hasJob(userId) {
+  const company = companyOf(userId);
+  return Boolean(company && ["active", "frozen", "bankrupt"].includes(company.status));
+}
+
+function getCategoryId() {
+  return load().categoryId ?? null;
+}
+
+module.exports = { setupEntreprises, handleEntreprisesInteraction, showIrfCompanies, hasJob, getCategoryId };

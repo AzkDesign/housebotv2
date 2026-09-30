@@ -70,6 +70,7 @@ const { setupCasino, handleCasinoInteraction } = require("./casino");
 const { setupIrfPanel, handleIrfInteraction } = require("./irf");
 const { setupAirbnb, handleAirbnbInteraction } = require("./airbnb");
 const { setupEntreprises, handleEntreprisesInteraction } = require("./entreprises");
+const { setupImpots, handleImpotsInteraction } = require("./impots");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -536,6 +537,7 @@ client.once("ready", async () => {
   await step("IRF", () => setupIrfPanel(client));
   await step("Airbnb", () => setupAirbnb(client));
   await step("Entreprises", () => setupEntreprises(client));
+  await step("Impôts", () => setupImpots(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -553,6 +555,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (await handleIrfInteraction(interaction, client)) return;
   if (await handleAirbnbInteraction(interaction, client)) return;
   if (await handleEntreprisesInteraction(interaction, client)) return;
+  if (await handleImpotsInteraction(interaction, client)) return;
   if (await handleLevelCommand(interaction)) return;
   if (await handleEconomieInteraction(interaction, client)) return;
   if (await handleCreditInteraction(interaction, client)) return;

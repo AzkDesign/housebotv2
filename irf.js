@@ -31,6 +31,7 @@ const {
   TICKET_CATEGORY_ID,
 } = require("./casino");
 const { showIrfCompanies } = require("./entreprises");
+const { showIrfTaxes } = require("./impots");
 
 const IRF_PANEL_CHANNEL_ID = "1527524719094534185";
 const PANEL_TITLE = "🏛️ IRF — Institut de Régulation Financière";
@@ -75,6 +76,7 @@ const ACTIONS = [
   { id: "tresorerie", label: "Trésorerie", emoji: "🏛️", style: ButtonStyle.Secondary, text: "Taxes, Airbnb & flux casino" },
   { id: "licences", label: "Licences", emoji: "🪪", style: ButtonStyle.Secondary, text: "Membres ayant acheté une licence" },
   { id: "entreprises", label: "Entreprises", emoji: "🏢", style: ButtonStyle.Primary, text: "Registre, audit, gel et liquidation des entreprises" },
+  { id: "impots", label: "Impôts", emoji: "🧾", style: ButtonStyle.Secondary, text: "Débiteurs, contrôles fiscaux et recettes" },
   { id: "enquete", label: "Enquête", emoji: "🔎", style: ButtonStyle.Danger, text: "Ouvrir un ticket d'enquête avec 1 ou 2 membres" },
 ];
 
@@ -93,7 +95,7 @@ function buildPanelMessage() {
     new ButtonBuilder().setCustomId(`irf_${a.id}`).setLabel(a.label).setEmoji(a.emoji).setStyle(a.style)
   );
   const rows = [];
-  for (const size of [3, 4, 2]) {
+  for (const size of [3, 4, 3]) {
     rows.push(new ActionRowBuilder().addComponents(buttons.splice(0, size)));
   }
   return { embeds: [embed], components: rows };
@@ -193,6 +195,10 @@ const TREASURY_LABELS = {
   impotsSocietes: "⚖️ Impôt sur les sociétés",
   dividendes: "📤 Taxe sur dividendes",
   liquidations: "⚖️ Liquidations",
+  taxeHabitation: "🏠 Taxe d'habitation",
+  impotFortune: "💎 Impôt sur la fortune",
+  redressements: "⚖️ Redressements fiscaux",
+  recouvrement: "💳 Dettes recouvrées",
   casinoMises: "🎰 Mises casino",
   casinoGains: "🎰 Gains versés casino",
 };
@@ -201,7 +207,7 @@ async function showTresorerie(interaction) {
   const t = loadEconomie().treasury;
   const get = (k) => t[k] ?? 0;
   const casinoNet = Math.round((get("casinoMises") - get("casinoGains")) * 100) / 100;
-  const total = Math.round((get("amendes") + get("licences") + get("taxesDefis") + get("airbnb") + get("immatriculations") + get("impotsSocietes") + get("dividendes") + get("liquidations") + casinoNet) * 100) / 100;
+  const total = Math.round((get("amendes") + get("licences") + get("taxesDefis") + get("airbnb") + get("immatriculations") + get("impotsSocietes") + get("dividendes") + get("liquidations") + get("taxeHabitation") + get("impotFortune") + get("redressements") + get("recouvrement") + casinoNet) * 100) / 100;
 
   const embed = new EmbedBuilder()
     .setColor(0xd4af37)
@@ -457,6 +463,9 @@ async function handleIrfInteraction(interaction, client) {
         break;
       case "irf_tresorerie":
         await showTresorerie(interaction);
+        break;
+      case "irf_impots":
+        await showIrfTaxes(interaction);
         break;
       case "irf_entreprises":
         await showIrfCompanies(interaction);

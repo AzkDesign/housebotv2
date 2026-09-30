@@ -22,6 +22,7 @@ function normalizeState(data) {
   data.transactions ??= {}; // userId -> [{ at, delta, after, label }]
   data.frozen ??= {}; // userId -> { by, reason, at }
   data.treasury ??= {}; // clé -> montant cumulé (amendes, licences, casino…)
+  data.taxDebts ??= {}; // userId -> { amount, weeks } : dette fiscale
   return data;
 }
 
@@ -76,8 +77,31 @@ function changeBalance(userId, delta, label = "—", { force = false } = {}) {
   if (after < 0) return null;
   state.balances[userId] = after;
   recordTransaction(state, userId, delta, after, label);
+
+  // Saisie automatique : un revenu rembourse d'abord la dette fiscale.
+  const debt = state.taxDebts[userId];
+  if (delta > 0 && debt?.amount > 0) {
+    const seized = Math.min(delta, debt.amount);
+    debt.amount = Math.round((debt.amount - seized) * 100) / 100;
+    if (debt.amount <= 0) delete state.taxDebts[userId];
+    state.balances[userId] = Math.round((after - seized) * 100) / 100;
+    recordTransaction(state, userId, -seized, state.balances[userId], "Saisie fiscale (dette d'impôts)");
+    state.treasury.recouvrement = Math.round(((state.treasury.recouvrement ?? 0) + seized) * 100) / 100;
+  }
+
   saveState(state);
-  return after;
+  return state.balances[userId];
+}
+
+function getTaxDebt(userId) {
+  return loadState().taxDebts[userId] ?? null;
+}
+
+function setTaxDebt(userId, debt) {
+  const state = loadState();
+  if (debt && debt.amount > 0) state.taxDebts[userId] = debt;
+  else delete state.taxDebts[userId];
+  saveState(state);
 }
 
 function addToTreasury(key, amount) {
@@ -303,6 +327,8 @@ module.exports = {
   addToTreasury,
   isFrozen,
   setFrozen,
+  getTaxDebt,
+  setTaxDebt,
   formatEuro,
   isGerant,
   ECONOMIE_LOG_CHANNEL_ID,
