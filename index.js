@@ -68,6 +68,7 @@ const { registerSlashCommands } = require("./commands");
 const { handleClearCommand } = require("./clear");
 const { setupCasino, handleCasinoInteraction } = require("./casino");
 const { setupIrfPanel, handleIrfInteraction } = require("./irf");
+const { setupAirbnb, handleAirbnbInteraction } = require("./airbnb");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -532,6 +533,7 @@ client.once("ready", async () => {
   await step("missions", () => setupMissionPanel(client));
   await step("casino", () => setupCasino(client));
   await step("IRF", () => setupIrfPanel(client));
+  await step("Airbnb", () => setupAirbnb(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -547,6 +549,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (await handleClearCommand(interaction)) return;
   if (await handleCasinoInteraction(interaction, client)) return;
   if (await handleIrfInteraction(interaction, client)) return;
+  if (await handleAirbnbInteraction(interaction, client)) return;
   if (await handleLevelCommand(interaction)) return;
   if (await handleEconomieInteraction(interaction, client)) return;
   if (await handleCreditInteraction(interaction, client)) return;

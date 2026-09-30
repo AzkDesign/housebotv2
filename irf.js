@@ -71,7 +71,7 @@ const ACTIONS = [
   { id: "degeler", label: "Dégeler", emoji: "🔓", style: ButtonStyle.Success, text: "Débloquer un compte" },
   { id: "transactions", label: "Transactions", emoji: "📋", style: ButtonStyle.Secondary, text: "Historique d'un membre" },
   { id: "amende", label: "Amende", emoji: "💸", style: ButtonStyle.Danger, text: "Infliger une amende financière" },
-  { id: "tresorerie", label: "Trésorerie", emoji: "🏛️", style: ButtonStyle.Secondary, text: "Taxes & flux casino" },
+  { id: "tresorerie", label: "Trésorerie", emoji: "🏛️", style: ButtonStyle.Secondary, text: "Taxes, Airbnb & flux casino" },
   { id: "licences", label: "Licences", emoji: "🪪", style: ButtonStyle.Secondary, text: "Membres ayant acheté une licence" },
   { id: "enquete", label: "Enquête", emoji: "🔎", style: ButtonStyle.Danger, text: "Ouvrir un ticket d'enquête avec 1 ou 2 membres" },
 ];
@@ -186,6 +186,7 @@ const TREASURY_LABELS = {
   amendes: "💸 Amendes",
   licences: "🪪 Licences",
   taxesDefis: "⚔️ Taxes des défis",
+  airbnb: "🏡 Airbnb (80 %)",
   casinoMises: "🎰 Mises casino",
   casinoGains: "🎰 Gains versés casino",
 };
@@ -194,7 +195,7 @@ async function showTresorerie(interaction) {
   const t = loadEconomie().treasury;
   const get = (k) => t[k] ?? 0;
   const casinoNet = Math.round((get("casinoMises") - get("casinoGains")) * 100) / 100;
-  const total = Math.round((get("amendes") + get("licences") + get("taxesDefis") + casinoNet) * 100) / 100;
+  const total = Math.round((get("amendes") + get("licences") + get("taxesDefis") + get("airbnb") + casinoNet) * 100) / 100;
 
   const embed = new EmbedBuilder()
     .setColor(0xd4af37)
