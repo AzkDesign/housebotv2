@@ -51,6 +51,21 @@ function getBalance(state, userId) {
   return state.balances[userId] ?? 0;
 }
 
+// Ajoute (ou retire si négatif) un montant au solde d'un membre.
+// Renvoie le nouveau solde, ou null si le solde serait négatif.
+function changeBalance(userId, delta) {
+  const state = loadState();
+  const after = Math.round((getBalance(state, userId) + delta) * 100) / 100;
+  if (after < 0) return null;
+  state.balances[userId] = after;
+  saveState(state);
+  return after;
+}
+
+function readBalance(userId) {
+  return getBalance(loadState(), userId);
+}
+
 // --- Classement des plus riches ---
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
@@ -237,5 +252,11 @@ async function handleEconomieInteraction(interaction, client) {
 
 module.exports = {
   setupRichestLeaderboard,
+  refreshRichestLeaderboard,
   handleEconomieInteraction,
+  changeBalance,
+  readBalance,
+  formatEuro,
+  isGerant,
+  ECONOMIE_LOG_CHANNEL_ID,
 };

@@ -5,6 +5,11 @@ const {
   ButtonStyle,
   ChannelType,
 } = require("discord.js");
+const {
+  CASINO_ACCESS_ROLE_ID,
+  ENTREPRENEUR_ROLE_ID,
+  SITUATION_DELICATE_ROLE_ID,
+} = require("./casino");
 
 const CANDIDATURE_CATEGORY_ID = "1509979339649843200";
 const CANDIDATURE_LOG_CHANNEL_ID = "1509980081764700271";
@@ -354,8 +359,22 @@ async function closeCandidatureVoting(channel, guild, stats) {
     .catch(() => null);
 }
 
+// Donne le rôle correspondant au profil choisi dans le formulaire.
+// Les entrepreneurs ont aussi directement accès au casino.
+async function assignProfileRoles(guild, stats) {
+  const member = await guild.members.fetch(stats.memberId).catch(() => null);
+  if (!member) return;
+  const profil = stats.answers?.profil;
+  if (profil === "Entrepreneur") {
+    await member.roles.add([ENTREPRENEUR_ROLE_ID, CASINO_ACCESS_ROLE_ID]).catch(() => null);
+  } else if (profil === "Personne en situation délicate") {
+    await member.roles.add(SITUATION_DELICATE_ROLE_ID).catch(() => null);
+  }
+}
+
 async function finalizeCandidature(channel, guild, stats, accepted, reason) {
   stats.status = accepted ? "accepted" : "rejected";
+  if (accepted) await assignProfileRoles(guild, stats);
   await notifyCandidateResult(channel, accepted, reason);
   await updateLogVoteMessage(
     channel,

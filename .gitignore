@@ -1,3 +1,4 @@
 node_modules/
 .env
 economie-state.json
+casino-state.json
