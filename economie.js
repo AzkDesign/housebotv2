@@ -12,8 +12,8 @@ const OLD_LEADERBOARD_TITLE = "🏆 Classement — Plus actifs";
 
 // DATA_DIR permet de stocker les soldes sur un volume Railway (ex. /data)
 // pour qu'ils ne soient pas effacés à chaque redéploiement.
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "economie-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("economie-state.json");
 
 const TRANSACTIONS_KEPT = 30;
 

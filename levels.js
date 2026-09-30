@@ -15,7 +15,7 @@ const MESSAGE_LEVELS = [
   { count: 1000, roleId: "1510693310002364587", label: "Niveau IV" },
 ];
 
-const STATE_FILE = path.join(__dirname, "levels-state.json");
+const STATE_FILE = require("./data").dataFile("levels-state.json");
 
 const INSULT_PATTERNS = [
   /\bconnard\b/i,

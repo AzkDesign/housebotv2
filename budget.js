@@ -20,7 +20,7 @@ const BUDGET_HISTORY_CHANNEL_ID = "1510687492896981102";
 const RESPONSABLE_ROLE_ID = "1509984877120847963";
 const GERANTS_ROLE_ID = "1509985135565475850";
 
-const STATE_FILE = path.join(__dirname, "budget-state.json");
+const STATE_FILE = require("./data").dataFile("budget-state.json");
 const DEFAULT_BUDGET = 3700;
 const ACHAT_TIMEOUT_MS = 10 * 60 * 1000;
 

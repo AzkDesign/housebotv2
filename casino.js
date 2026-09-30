@@ -47,8 +47,8 @@ const OPEN_AT = 4 * 1440 + 20 * 60;
 const CLOSE_AT = 2 * 60;
 const SCHEDULE_TEXT = "du **vendredi 20h** au **lundi 2h** (heure de Paris)";
 
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "casino-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("casino-state.json");
 
 function loadState() {
   try {

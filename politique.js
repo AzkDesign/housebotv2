@@ -15,8 +15,8 @@ const LEVERS = {
   minSalary: { label: "Salaire minimum (par semaine)", default: 200, min: 0, max: 1000, euro: true },
 };
 
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "politique-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("politique-state.json");
 let state = null;
 
 function load() {

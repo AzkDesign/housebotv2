@@ -32,7 +32,7 @@ const { P, formatLever } = require("./politique");
 const { findOrCreateChannel } = require("./salons");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
-const CHAMBRES_STATE_FILE = path.join(__dirname, "chambres-state.json");
+const CHAMBRES_STATE_FILE = require("./data").dataFile("chambres-state.json");
 
 // --- Barème ---
 
@@ -75,8 +75,8 @@ function round2(n) {
 
 // --- Données ---
 
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "impots-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("impots-state.json");
 let state = null;
 
 function load() {

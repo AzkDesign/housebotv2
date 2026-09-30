@@ -36,8 +36,8 @@ const { showIrfTaxes } = require("./impots");
 const IRF_PANEL_CHANNEL_ID = "1527524719094534185";
 const PANEL_TITLE = "🏛️ IRF — Institut de Régulation Financière";
 
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "irf-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("irf-state.json");
 
 function loadState() {
   try {

@@ -58,8 +58,8 @@ function ts(ms, style = "f") {
 
 // --- Données ---
 
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "mairie-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("mairie-state.json");
 let state = null;
 
 function load() {

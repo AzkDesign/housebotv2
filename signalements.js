@@ -18,7 +18,7 @@ const SIGNALEMENT_PANEL_CHANNEL_ID = "1510000880097693818";
 const SIGNALEMENT_LOG_CHANNEL_ID = "1510690066194763786";
 const SIGNALEMENT_ADMIN_ROLE_ID = "1509979964651343993";
 
-const STATE_FILE = path.join(__dirname, "signalements-state.json");
+const STATE_FILE = require("./data").dataFile("signalements-state.json");
 
 const BTN = {
   ADD: "sig_add",

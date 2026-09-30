@@ -169,8 +169,8 @@ function parisHour(ts) {
 
 // --- Données (une seule copie en mémoire) ---
 
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "entreprises-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("entreprises-state.json");
 let state = null;
 
 function load() {

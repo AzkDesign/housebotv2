@@ -19,7 +19,7 @@ const SHOP_TICKET_CATEGORY_ID = "1510692131487092736";
 const MIDDLEMAN_ROLE_ID = "1510773230154289222";
 const SHOP_LOG_CHANNEL_ID = "1510687492896981102";
 
-const STATE_FILE = path.join(__dirname, "boutique-state.json");
+const STATE_FILE = require("./data").dataFile("boutique-state.json");
 
 const BTN = {
   SELL: "shop_sell",

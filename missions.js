@@ -18,7 +18,7 @@ const MISSION_TICKET_CATEGORY_ID = "1510693552299184218";
 const FONDATION_ROLE_ID = "1509974377267990659";
 const GERANT_BANCAIRE_ROLE_ID = "1509985135565475850";
 
-const STATE_FILE = path.join(__dirname, "missions-state.json");
+const STATE_FILE = require("./data").dataFile("missions-state.json");
 
 const MODAL_MISSION = "mission_create_modal";
 const SELECT_MISSION = "mission_select";

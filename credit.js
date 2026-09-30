@@ -15,7 +15,7 @@ const CREDIT_CHANNEL_ID = "1511135082927100104";
 const CREDIT_LOG_CHANNEL_ID = "1510687492896981102";
 const GERANTS_ROLE_ID = "1509985135565475850";
 
-const STATE_FILE = path.join(__dirname, "credit-state.json");
+const STATE_FILE = require("./data").dataFile("credit-state.json");
 
 const SELECT_DURATION = "credit_select_duration";
 const MODAL_CREDIT = "credit_modal";

@@ -16,7 +16,7 @@ const CHAMBRE_SELECT_ROOM_ID = "chambre_select_room";
 const CHAMBRE_SELECT_REMOVE_ROOM_ID = "chambre_select_remove_room";
 const CHAMBRE_SELECT_USER_PREFIX = "chambre_select_user:";
 const CHAMBRE_REMOVE_USER_PREFIX = "chambre_remove_user:";
-const STATE_FILE = path.join(__dirname, "chambres-state.json");
+const STATE_FILE = require("./data").dataFile("chambres-state.json");
 
 /** Seul ce rôle peut utiliser Ajout et Retrait */
 const CHAMBRE_STAFF_ROLE_ID = "1509979964651343993";

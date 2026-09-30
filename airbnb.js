@@ -35,8 +35,8 @@ const OPEN_HOUR = 7;
 const CLOSE_HOUR = 21;
 const CHECKOUT_HOUR = 11;
 
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const STATE_FILE = path.join(DATA_DIR, "airbnb-state.json");
+const { DATA_DIR, dataFile } = require("./data");
+const STATE_FILE = dataFile("airbnb-state.json");
 
 // Une seule copie en mémoire : la boucle automatique et les boutons
 // modifient le même objet, sans s'écraser mutuellement.
