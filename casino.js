@@ -9,6 +9,8 @@ const {
   TextInputBuilder,
   TextInputStyle,
   UserSelectMenuBuilder,
+  ChannelType,
+  PermissionFlagsBits,
 } = require("discord.js");
 const {
   changeBalance,
@@ -23,6 +25,8 @@ const CASINO_CHANNEL_ID = "1527054335928827954";
 const CASINO_ACCESS_ROLE_ID = "1554940931617071206";
 const ENTREPRENEUR_ROLE_ID = "1554940569732517909";
 const SITUATION_DELICATE_ROLE_ID = "1554940813522505778";
+const IRF_ROLE_ID = "1527525759793762586";
+const TICKET_CATEGORY_ID = "1509977402485510345";
 
 const PANEL_TITLE = "🎰 Casino de la Maison";
 const MIN_BET = 10;
@@ -306,10 +310,21 @@ async function setupCasino(client) {
   console.log("Casino prêt");
 }
 
-// --- Demande d'accès ---
+// --- Demande d'accès (ticket contrôlé par l'IRF) ---
+
+function isIrf(member) {
+  return member?.roles.cache.has(IRF_ROLE_ID) || isGerant(member);
+}
+
+function findAccessTicket(guild, memberId) {
+  return guild.channels.cache.find(
+    (ch) => ch.type === ChannelType.GuildText && ch.topic === `casino:${memberId}`
+  );
+}
 
 async function handleAccessRequest(interaction, client) {
   const member = interaction.member;
+  const guild = interaction.guild;
 
   if (member.roles.cache.has(CASINO_ACCESS_ROLE_ID)) {
     await interaction.reply({ content: "🎟️ Vous avez déjà accès au casino.", ephemeral: true });
@@ -325,12 +340,51 @@ async function handleAccessRequest(interaction, client) {
     return;
   }
 
-  const log = await client.channels.fetch(ECONOMIE_LOG_CHANNEL_ID).catch(() => null);
-  if (!log?.isTextBased()) {
+  const existing = findAccessTicket(guild, member.id);
+  if (existing) {
     await interaction.reply({
-      content: "❌ Impossible d'envoyer la demande. Contactez un gérant.",
+      content: `📨 Vous avez déjà une demande en cours : ${existing}`,
       ephemeral: true,
     });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const allow = [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.AttachFiles,
+  ];
+  const permissionOverwrites = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: member.id, allow },
+    {
+      id: guild.members.me.id,
+      allow: [...allow, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages],
+    },
+  ];
+  if (guild.roles.cache.has(IRF_ROLE_ID)) {
+    permissionOverwrites.push({ id: IRF_ROLE_ID, allow: [...allow, PermissionFlagsBits.ManageMessages] });
+  }
+
+  const slug = member.user.username.toLowerCase().replace(/[^a-z0-9]/g, "") || "membre";
+  const ticket = await guild.channels
+    .create({
+      name: `casino-${slug}`.slice(0, 100),
+      type: ChannelType.GuildText,
+      parent: TICKET_CATEGORY_ID,
+      topic: `casino:${member.id}`,
+      permissionOverwrites,
+    })
+    .catch((err) => {
+      console.error("Ticket casino:", err.message);
+      return null;
+    });
+
+  if (!ticket) {
+    await interaction.editReply("❌ Impossible d'ouvrir le ticket. Contactez un gérant.");
     return;
   }
 
@@ -342,15 +396,23 @@ async function handleAccessRequest(interaction, client) {
     .setColor(0xe91e63)
     .setTitle("🎟️ Demande d'accès au casino")
     .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
+    .setDescription(
+      `Bonjour ${member},\n\n` +
+        "L'**IRF** (Institut de Régulation Financière) va étudier votre demande : " +
+        "absence de **fraude** et de signes de **dépendance au jeu**.\n" +
+        "Répondez à leurs questions dans ce salon."
+    )
     .addFields(
       { name: "Membre", value: `${member} (\`${member.user.tag}\`)` },
       { name: "Profil", value: profil, inline: true },
       { name: "Solde", value: formatEuro(readBalance(member.id)), inline: true }
     )
-    .setFooter({ text: "Réservé aux gérants" })
+    .setFooter({ text: "Décision réservée à l'IRF" })
     .setTimestamp();
 
-  await log.send({
+  await ticket.send({
+    content: `${member} <@&${IRF_ROLE_ID}>`,
+    allowedMentions: { users: [member.id], roles: [IRF_ROLE_ID] },
     embeds: [embed],
     components: [
       new ActionRowBuilder().addComponents(
@@ -368,39 +430,45 @@ async function handleAccessRequest(interaction, client) {
     ],
   });
 
-  await interaction.reply({
-    content: "📨 Votre demande d'accès a été transmise aux gérants. Vous serez prévenu(e) en message privé.",
-    ephemeral: true,
-  });
+  await interaction.editReply(`📨 Votre demande est ouverte ici : ${ticket}`);
 }
 
-async function handleAccessDecision(interaction, accepted, userId) {
-  if (!isGerant(interaction.member)) {
-    await interaction.reply({ content: "❌ Réservé aux gérants.", ephemeral: true });
+async function handleAccessDecision(interaction, accepted, userId, client) {
+  if (!isIrf(interaction.member)) {
+    await interaction.reply({ content: "❌ Décision réservée à l'IRF.", ephemeral: true });
     return;
   }
 
   const member = await interaction.guild.members.fetch(userId).catch(() => null);
-  if (!member) {
-    await interaction.update({ components: [] });
-    await interaction.followUp({ content: "❌ Ce membre n'est plus sur le serveur.", ephemeral: true });
-    return;
-  }
-
-  if (accepted) await member.roles.add(CASINO_ACCESS_ROLE_ID).catch(() => null);
+  if (member && accepted) await member.roles.add(CASINO_ACCESS_ROLE_ID).catch(() => null);
 
   const embed = EmbedBuilder.from(interaction.message.embeds[0])
     .setColor(accepted ? 0x2ecc71 : 0xe74c3c)
     .setFooter({ text: `${accepted ? "Acceptée" : "Refusée"} par ${interaction.user.tag}` });
   await interaction.update({ embeds: [embed], components: [] });
 
-  await member
+  await interaction.channel
     .send(
+      (accepted
+        ? `✅ Accès au casino **accordé** à <@${userId}>. Il est ouvert ${SCHEDULE_TEXT}.`
+        : `❌ Accès au casino **refusé** à <@${userId}>.`) +
+        "\n*Ce ticket sera fermé dans 1 minute.*"
+    )
+    .catch(() => null);
+
+  const log = await client.channels.fetch(ECONOMIE_LOG_CHANNEL_ID).catch(() => null);
+  if (log?.isTextBased()) await log.send({ embeds: [embed] }).catch(() => null);
+
+  await member
+    ?.send(
       accepted
         ? `🎰 Votre demande d'accès au casino a été **acceptée** ! Il est ouvert ${SCHEDULE_TEXT}.`
         : "🎰 Votre demande d'accès au casino a été **refusée**."
     )
     .catch(() => null);
+
+  const channel = interaction.channel;
+  setTimeout(() => channel.delete("Demande casino traitée").catch(() => null), 60 * 1000);
 }
 
 // --- Modale de mise ---
@@ -877,7 +945,7 @@ async function handleCasinoInteraction(interaction, client) {
   }
   if (interaction.isButton() && id.startsWith("casino_access_")) {
     const [, , decision, userId] = id.split("_");
-    await handleAccessDecision(interaction, decision === "ok", userId);
+    await handleAccessDecision(interaction, decision === "ok", userId, client);
     return true;
   }
 
