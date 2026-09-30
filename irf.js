@@ -199,6 +199,7 @@ const TREASURY_LABELS = {
   impotFortune: "💎 Impôt sur la fortune",
   redressements: "⚖️ Redressements fiscaux",
   recouvrement: "💳 Dettes recouvrées",
+  cautions: "🗳️ Cautions électorales perdues",
   casinoMises: "🎰 Mises casino",
   casinoGains: "🎰 Gains versés casino",
 };
@@ -207,7 +208,7 @@ async function showTresorerie(interaction) {
   const t = loadEconomie().treasury;
   const get = (k) => t[k] ?? 0;
   const casinoNet = Math.round((get("casinoMises") - get("casinoGains")) * 100) / 100;
-  const total = Math.round((get("amendes") + get("licences") + get("taxesDefis") + get("airbnb") + get("immatriculations") + get("impotsSocietes") + get("dividendes") + get("liquidations") + get("taxeHabitation") + get("impotFortune") + get("redressements") + get("recouvrement") + casinoNet) * 100) / 100;
+  const total = Math.round((get("amendes") + get("licences") + get("taxesDefis") + get("airbnb") + get("immatriculations") + get("impotsSocietes") + get("dividendes") + get("liquidations") + get("taxeHabitation") + get("impotFortune") + get("redressements") + get("recouvrement") + get("cautions") + casinoNet) * 100) / 100;
 
   const embed = new EmbedBuilder()
     .setColor(0xd4af37)
@@ -219,7 +220,8 @@ async function showTresorerie(interaction) {
         inline: true,
       })),
       { name: "🎰 Résultat casino", value: `**${formatEuro(casinoNet)}**`, inline: true },
-      { name: "🏛️ Total encaissé par la Maison", value: `**${formatEuro(total)}**` }
+      { name: "🏛️ Total encaissé par la Maison", value: `**${formatEuro(total)}**` },
+      { name: "🏙️ Budget municipal (géré par le maire)", value: formatEuro(require("./mairie").getBudget()) }
     )
     .setFooter({ text: "Cumul depuis la mise en place de l'IRF" });
   await interaction.reply({ embeds: [embed], ephemeral: true });

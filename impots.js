@@ -27,6 +27,8 @@ const {
 } = require("./economie");
 const { IRF_ROLE_ID, SITUATION_DELICATE_ROLE_ID } = require("./casino");
 const { hasJob, getCategoryId } = require("./entreprises");
+// Multiplicateurs de taxe d'habitation et d'impôt sur la fortune réglés par le maire
+const { P, formatLever } = require("./politique");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 const CHAMBRES_STATE_FILE = path.join(__dirname, "chambres-state.json");
@@ -122,15 +124,19 @@ function wealthTax(balance) {
   for (const b of WEALTH_BRACKETS) {
     if (balance > b.from) tax += (Math.min(balance, b.to) - b.from) * b.rate;
   }
-  return round2(tax);
+  return round2(tax * P().wealthMultiplier);
+}
+
+function housingTax(roomId) {
+  return round2(HOUSING_TAX[roomId].amount * P().housingMultiplier);
 }
 
 // Calcule l'impôt de la semaine d'un membre, avec le détail.
 function computeTax(member, balance) {
   const lines = [];
   const rooms = roomsOf(member.id);
-  const housing = rooms.reduce((s, r) => s + HOUSING_TAX[r].amount, 0);
-  for (const r of rooms) lines.push([`🏠 Taxe d'habitation — ${HOUSING_TAX[r].name}`, HOUSING_TAX[r].amount]);
+  const housing = rooms.reduce((s, r) => s + housingTax(r), 0);
+  for (const r of rooms) lines.push([`🏠 Taxe d'habitation — ${HOUSING_TAX[r].name}`, housingTax(r)]);
   const wealth = wealthTax(balance);
   if (wealth > 0) lines.push(["💎 Impôt sur la fortune", wealth]);
   let total = round2(housing + wealth);
@@ -193,13 +199,14 @@ async function ensureChannel(client) {
 }
 
 function bracketsText() {
+  const m = P().wealthMultiplier;
   return WEALTH_BRACKETS.map(
-    (b) => `${b.to === Infinity ? `au-delà de ${formatEuro(b.from)}` : `${formatEuro(b.from)} → ${formatEuro(b.to)}`} : **${b.rate * 100} %**`
+    (b) => `${b.to === Infinity ? `au-delà de ${formatEuro(b.from)}` : `${formatEuro(b.from)} → ${formatEuro(b.to)}`} : **${Math.round(b.rate * m * 1000) / 10} %**`
   ).join("\n");
 }
 
 function panelMessage() {
-  const housing = [...new Map(Object.values(HOUSING_TAX).map((h) => [h.name.replace(/ \d$/, ""), h.amount])).entries()]
+  const housing = [...new Map(Object.entries(HOUSING_TAX).map(([id, h]) => [h.name.replace(/ \d$/, ""), housingTax(id)])).entries()]
     .map(([n, a]) => `${n} : **${formatEuro(a)}**/occupant`)
     .join("\n");
   return {
@@ -211,6 +218,7 @@ function panelMessage() {
           "Les impôts sont prélevés **chaque dimanche à 20h05**, directement sur votre solde. Votre avis d'imposition vous est envoyé en message privé.\n\n" +
             `**🏠 Taxe d'habitation** (par semaine)\n${housing}\n\n` +
             `**💎 Impôt sur la fortune** (par semaine, par tranches)\n${bracketsText()}\n\n` +
+            `🏛️ Taux fixés par la Mairie : habitation ${formatLever("housingMultiplier", P().housingMultiplier)}, fortune ${formatLever("wealthMultiplier", P().wealthMultiplier)}\n\n` +
             "**Exonérations**\n" +
             "🌱 Nouveaux membres : rien à payer pendant 2 semaines\n" +
             "🤝 Situation délicate **sans emploi ni entreprise** : rien à payer\n" +
@@ -577,4 +585,4 @@ async function setupImpots(client) {
   console.log("Impôts prêts");
 }
 
-module.exports = { setupImpots, handleImpotsInteraction, showIrfTaxes };
+module.exports = { setupImpots, handleImpotsInteraction, showIrfTaxes, refreshPanel };

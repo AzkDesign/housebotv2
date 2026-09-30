@@ -25,14 +25,12 @@ const {
 } = require("./economie");
 const { ENTREPRENEUR_ROLE_ID, LICENCE_ROLE_ID, IRF_ROLE_ID } = require("./casino");
 const { randomPerson } = require("./airbnb");
+// Taux réglés par le maire : impôt sur les sociétés, dividendes, salaire minimum, frais…
+const { P, sectorBoost } = require("./politique");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 
-const REGISTRATION_FEE = 500;
 const START_CAPITAL = 5000;
-const CORPORATE_TAX = 0.2; // impôt sur les sociétés, sur le chiffre d'affaires de la semaine
-const DIVIDEND_TAX = 0.1; // taxe sur l'argent que le patron se verse
-const MIN_SALARY = 200;
 const UNPAID_WEEKS_BEFORE_BANKRUPTCY = 2;
 const CLIENT_TIMEOUT_MS = 20 * 60 * 1000;
 const SHIFT_MAX_MS = 6 * 60 * 60 * 1000; // service terminé automatiquement après 6 h
@@ -298,7 +296,7 @@ function whyEmbed() {
         "🏆 **De la visibilité** — le classement des entreprises est affiché ici chaque semaine.\n\n" +
         "⚠️ **Travail au noir interdit** : vendre des services ou employer quelqu'un sans entreprise immatriculée " +
         "expose à une **amende** et au **gel du compte** par l'IRF.\n\n" +
-        `💶 **Coût** : ${formatEuro(REGISTRATION_FEE)} de frais d'immatriculation + ${formatEuro(START_CAPITAL)} de capital ` +
+        `💶 **Coût** : ${formatEuro(P().registrationFee)} de frais d'immatriculation + ${formatEuro(START_CAPITAL)} de capital ` +
         "(ce capital **reste à vous**, sur le compte de l'entreprise).\n" +
         "📋 **Conditions** : avoir le rôle **Entrepreneur** et la **licence**."
     );
@@ -372,10 +370,10 @@ async function startCreation(interaction) {
     await interaction.reply({ content: "❌ Vous faites déjà partie d'une entreprise (une seule par personne).", ephemeral: true });
     return;
   }
-  const cost = REGISTRATION_FEE + START_CAPITAL;
+  const cost = P().registrationFee + START_CAPITAL;
   if (readBalance(member.id) < cost) {
     await interaction.reply({
-      content: `❌ Il faut **${formatEuro(cost)}** (${formatEuro(REGISTRATION_FEE)} de frais + ${formatEuro(START_CAPITAL)} de capital). Vous avez ${formatEuro(readBalance(member.id))}.`,
+      content: `❌ Il faut **${formatEuro(cost)}** (${formatEuro(P().registrationFee)} de frais + ${formatEuro(START_CAPITAL)} de capital). Vous avez ${formatEuro(readBalance(member.id))}.`,
       ephemeral: true,
     });
     return;
@@ -432,7 +430,8 @@ async function submitCreation(interaction, sector, client) {
     return;
   }
 
-  const cost = REGISTRATION_FEE + START_CAPITAL;
+  const fee = P().registrationFee;
+  const cost = fee + START_CAPITAL;
   if (changeBalance(userId, -cost, `Immatriculation de « ${name} » (en attente)`) === null) {
     await interaction.reply({ content: `❌ Solde insuffisant ou compte gelé (il faut ${formatEuro(cost)}).`, ephemeral: true });
     return;
@@ -446,6 +445,7 @@ async function submitCreation(interaction, sector, client) {
     description,
     logo: /^https?:\/\//.test(logo) ? logo : null,
     ownerId: userId,
+    fee,
     status: "pending",
     balance: 0,
     createdAt: Date.now(),
@@ -471,7 +471,7 @@ async function submitCreation(interaction, sector, client) {
         .setTitle("🏛️ Demande d'immatriculation")
         .setThumbnail(company.logo)
         .setDescription(`**${name}** — ${SECTORS[sector].label}\nPatron : <@${userId}>\n\n${description}`)
-        .addFields({ name: "Versé", value: `${formatEuro(REGISTRATION_FEE)} de frais + ${formatEuro(START_CAPITAL)} de capital (remboursés en cas de refus)` })
+        .addFields({ name: "Versé", value: `${formatEuro(fee)} de frais + ${formatEuro(START_CAPITAL)} de capital (remboursés en cas de refus)` })
         .setTimestamp(),
     ],
     components: [
@@ -516,7 +516,8 @@ async function validateCreation(interaction, accepted, id, client) {
     await interaction.update({ components: [] });
     return;
   }
-  const cost = REGISTRATION_FEE + START_CAPITAL;
+  const fee = company.fee ?? P().registrationFee;
+  const cost = fee + START_CAPITAL;
 
   if (!accepted) {
     company.status = "refused";
@@ -555,7 +556,7 @@ async function validateCreation(interaction, accepted, id, client) {
   company.channelId = channel.id;
   company.validatedBy = interaction.user.id;
   move(company, START_CAPITAL, "Capital de départ");
-  addToTreasury("immatriculations", REGISTRATION_FEE);
+  if (fee > 0) addToTreasury("immatriculations", fee);
   save();
   registryDirty = true;
 
@@ -574,7 +575,7 @@ async function validateCreation(interaction, accepted, id, client) {
             "1. 📢 Publiez une offre d'emploi ou 👥 embauchez directement\n" +
             "2. 🟢 Prenez votre service : les clients arrivent quand quelqu'un est en service\n" +
             "3. 🧾 Facturez vos prestations aux membres\n\n" +
-            `⚖️ Chaque dimanche à 20h : impôt de **${Math.round(CORPORATE_TAX * 100)} %** sur le chiffre d'affaires, puis versement des salaires.`
+            `⚖️ Chaque dimanche à 20h : impôt de **${Math.round(P().corporateTax * 100)} %** sur le chiffre d'affaires, puis versement des salaires.`
         ),
     ],
   });
@@ -795,7 +796,8 @@ async function tick(client) {
       hour < close
     ) {
       await sendClientRequest(client, company);
-      company.nextClientAt = now + clientGap(dutyCount);
+      // Plan de relance voté par le maire : +50 % de clients dans le secteur
+      company.nextClientAt = now + clientGap(dutyCount) / (sectorBoost(company.sector) ? 1.5 : 1);
       save();
     }
   }
@@ -822,7 +824,7 @@ async function showAccount(interaction, company) {
     .setDescription(
       `Solde : **${formatEuro(company.balance)}**\n` +
         `Salaires dus dimanche : **${formatEuro(weeklyPayroll(company))}**\n` +
-        `Impôt estimé (${Math.round(CORPORATE_TAX * 100)} % du CA) : **${formatEuro(round2(company.weekRevenue * CORPORATE_TAX))}**\n\n` +
+        `Impôt estimé (${Math.round(P().corporateTax * 100)} % du CA) : **${formatEuro(round2(company.weekRevenue * P().corporateTax))}**\n\n` +
         (list.length
           ? list.map((t) => `${ts(t.at, "d")} **${t.delta >= 0 ? "+" : ""}${formatEuro(t.delta)}** — ${t.label}`).join("\n").slice(0, 3000)
           : "*Aucune opération.*")
@@ -831,7 +833,7 @@ async function showAccount(interaction, company) {
     ? [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`ent_deposit_${company.id}`).setLabel("Déposer de mon argent").setEmoji("📥").setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`ent_dividend_${company.id}`).setLabel(`Me verser un dividende (−${Math.round(DIVIDEND_TAX * 100)} %)`).setEmoji("📤").setStyle(ButtonStyle.Secondary)
+          new ButtonBuilder().setCustomId(`ent_dividend_${company.id}`).setLabel(`Me verser un dividende (−${Math.round(P().dividendTax * 100)} %)`).setEmoji("📤").setStyle(ButtonStyle.Secondary)
         ),
       ]
     : [];
@@ -871,7 +873,7 @@ async function dividend(interaction, company, amount, client) {
   if (!move(company, -amount, `Dividende versé à ${interaction.user.tag}`)) {
     return interaction.reply({ content: `❌ Le compte de l'entreprise n'a que ${formatEuro(company.balance)}.`, ephemeral: true });
   }
-  const tax = round2(amount * DIVIDEND_TAX);
+  const tax = round2(amount * P().dividendTax);
   changeBalance(interaction.user.id, amount - tax, `Dividende de « ${company.name} »`);
   addToTreasury("dividendes", tax);
   save();
@@ -934,14 +936,14 @@ function contractModal(customId, title, current) {
     .setTitle(title)
     .addComponents(
       input("poste", "Poste (employe ou manager)", current?.role, "employe"),
-      input("salaire", `Salaire par semaine (min. ${MIN_SALARY} €)`, current?.salary, String(MIN_SALARY))
+      input("salaire", `Salaire par semaine (min. ${P().minSalary} €)`, current?.salary, String(P().minSalary))
     );
 }
 
 function readContract(interaction) {
   const poste = interaction.fields.getTextInputValue("poste").toLowerCase().includes("manag") ? "manager" : "employe";
   const salary = parseAmount(interaction.fields.getTextInputValue("salaire"));
-  if (salary < MIN_SALARY) return { error: `❌ Le salaire minimum est de ${formatEuro(MIN_SALARY)} par semaine.` };
+  if (salary < P().minSalary) return { error: `❌ Le salaire minimum est de ${formatEuro(P().minSalary)} par semaine.` };
   return { role: poste, salary };
 }
 
@@ -1180,7 +1182,7 @@ async function payInvoice(interaction, id, mode, client) {
 
 async function showReport(interaction, company) {
   const best = Object.entries(company.weekStats).sort((a, b) => b[1] - a[1])[0];
-  const tax = round2(company.weekRevenue * CORPORATE_TAX);
+  const tax = round2(company.weekRevenue * P().corporateTax);
   const payroll = weeklyPayroll(company);
   await interaction.reply({
     embeds: [
@@ -1208,10 +1210,10 @@ async function weeklyClose(client) {
   for (const company of Object.values(load().companies)) {
     if (company.status !== "active") continue;
 
-    const tax = round2(company.weekRevenue * CORPORATE_TAX);
+    const tax = round2(company.weekRevenue * P().corporateTax);
     if (tax > 0) {
       const paid = Math.min(tax, company.balance);
-      move(company, -paid, `Impôt sur les sociétés (${Math.round(CORPORATE_TAX * 100)} %)`);
+      move(company, -paid, `Impôt sur les sociétés (${Math.round(P().corporateTax * 100)} %)`);
       addToTreasury("impotsSocietes", paid);
     }
 
@@ -1239,7 +1241,7 @@ async function weeklyClose(client) {
           .setTitle("🗓️ Clôture de la semaine")
           .setDescription(
             `Chiffre d'affaires : **${formatEuro(company.weekRevenue)}**\n` +
-              `Impôt (${Math.round(CORPORATE_TAX * 100)} %) : **${formatEuro(tax)}**\n${salaryText}\n` +
+              `Impôt (${Math.round(P().corporateTax * 100)} %) : **${formatEuro(tax)}**\n${salaryText}\n` +
               (best ? `🏅 Employé de la semaine : <@${best[0]}> (${best[1]} client(s))\n` : "") +
               `\nCompte : **${formatEuro(company.balance)}**`
           )
@@ -1460,7 +1462,7 @@ async function handleEntreprisesInteraction(interaction, client) {
       break;
     case "dividend":
       if (!patron) await denied("❌ Réservé au patron.");
-      else await interaction.showModal(amountModal(`ent_mdividend_${company.id}`, "📤 Me verser un dividende", `Montant (€) — taxe de ${Math.round(DIVIDEND_TAX * 100)} %`));
+      else await interaction.showModal(amountModal(`ent_mdividend_${company.id}`, "📤 Me verser un dividende", `Montant (€) — taxe de ${Math.round(P().dividendTax * 100)} %`));
       break;
     case "mdeposit":
       if (!patron) await denied("❌ Réservé au patron.");
@@ -1599,4 +1601,27 @@ function getCategoryId() {
   return load().categoryId ?? null;
 }
 
-module.exports = { setupEntreprises, handleEntreprisesInteraction, showIrfCompanies, hasJob, getCategoryId };
+// Pour la mairie : entreprises en activité et versement d'une subvention.
+function listActiveCompanies() {
+  return Object.values(load().companies).filter((c) => c.status === "active");
+}
+
+function creditCompany(companyId, amount, label) {
+  const company = load().companies[companyId];
+  if (!company || company.status !== "active") return false;
+  move(company, amount, label);
+  save();
+  dirtyPanels.add(company.id);
+  return true;
+}
+
+module.exports = {
+  setupEntreprises,
+  handleEntreprisesInteraction,
+  showIrfCompanies,
+  hasJob,
+  getCategoryId,
+  listActiveCompanies,
+  creditCompany,
+  SECTORS,
+};

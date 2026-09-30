@@ -18,13 +18,15 @@ const {
   isGerant,
   refreshRichestLeaderboard,
 } = require("./economie");
+// Part de la Maison sur chaque séjour, réglée par le maire (80 % par défaut)
+const { P } = require("./politique");
+const hostShare = () => Math.round((1 - P().airbnbMaisonShare) * 100) / 100;
 
 const AIRBNB_CHANNEL_ID = "1527544352090357881";
 const RESPONSABLE_ROLE_ID = "1527543284765954050";
 const HOTE_ROLE_ID = "1554949371194253425";
 
 const PANEL_TITLE = "🏡 Airbnb de la Maison";
-const HOST_SHARE = 0.2; // 20 % pour l'hôte, 80 % pour la Maison
 const MAX_LISTINGS_PER_HOST = 5;
 const MIN_GAP_MS = 3 * 60 * 60 * 1000; // au moins 3 h entre deux demandes
 const EXTRA_GAP_MS = 3 * 60 * 60 * 1000; // + jusqu'à 3 h de hasard
@@ -341,7 +343,7 @@ function buildPanelMessage() {
         "🟢 **Activer / Désactiver** — quand c'est activé, des voyageurs vous envoient des demandes (entre 7h et 21h)\n" +
         "📂 **Mes biens** — gérer vos logements\n" +
         "🛠️ **Gestion** — réservé aux responsables Airbnb\n\n" +
-        `💶 Chaque séjour : **${Math.round(HOST_SHARE * 100)} %** pour l'hôte, **${Math.round((1 - HOST_SHARE) * 100)} %** pour la Maison. Ménage compris.\n\n` +
+        `💶 Chaque séjour : **${Math.round(hostShare() * 100)} %** pour l'hôte, **${Math.round((1 - hostShare()) * 100)} %** pour la Maison. Ménage compris.\n\n` +
         `**Biens disponibles (${listings.length})**\n${body || "*Aucun bien pour le moment.*"}`
     )
     .setFooter({ text: `${online} hôte(s) en ligne` })
@@ -420,7 +422,7 @@ function requestEmbed(request, listing, footer) {
       { name: "Voyageurs", value: String(g.guests), inline: true },
       { name: "Nuits", value: String(g.nights), inline: true },
       { name: "Total du séjour", value: formatEuro(total), inline: true },
-      { name: "Votre part (20 %)", value: `**${formatEuro(round2(total * HOST_SHARE))}**`, inline: true },
+      { name: `Votre part (${Math.round(hostShare() * 100)} %)`, value: `**${formatEuro(round2(total * hostShare()))}**`, inline: true },
       { name: "Arrivée", value: "Dès acceptation", inline: true },
       { name: "Départ prévu", value: ts(checkoutTime(Date.now(), g.nights), "f"), inline: true }
     )
@@ -766,7 +768,7 @@ async function showAdmin(interaction) {
       { name: "En attente", value: String(pending), inline: true },
       { name: "Demandes en cours", value: String(Object.keys(state.requests).length), inline: true },
       { name: "Chiffre d'affaires total", value: formatEuro(round2(revenue)), inline: true },
-      { name: "Part de la Maison (80 %)", value: formatEuro(round2(revenue * (1 - HOST_SHARE))), inline: true },
+      { name: `Part de la Maison (${Math.round((1 - hostShare()) * 100)} %)`, value: formatEuro(round2(revenue * (1 - hostShare()))), inline: true },
       { name: "Hôtes en ligne", value: online.length ? online.map(([id]) => `<@${id}>`).join(", ").slice(0, 1024) : "Aucun" }
     );
 
@@ -882,7 +884,7 @@ async function answerRequest(interaction, accepted, id, client) {
     return;
   }
 
-  const hostPart = round2(request.total * HOST_SHARE);
+  const hostPart = round2(request.total * hostShare());
   const maisonPart = round2(request.total - hostPart);
   const checkout = checkoutTime(Date.now(), g.nights);
 
@@ -906,8 +908,8 @@ async function answerRequest(interaction, accepted, id, client) {
     )
     .addFields(
       { name: "Total du séjour", value: formatEuro(request.total), inline: true },
-      { name: "Pour l'hôte (20 %)", value: `**${formatEuro(hostPart)}**`, inline: true },
-      { name: "Pour la Maison (80 %)", value: formatEuro(maisonPart), inline: true }
+      { name: `Pour l'hôte (${Math.round(hostShare() * 100)} %)`, value: `**${formatEuro(hostPart)}**`, inline: true },
+      { name: `Pour la Maison (${Math.round((1 - hostShare()) * 100)} %)`, value: formatEuro(maisonPart), inline: true }
     )
     .setTimestamp();
   await interaction.update({ content: `<@${request.hostId}>`, embeds: [embed], components: [] });

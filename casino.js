@@ -22,6 +22,8 @@ const {
   addToTreasury,
   isFrozen,
 } = require("./economie");
+// Taxe de la maison sur le pot d'un défi (réglée par le maire), versée au jackpot
+const { P } = require("./politique");
 
 const CASINO_CHANNEL_ID = "1527054335928827954";
 const CASINO_ACCESS_ROLE_ID = "1554940931617071206";
@@ -36,7 +38,6 @@ const PANEL_TITLE = "🎰 Casino de la Maison";
 const MIN_BET = 10;
 const JACKPOT_SEED = 1000;
 const JACKPOT_SHARE = 0.02; // part de chaque mise de machine à sous versée au jackpot
-const DUEL_TAX = 0.05; // taxe de la maison sur le pot d'un défi, versée au jackpot
 const BLACKJACK_TIMEOUT_MS = 3 * 60 * 1000;
 const DUEL_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -904,7 +905,7 @@ async function createDuel(interaction, opponentId, bet, client) {
   }
 
   const id = String(++duelCounter);
-  const tax = round2(bet * 2 * DUEL_TAX);
+  const tax = round2(bet * 2 * P().duelTax);
   const embed = new EmbedBuilder()
     .setColor(0xe74c3c)
     .setTitle("⚔️ Défi au casino")
@@ -986,7 +987,7 @@ async function handleDuelResponse(interaction, accepted, id) {
   markBalancesDirty();
 
   const pot = duel.bet * 2;
-  const tax = round2(pot * DUEL_TAX);
+  const tax = round2(pot * P().duelTax);
   const winnerId = Math.random() < 0.5 ? duel.challengerId : duel.opponentId;
   const loserId = winnerId === duel.challengerId ? duel.opponentId : duel.challengerId;
   changeBalance(winnerId, pot - tax, "Casino — défi (gain)", { force: true });
