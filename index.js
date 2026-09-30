@@ -72,7 +72,6 @@ const { setupRichestLeaderboard, handleEconomieInteraction } = require("./econom
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
 const { setupCreditTable, handleCreditInteraction } = require("./credit");
 const { setupMissionPanel, handleMissionInteraction } = require("./missions");
-const { setupReopeningAnnouncement } = require("./annonce");
 const { buildRulesEmbeds } = require("./reglement");
 
 const TICKET_TYPES = {
@@ -530,7 +529,6 @@ client.once("ready", async () => {
   await step("boutique", () => setupShopPanel(client));
   await step("crédit", () => setupCreditTable(client));
   await step("missions", () => setupMissionPanel(client));
-  await step("annonce", () => setupReopeningAnnouncement(client));
   await step("casino", () => setupCasino(client));
 });
 
