@@ -78,13 +78,26 @@ const QUARTIERS = {
 const MAISONS = [
   {
     id: "maison1",
-    name: "La Maison",
+    name: "Maison 1",
     rooms: [
       { id: "penthouse", name: "Penthouse", capacity: 2, quartier: "haussmann" },
       { id: "suite", name: "Suite", capacity: 2, quartier: "marais" },
       { id: "double1", name: "Chambre double 1", capacity: 2, quartier: "montmartre" },
       { id: "double2", name: "Chambre double 2", capacity: 2, quartier: "belleville" },
       { id: "double3", name: "Chambre double 3", capacity: 2, quartier: "belleville" },
+    ],
+  },
+  {
+    id: "maison2",
+    name: "Maison 2",
+    rooms: [
+      { id: "m2_penthouse1", name: "Penthouse 1", capacity: 2, quartier: "haussmann" },
+      { id: "m2_penthouse2", name: "Penthouse 2", capacity: 2, quartier: "haussmann" },
+      { id: "m2_penthouse3", name: "Penthouse 3", capacity: 2, quartier: "haussmann" },
+      { id: "m2_suite1", name: "Suite 1", capacity: 2, quartier: "marais" },
+      { id: "m2_suite2", name: "Suite 2", capacity: 2, quartier: "marais" },
+      { id: "m2_double1", name: "Chambre double 1", capacity: 2, quartier: "montmartre" },
+      { id: "m2_double2", name: "Chambre double 2", capacity: 2, quartier: "belleville" },
     ],
   },
 ];
@@ -116,6 +129,11 @@ function getRoom(roomId) {
 
 function maisonOf(room) {
   return MAISONS.find((m) => m.id === room.maison);
+}
+
+// « Maison 2, Chambre double 1 » : plusieurs maisons ont des chambres du même nom.
+function roomLabel(room) {
+  return MAISONS.length > 1 ? `${maisonOf(room).name}, ${room.name}` : room.name;
 }
 
 function removeMemberFromAllRooms(state, userId) {
@@ -258,11 +276,11 @@ async function announceMove(client, userId, fromRoom, toRoom) {
   const to = QUARTIERS[toRoom.quartier];
   let text;
   if (!fromRoom) {
-    text = `🔑 <@${userId}> emménage à **${to.emoji} ${to.name}** (${toRoom.name}).`;
+    text = `🔑 <@${userId}> emménage à **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
   } else {
     const from = QUARTIERS[fromRoom.quartier];
     const arrow = to.stars > from.stars ? "⬆️" : to.stars < from.stars ? "⬇️" : "📦";
-    text = `${arrow} <@${userId}> quitte **${from.emoji} ${from.name}** (${fromRoom.name}) pour **${to.emoji} ${to.name}** (${toRoom.name}).`;
+    text = `${arrow} <@${userId}> quitte **${from.emoji} ${from.name}** (${roomLabel(fromRoom)}) pour **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
   }
   await channel.send({ content: text, allowedMentions: { users: [] } }).catch(() => null);
 }
@@ -353,8 +371,8 @@ async function openMoveTicket(interaction) {
         .setTitle("📦 Demande de déménagement")
         .addFields(
           { name: "Membre", value: `${member}` },
-          { name: "Actuellement", value: current ? `${current.quartier.emoji} ${current.quartier.name} — ${current.room.name}` : "Sans chambre", inline: true },
-          { name: "Souhaite aller", value: `${q.emoji} ${q.name} — ${room.name}`, inline: true },
+          { name: "Actuellement", value: current ? `${current.quartier.emoji} ${current.quartier.name} — ${roomLabel(current.room)}` : "Sans chambre", inline: true },
+          { name: "Souhaite aller", value: `${q.emoji} ${q.name} — ${roomLabel(room)}`, inline: true },
           { name: "Frais", value: `${formatEuro(q.moveFee)} (solde : ${formatEuro(readBalance(member.id))})` }
         )
         .setFooter({ text: "Décision réservée à la Fondation et aux gérants" })
@@ -392,7 +410,7 @@ async function answerMove(interaction, decision, userId) {
       await interaction.reply({ content: "❌ La chambre n'a plus de place libre.", ephemeral: true });
       return;
     }
-    if (changeBalance(userId, -q.moveFee, `Déménagement vers ${q.name} (${room.name})`) === null) {
+    if (changeBalance(userId, -q.moveFee, `Déménagement vers ${q.name} (${roomLabel(room)})`) === null) {
       await interaction.reply({ content: `❌ Le membre n'a plus assez d'argent (${formatEuro(q.moveFee)} nécessaires) ou son compte est gelé.`, ephemeral: true });
       return;
     }
@@ -400,7 +418,7 @@ async function answerMove(interaction, decision, userId) {
     const from = getResidence(userId)?.room ?? null;
     removeMemberFromAllRooms(state, userId);
     state.rooms[room.id].push(userId);
-    result = `✅ Déménagement **accepté** par ${interaction.user} : bienvenue à ${q.emoji} **${q.name}** (${room.name}) ! ${formatEuro(q.moveFee)} prélevés.`;
+    result = `✅ Déménagement **accepté** par ${interaction.user} : bienvenue à ${q.emoji} **${q.name}** (${roomLabel(room)}) ! ${formatEuro(q.moveFee)} prélevés.`;
     delete state.moves[userId];
     saveState(state);
     await announceMove(interaction.client, userId, from, room);
