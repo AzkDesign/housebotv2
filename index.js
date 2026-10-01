@@ -76,7 +76,7 @@ const { setupImpots, handleImpotsInteraction } = require("./impots");
 const { setupMairie, handleMairieInteraction } = require("./mairie");
 const { setupAssociations, handleAssociationsInteraction } = require("./associations");
 const { handleProfilCommand } = require("./profil");
-const { publishV3Announcement } = require("./annonce");
+const { setupEspaces, handleEspacesInteraction, isProtectedChannel } = require("./espaces");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -471,6 +471,7 @@ async function setupGuildPermissions(guild) {
     if (channel.parentId === CANDIDATURE_CATEGORY_ID) continue;
     // Salons privés (entreprises, bureau du maire, ou sujet commençant par « privé: ») : ne pas les ouvrir à tous
     if (channel.topic?.startsWith("entreprise:") || channel.topic?.startsWith("privé:")) continue;
+    if (isProtectedChannel(channel)) continue; // espaces Jeunes / Entrepreneurs (catégories et salons vocaux)
     if (!channelTypes.includes(channel.type)) continue;
 
     try {
@@ -549,7 +550,7 @@ client.once(Events.ClientReady, async () => {
   await step("Impôts", () => setupImpots(client));
   await step("Mairie", () => setupMairie(client));
   await step("Associations", () => setupAssociations(client));
-  await step("annonce V3", () => publishV3Announcement(client));
+  await step("Espaces Jeunes / Entrepreneurs", () => setupEspaces(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -578,6 +579,7 @@ async function onInteraction(interaction) {
   }
   if (await handleClearCommand(interaction)) return;
   if (await handleProfilCommand(interaction)) return;
+  if (await handleEspacesInteraction(interaction)) return;
   if (await handleCasinoInteraction(interaction, client)) return;
   if (await handleIrfInteraction(interaction, client)) return;
   if (await handleAirbnbInteraction(interaction, client)) return;
