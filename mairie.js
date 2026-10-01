@@ -1599,12 +1599,24 @@ function getCategoryId() {
   return load().categoryId ?? null;
 }
 
+// Pour /profil : fonction municipale et titre de noblesse.
+function getPublicRole(userId) {
+  const s = load();
+  const r = REGIMES[regime()];
+  let office = null;
+  if (s.mayor?.userId === userId) office = `${r.emoji} ${r.title}${s.mayor.interim ? " (intérim)" : ""}`;
+  else if (s.mayor?.adjointId === userId) office = "🎖️ Adjoint au maire";
+  const title = s.nobles?.[userId] ? NOBLE_TITLES[s.nobles[userId]] : null;
+  return { office, title };
+}
+
 module.exports = {
   setupMairie,
   handleMairieInteraction,
   getBudget,
   // Pour les associations
   getCategoryId,
+  getPublicRole,
   getGuild,
   journal,
   sign,

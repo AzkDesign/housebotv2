@@ -1625,7 +1625,21 @@ function creditCompany(companyId, amount, label) {
   return true;
 }
 
+// Pour /profil : entreprise et poste d'un membre.
+function getJobOf(userId) {
+  const company = companyOf(userId);
+  if (!company || !["active", "frozen", "bankrupt", "pending"].includes(company.status)) return null;
+  return {
+    name: company.name,
+    sector: SECTORS[company.sector].label,
+    role: POSTES[roleIn(company, userId)],
+    status: company.status,
+    channelId: company.channelId,
+  };
+}
+
 module.exports = {
+  getJobOf,
   setupEntreprises,
   handleEntreprisesInteraction,
   showIrfCompanies,

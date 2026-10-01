@@ -644,4 +644,11 @@ async function setupAssociations(client) {
   console.log("Associations prêtes");
 }
 
-module.exports = { setupAssociations, handleAssociationsInteraction, openMayorMenu };
+// Pour /profil : associations d'un membre.
+function getAssociationsOf(userId) {
+  return activeAssos()
+    .filter((a) => a.members.includes(userId))
+    .map((a) => ({ name: a.name, president: a.presidentId === userId, banned: a.status === "banned", channelId: a.panelChannelId }));
+}
+
+module.exports = { setupAssociations, handleAssociationsInteraction, openMayorMenu, getAssociationsOf };

@@ -75,6 +75,7 @@ const { setupEntreprises, handleEntreprisesInteraction } = require("./entreprise
 const { setupImpots, handleImpotsInteraction } = require("./impots");
 const { setupMairie, handleMairieInteraction } = require("./mairie");
 const { setupAssociations, handleAssociationsInteraction } = require("./associations");
+const { handleProfilCommand } = require("./profil");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -574,6 +575,7 @@ async function onInteraction(interaction) {
     return;
   }
   if (await handleClearCommand(interaction)) return;
+  if (await handleProfilCommand(interaction)) return;
   if (await handleCasinoInteraction(interaction, client)) return;
   if (await handleIrfInteraction(interaction, client)) return;
   if (await handleAirbnbInteraction(interaction, client)) return;

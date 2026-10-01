@@ -245,7 +245,16 @@ async function handleLevelCommand(interaction) {
   return true;
 }
 
+// Pour /profil : niveau atteint et nombre de messages.
+function getLevelSummary(userId) {
+  const user = loadState().users[userId];
+  const messages = user?.messages ?? 0;
+  const reached = MESSAGE_LEVELS.filter((l) => messages >= l.count || user?.earnedLevels?.includes(l.count)).at(-1);
+  return { label: reached?.label ?? "Débutant", messages };
+}
+
 module.exports = {
+  getLevelSummary,
   handleLevelMessage,
   handleLevelCommand,
   LEVEL_CHANNEL_ID,
