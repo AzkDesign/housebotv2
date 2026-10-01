@@ -331,5 +331,6 @@ module.exports = {
   setTaxDebt,
   formatEuro,
   isGerant,
+  GERANTS_ROLE_ID,
   ECONOMIE_LOG_CHANNEL_ID,
 };
