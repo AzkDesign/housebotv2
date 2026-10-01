@@ -95,7 +95,112 @@ async function setupReopeningAnnouncement(client) {
   }
 }
 
+// --- Annonce de la V3 : publiée une seule fois ---
+
+const fs = require("fs");
+const V3_TITLE = "🦋 La Maison passe en V3 ! 🦋";
+const STATE_FILE = require("./data").dataFile("annonces-state.json");
+
+function loadAnnonces() {
+  try {
+    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function buildV3Embeds() {
+  return [
+    new EmbedBuilder()
+      .setColor(0x8b0000)
+      .setTitle(V3_TITLE)
+      .setDescription(
+        "La Maison change de dimension : économie, politique, business… tout a été repensé pour que **chacun puisse construire sa place**. Voici ce qui arrive 👇"
+      )
+      .addFields(
+        {
+          name: "💰 L'économie",
+          value:
+            "• `/solde` pour voir votre argent, et un **classement des plus grandes fortunes**\n" +
+            "• `/profil` : votre **carte d'identité** de la Maison (quartier, travail, fonctions, associations, rang…)",
+        },
+        {
+          name: "🏙️ Les quartiers",
+          value:
+            "La Maison est désormais divisée en **quartiers parisiens** : 💎 Haussmann, 🌳 Le Marais, 🎨 Montmartre et 🏘️ Belleville. " +
+            "Chaque quartier a son ambiance, ses équipements et sa taxe. Envie de changer ? Faites une **demande de déménagement** depuis le tableau des chambres.",
+        },
+        {
+          name: "🏢 Les entreprises",
+          value:
+            "Créez votre entreprise au **Registre du commerce** (rôle Entrepreneur et licence requis), embauchez, servez des clients, facturez, versez des salaires… " +
+            "Les offres d'emploi sont publiées dans le salon recrutement.",
+        },
+        { name: "🏡 L'Airbnb", value: "Mettez vos biens en location : des voyageurs du monde entier vous envoient des demandes de réservation." },
+        {
+          name: "🎰 Le casino",
+          value: "Blackjack, roulette, machine à sous avec **jackpot**, et défis entre membres. Ouvert **du vendredi 20h au lundi 2h**.",
+        }
+      ),
+    new EmbedBuilder()
+      .setColor(0xf1c40f)
+      .addFields(
+        {
+          name: "🏛️ La Mairie",
+          value:
+            "**Élections chaque trimestre !** Le maire gère le budget de la ville, fixe les impôts, verse des aides, crée des **associations**… " +
+            "et choisit même le **régime** : 🗳️ démocratie, 👑 monarchie, ⚔️ dictature ou 🏴 anarchie. Tout est publié au **Journal officiel**. " +
+            "Et si le maire abuse, une **pétition** peut mener à sa destitution.",
+        },
+        {
+          name: "🗳️ Première élection : maintenant !",
+          value: "📝 Candidatures du **1er au 3 octobre**\n📣 Campagne du **4 au 6 octobre**\n🗳️ Vote du **7 au 8 octobre à 21h**",
+        },
+        {
+          name: "🧾 Les impôts",
+          value:
+            "Chaque dimanche : taxe d'habitation (selon votre quartier) et impôt sur la fortune. Tout est expliqué dans le **centre des impôts**. " +
+            "L'**IRF** veille sur les comptes et mène des contrôles fiscaux 👀",
+        },
+        {
+          name: "🤝 Les associations",
+          value: "Créées par la Mairie : rejoignez-en une, participez aux activités, ou proposez la vôtre au maire !",
+        }
+      )
+      .setFooter({ text: "Prenez le temps de découvrir les nouveaux salons, et posez vos questions en ticket. Bienvenue dans la Maison V3 🦋" })
+      .setTimestamp(),
+  ];
+}
+
+async function publishV3Announcement(client) {
+  const state = loadAnnonces();
+  if (state.v3MessageId) return;
+
+  const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
+  if (!channel?.isTextBased()) {
+    console.warn(`Salon annonce ${ANNOUNCE_CHANNEL_ID} introuvable`);
+    return;
+  }
+
+  // Déjà publiée (données perdues entre-temps) : on ne la reposte pas.
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const existing = recent?.find((m) => m.author.id === client.user.id && m.embeds[0]?.title === V3_TITLE);
+  if (existing) {
+    state.v3MessageId = existing.id;
+  } else {
+    const message = await channel.send({
+      content: "@everyone",
+      allowedMentions: { parse: ["everyone"] },
+      embeds: buildV3Embeds(),
+    });
+    state.v3MessageId = message.id;
+    console.log("Annonce V3 publiée avec @everyone");
+  }
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
 module.exports = {
   setupReopeningAnnouncement,
+  publishV3Announcement,
   ANNOUNCE_CHANNEL_ID,
 };
