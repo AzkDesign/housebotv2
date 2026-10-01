@@ -240,4 +240,60 @@ async function handleEspacesInteraction(interaction) {
   return false;
 }
 
-module.exports = { setupEspaces, handleEspacesInteraction, isProtectedChannel };
+// --- Annonce dans l'espace Entrepreneurs : la Maison 2 mixte (publiée une seule fois) ---
+
+const MIXITE_TITLE = "🏡 Maison 2 : place à la mixité";
+
+async function publishMixiteAnnouncement(client) {
+  const state = load();
+  const space = state.entrepreneurs;
+  if (!space?.channelIds?.length || space.mixiteMessageId) return;
+  const channel = await client.channels.fetch(space.channelIds[0]).catch(() => null); // ╭⊱・annonces・📢
+  if (!channel?.isTextBased()) return;
+
+  const recent = await channel.messages.fetch({ limit: 30 }).catch(() => null);
+  const existing = recent?.find((m) => m.author.id === client.user.id && m.embeds[0]?.title === MIXITE_TITLE);
+  if (existing) {
+    space.mixiteMessageId = existing.id;
+  } else {
+    const message = await channel.send({
+      content: `<@&${ENTREPRENEUR_ROLE_ID}>`,
+      allowedMentions: { roles: [ENTREPRENEUR_ROLE_ID] },
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x8b0000)
+          .setTitle(MIXITE_TITLE)
+          .setDescription(
+            "La **Maison 2** ouvre ses portes en **mixité** : filles et garçons y vivent ensemble.\n" +
+              "Elle est **réservée aux Entrepreneurs**."
+          )
+          .addFields(
+            {
+              name: "🛏️ Les chambres (14 places)",
+              value:
+                "💎 **Haussmann** — 3 Penthouses\n🌳 **Le Marais** — 2 Suites\n🎨 **Montmartre** — 1 Chambre double\n🏘️ **Belleville** — 1 Chambre double",
+            },
+            {
+              name: "📦 Comment emménager ?",
+              value:
+                "Dans le **tableau des chambres**, cliquez sur **Demander un déménagement** et choisissez une chambre de la Maison 2. " +
+                "Un ticket s'ouvre avec la Fondation (frais selon le quartier).",
+            },
+            {
+              name: "🤝 Vivre ensemble",
+              value:
+                "Respect de l'intimité de chacun, consentement et bienveillance avant tout. Le règlement de la Maison s'applique, " +
+                "et le moindre souci se règle en ticket avec la Fondation.",
+            }
+          )
+          .setFooter({ text: "Maison des Entrepreneurs" })
+          .setTimestamp(),
+      ],
+    });
+    space.mixiteMessageId = message.id;
+    console.log("Annonce mixité Maison 2 publiée");
+  }
+  save(state);
+}
+
+module.exports = { setupEspaces, handleEspacesInteraction, isProtectedChannel, publishMixiteAnnouncement };

@@ -76,7 +76,7 @@ const { setupImpots, handleImpotsInteraction } = require("./impots");
 const { setupMairie, handleMairieInteraction } = require("./mairie");
 const { setupAssociations, handleAssociationsInteraction } = require("./associations");
 const { handleProfilCommand } = require("./profil");
-const { setupEspaces, handleEspacesInteraction, isProtectedChannel } = require("./espaces");
+const { setupEspaces, handleEspacesInteraction, isProtectedChannel, publishMixiteAnnouncement } = require("./espaces");
 const { publishV3Announcement, publishV3Video, publishRecruitmentAnnouncement } = require("./annonce");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
@@ -555,6 +555,7 @@ client.once(Events.ClientReady, async () => {
   await step("annonce V3", () => publishV3Announcement(client));
   await step("vidéo V3", () => publishV3Video(client));
   await step("annonce recrutement", () => publishRecruitmentAnnouncement(client));
+  await step("annonce mixité Maison 2", () => publishMixiteAnnouncement(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {

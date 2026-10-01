@@ -17,6 +17,8 @@ const {
   isGerant,
   GERANTS_ROLE_ID,
 } = require("./economie");
+// Maison 2 : mixte, réservée aux Entrepreneurs (adultes)
+const ENTREPRENEUR_ROLE_ID = "1554940569732517909";
 
 const CHAMBRES_CHANNEL_ID = "1509983864624386048";
 const TICKET_CATEGORY_ID = "1509977402485510345";
@@ -90,6 +92,7 @@ const MAISONS = [
   {
     id: "maison2",
     name: "Maison 2",
+    onlyRole: ENTREPRENEUR_ROLE_ID,
     rooms: [
       { id: "m2_penthouse1", name: "Penthouse 1", capacity: 2, quartier: "haussmann" },
       { id: "m2_penthouse2", name: "Penthouse 2", capacity: 2, quartier: "haussmann" },
@@ -224,8 +227,14 @@ function buildPanelMessage(guild) {
   };
 }
 
-function roomOptions(state, { onlyFree = false, exclude = null, withFee = false } = {}) {
-  return ROOMS.filter((r) => r.id !== exclude && (!onlyFree || freePlaces(state, r) > 0))
+// Un membre peut-il habiter cette chambre ? (Maison 2 : Entrepreneurs uniquement)
+function allowedIn(member, room) {
+  const role = maisonOf(room).onlyRole;
+  return !role || Boolean(member?.roles.cache.has(role));
+}
+
+function roomOptions(state, { onlyFree = false, exclude = null, withFee = false, member = null } = {}) {
+  return ROOMS.filter((r) => r.id !== exclude && (!onlyFree || freePlaces(state, r) > 0) && (!member || allowedIn(member, r)))
     .slice(0, 25)
     .map((room) => {
       const q = QUARTIERS[room.quartier];
@@ -300,7 +309,7 @@ async function startMoveRequest(interaction) {
     return;
   }
   const current = getResidence(interaction.user.id);
-  const options = roomOptions(state, { onlyFree: true, exclude: current?.room.id, withFee: true });
+  const options = roomOptions(state, { onlyFree: true, exclude: current?.room.id, withFee: true, member: interaction.member });
   if (!options.length) {
     await interaction.reply({ content: "😕 Aucune place libre pour le moment.", ephemeral: true });
     return;
@@ -321,6 +330,10 @@ async function openMoveTicket(interaction) {
   const member = interaction.member;
   const room = getRoom(interaction.values[0]);
   const state = loadState();
+  if (room && !allowedIn(member, room)) {
+    await interaction.update({ content: "❌ La Maison 2 est réservée aux Entrepreneurs.", components: [] });
+    return;
+  }
   if (!room || freePlaces(state, room) <= 0) {
     await interaction.update({ content: "❌ Cette chambre n'est plus disponible.", components: [] });
     return;
@@ -578,6 +591,11 @@ async function handleChambreInteraction(interaction) {
     const occupants = state.rooms[room.id];
     if (occupants.includes(targetId)) {
       await interaction.update({ content: `ℹ️ Ce membre est déjà dans **${room.name}**.`, components: [] });
+      return true;
+    }
+    const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+    if (!allowedIn(targetMember, room)) {
+      await interaction.update({ content: `❌ ${maisonOf(room).name} est réservée aux Entrepreneurs : <@${targetId}> n'a pas ce rôle.`, components: [] });
       return true;
     }
     if (occupants.length >= room.capacity) {
