@@ -232,7 +232,61 @@ async function publishV3Video(client) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+// --- Annonce : le recrutement repasse par la candidature (publiée une seule fois) ---
+
+const RECRUTEMENT_TITLE = "📋 Le recrutement revient en candidature";
+
+async function publishRecruitmentAnnouncement(client) {
+  const state = loadAnnonces();
+  if (state.recrutementMessageId) return;
+
+  const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const existing = recent?.find((m) => m.author.id === client.user.id && m.embeds[0]?.title === RECRUTEMENT_TITLE);
+  if (existing) {
+    state.recrutementMessageId = existing.id;
+  } else {
+    const message = await channel.send({
+      content: "@everyone",
+      allowedMentions: { parse: ["everyone"] },
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x800020)
+          .setTitle(RECRUTEMENT_TITLE)
+          .setDescription(
+            "Le recrutement par **parrainage** est terminé : pour rejoindre la Maison, il faut désormais **déposer une candidature**."
+          )
+          .addFields(
+            {
+              name: "📝 Comment candidater ?",
+              value:
+                `1. Rendez-vous dans <#${PANEL_LINKS.tickets}> et ouvrez un ticket **Candidature**\n` +
+                "2. Répondez au questionnaire, question par question\n" +
+                "3. Le staff étudie votre candidature et vote\n" +
+                "4. Vous recevez la réponse directement dans votre ticket",
+            },
+            {
+              name: "💡 Bon à savoir",
+              value:
+                "• Répondez **sérieusement** : c'est votre première impression auprès du staff\n" +
+                "• Vous pouvez reprendre votre questionnaire là où vous vous êtes arrêté(e)\n" +
+                "• Un doute ? Ouvrez un ticket **Question**",
+            }
+          )
+          .setFooter({ text: "La Maison — recrutement sur candidature 🦋" })
+          .setTimestamp(),
+      ],
+    });
+    state.recrutementMessageId = message.id;
+    console.log("Annonce recrutement publiée avec @everyone");
+  }
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
 module.exports = {
+  publishRecruitmentAnnouncement,
   setupReopeningAnnouncement,
   publishV3Announcement,
   publishV3Video,
