@@ -36,6 +36,8 @@ const LICENCE_PRICE = 1000;
 
 const PANEL_TITLE = "🎰 Casino de la Maison";
 const MIN_BET = 10;
+// Personne ne peut dépasser ce solde grâce au casino (règle affichée sur le panneau).
+const CASINO_CAP = 15000;
 const JACKPOT_SEED = 1000;
 const JACKPOT_SHARE = 0.02; // part de chaque mise de machine à sous versée au jackpot
 const BLACKJACK_TIMEOUT_MS = 3 * 60 * 1000;
@@ -138,6 +140,9 @@ function playError(member) {
   if (!hasAccess(member)) {
     return "🎟️ Vous n'avez pas encore accès au casino. Cliquez sur **Demander l'accès au casino**.";
   }
+  if (readBalance(member.id) >= CASINO_CAP) {
+    return `🎰 Votre solde atteint le **plafond du casino (${formatEuro(CASINO_CAP)})** : vous ne pouvez plus jouer tant qu'il est au-dessus.`;
+  }
   return null;
 }
 
@@ -159,11 +164,20 @@ function takeBet(userId, amount, game) {
 
 // Paie les gains d'une partie déjà lancée (même si le compte a été gelé entre-temps).
 function pay(userId, amount, game) {
-  if (amount > 0) {
-    changeBalance(userId, round2(amount), `Casino — ${game} (gain)`, { force: true });
-    addToTreasury("casinoGains", round2(amount));
+  const paid = round2(Math.max(0, Math.min(amount, CASINO_CAP - readBalance(userId))));
+  if (paid > 0) {
+    changeBalance(userId, paid, `Casino — ${game} (gain)`, { force: true });
+    addToTreasury("casinoGains", paid);
     markBalancesDirty();
   }
+  return paid;
+}
+
+// Message affiché quand un gain a été réduit par le plafond.
+function capNote(won, paid) {
+  return paid < round2(won)
+    ? `\n🎰 **Plafond du casino atteint** : impossible de dépasser ${formatEuro(CASINO_CAP)} grâce au casino. ${formatEuro(paid)} versés sur ${formatEuro(won)}.`
+    : "";
 }
 
 function addToJackpot(amount) {
@@ -200,7 +214,7 @@ function buildPanelEmbed(state) {
         "🎰 **Machine à sous** — 3 symboles, plus rare = plus gros gain. Enchaînez **x5 / x10 tours** d'un coup. Trois 7️⃣ font tomber le **jackpot** !\n" +
         "⚔️ **Défi** — Misez directement contre un autre membre, le gagnant rafle la mise (moins la taxe de la maison).\n\n" +
         `🎟️ Les **entrepreneurs** ont accès directement ; les autres membres doivent **demander l'accès**.\n` +
-        `*Mise minimum : ${formatEuro(MIN_BET)}. La maison garde toujours un avantage.*`
+        `*Mise minimum : ${formatEuro(MIN_BET)}. Plafond : personne ne peut dépasser ${formatEuro(CASINO_CAP)} grâce au casino. La maison garde toujours un avantage.*`
     )
     .addFields({ name: "💰 Jackpot progressif", value: `**${formatEuro(state.jackpot)}**` })
     .setTimestamp();
@@ -682,7 +696,8 @@ function finishBlackjack(game) {
       result = { payout: 0, text: `😔 Le croupier gagne — vous perdez ${formatEuro(game.bet)}.` };
     }
   }
-  pay(game.userId, result.payout, "blackjack");
+  const paid = pay(game.userId, result.payout, "blackjack");
+  result.text += capNote(result.payout, paid);
   return result;
 }
 
@@ -715,7 +730,8 @@ async function startBlackjack(interaction, bet) {
     } else {
       result = { payout: 0, text: `😔 Blackjack du croupier — vous perdez ${formatEuro(bet)}.` };
     }
-    pay(userId, result.payout, "blackjack");
+    const paid = pay(userId, result.payout, "blackjack");
+    result.text += capNote(result.payout, paid);
     await interaction.reply({ embeds: [blackjackEmbed(game, result)], ephemeral: true });
     return;
   }
@@ -799,7 +815,7 @@ async function playRoulette(interaction, color, bet) {
   const choice = ROULETTE_BETS[color];
   const won = landed === color;
   const payout = won ? bet * choice.multiplier : 0;
-  pay(userId, payout, "roulette");
+  const paid = pay(userId, payout, "roulette");
 
   const embed = new EmbedBuilder()
     .setColor(won ? 0x2ecc71 : 0xe74c3c)
@@ -807,7 +823,7 @@ async function playRoulette(interaction, color, bet) {
     .setDescription(
       `Vous misez **${formatEuro(bet)}** sur ${choice.emoji} **${choice.label}**.\n\n` +
         `La bille s'arrête sur **${n} ${ROULETTE_BETS[landed].emoji} ${ROULETTE_BETS[landed].label}**.\n\n` +
-        (won ? `🎉 **Vous gagnez ${formatEuro(payout)} !**` : `😔 Perdu — ${formatEuro(bet)}.`)
+        (won ? `🎉 **Vous gagnez ${formatEuro(payout)} !**${capNote(payout, paid)}` : `😔 Perdu — ${formatEuro(bet)}.`)
     )
     .addFields({ name: "Solde", value: formatEuro(readBalance(userId)) });
 
@@ -881,7 +897,8 @@ async function playSlots(interaction, spins, bet, client) {
     lines.push(`${display}${gain > 0 ? ` **+${formatEuro(round2(gain))}**${note}` : ""}`);
   }
 
-  pay(userId, total, "machine à sous");
+  const paid = pay(userId, total, "machine à sous");
+  if (paid < round2(total)) lines.push(capNote(total, paid).trim());
   const spent = bet * spins;
 
   const embed = new EmbedBuilder()
@@ -890,7 +907,7 @@ async function playSlots(interaction, spins, bet, client) {
     .setDescription(lines.join("\n"))
     .addFields(
       { name: "Misé", value: formatEuro(spent), inline: true },
-      { name: "Gagné", value: formatEuro(round2(total)), inline: true },
+      { name: "Gagné", value: formatEuro(paid), inline: true },
       { name: "Solde", value: formatEuro(readBalance(userId)), inline: true }
     );
 
@@ -899,7 +916,7 @@ async function playSlots(interaction, spins, bet, client) {
   if (jackpotWon) {
     const channel = await client.channels.fetch(CASINO_CHANNEL_ID).catch(() => null);
     await channel
-      ?.send(`💰🎰 **JACKPOT !** ${interaction.user} vient de remporter **${formatEuro(jackpotWon)}** à la machine à sous !`)
+      ?.send(`💰🎰 **JACKPOT !** ${interaction.user} vient de remporter le **JACKPOT** à la machine à sous !`)
       .catch(() => null);
   }
 }
@@ -1029,7 +1046,9 @@ async function handleDuelResponse(interaction, accepted, id) {
   const tax = round2(pot * P().duelTax);
   const winnerId = Math.random() < 0.5 ? duel.challengerId : duel.opponentId;
   const loserId = winnerId === duel.challengerId ? duel.opponentId : duel.challengerId;
-  changeBalance(winnerId, pot - tax, "Casino — défi (gain)", { force: true });
+  const won = round2(pot - tax);
+  const paidDuel = round2(Math.max(0, Math.min(won, CASINO_CAP - readBalance(winnerId))));
+  if (paidDuel > 0) changeBalance(winnerId, paidDuel, "Casino — défi (gain)", { force: true });
   addToTreasury("taxesDefis", tax);
   addToJackpot(tax);
 
@@ -1037,7 +1056,7 @@ async function handleDuelResponse(interaction, accepted, id) {
     .setColor(0xd4af37)
     .setTitle("⚔️ Défi — Résultat")
     .setDescription(
-      `🪙 La pièce est lancée…\n\n🏆 <@${winnerId}> remporte **${formatEuro(pot - tax)}** face à <@${loserId}> !\n` +
+      `🪙 La pièce est lancée…\n\n🏆 <@${winnerId}> remporte **${formatEuro(won)}** face à <@${loserId}> !${capNote(won, paidDuel)}\n` +
         `*Taxe de la maison : ${formatEuro(tax)} (versée au jackpot)*`
     )
     .setTimestamp();
