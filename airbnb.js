@@ -19,7 +19,7 @@ const {
   refreshRichestLeaderboard,
 } = require("./economie");
 // Part de la Maison sur chaque séjour, réglée par le maire (80 % par défaut)
-const { P } = require("./politique");
+const { P, curfew } = require("./politique");
 const hostShare = () => Math.round((1 - P().airbnbMaisonShare) * 100) / 100;
 
 const AIRBNB_CHANNEL_ID = "1527544352090357881";
@@ -506,7 +506,8 @@ async function tick(client) {
   }
 
   // Nouvelles demandes pour les hôtes en ligne
-  if (inBookingHours(now)) {
+  // Pendant un couvre-feu (dictature), aucun voyageur n'arrive.
+  if (inBookingHours(now) && !curfew()) {
     for (const [hostId, host] of Object.entries(state.hosts)) {
       if (!host.on || now < host.nextAt) continue;
       if (Object.values(state.requests).some((r) => r.hostId === hostId)) continue;

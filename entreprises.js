@@ -1597,6 +1597,25 @@ function listActiveCompanies() {
   return Object.values(load().companies).filter((c) => c.status === "active");
 }
 
+function listOpenCompanies() {
+  return Object.values(load().companies).filter((c) => c.status === "active" || c.status === "frozen");
+}
+
+// Pour la mairie (dictature) : suspendre ou rétablir une entreprise.
+async function setCompanySuspended(client, companyId, suspended, reason) {
+  const company = load().companies[companyId];
+  if (!company || !["active", "frozen"].includes(company.status)) return null;
+  company.status = suspended ? "frozen" : "active";
+  if (suspended) company.onDuty = {};
+  save();
+  dirtyPanels.add(company.id);
+  registryDirty = true;
+  await send(client, company.channelId, {
+    content: suspended ? `⛔ **L'entreprise est suspendue par le régime.** ${reason}` : "✅ **Le régime lève la suspension de l'entreprise.**",
+  });
+  return company;
+}
+
 function creditCompany(companyId, amount, label) {
   const company = load().companies[companyId];
   if (!company || company.status !== "active") return false;
@@ -1613,6 +1632,8 @@ module.exports = {
   hasJob,
   getCategoryId,
   listActiveCompanies,
+  listOpenCompanies,
   creditCompany,
+  setCompanySuspended,
   SECTORS,
 };

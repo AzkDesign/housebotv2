@@ -36,11 +36,81 @@ function save() {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+// --- Régimes ---
+const REGIMES = {
+  democratie: {
+    name: "Démocratie",
+    emoji: "🗳️",
+    title: "Maire",
+    petition: 0.3,
+    description: "Le maire gouverne, et peut consulter les citoyens par des votes. Pétition de destitution à 30 %.",
+  },
+  monarchie: {
+    name: "Monarchie",
+    emoji: "👑",
+    title: "Monarque",
+    petition: 0.5,
+    description: "Le maire règne en monarque et distribue des titres de noblesse. Pétition de destitution à 50 %.",
+  },
+  dictature: {
+    name: "Dictature",
+    emoji: "⚔️",
+    title: "Dictateur",
+    petition: 0.6,
+    description: "Couvre-feu, confiscations, suspension d'entreprises, censure du Journal officiel. Pétition de destitution à 60 %.",
+  },
+  anarchie: {
+    name: "Anarchie",
+    emoji: "🏴",
+    title: "Maire (sans pouvoir)",
+    petition: 0.3,
+    description: "Plus aucun impôt, aucune aide : chacun pour soi. Le maire ne garde que les événements et les associations.",
+  },
+};
+
+function regime() {
+  return load().regime ?? "democratie";
+}
+
+function setRegime(id) {
+  const s = load();
+  s.regime = id;
+  s.regimeChangedAt = Date.now();
+  if (id !== "dictature") s.curfew = false;
+  save();
+}
+
+function regimeChangedAt() {
+  return load().regimeChangedAt ?? 0;
+}
+
+// Couvre-feu (dictature) : casino fermé, plus de demandes Airbnb.
+function curfew() {
+  return regime() === "dictature" && Boolean(load().curfew);
+}
+
+function setCurfew(on) {
+  load().curfew = on;
+  save();
+}
+
+// En anarchie, aucun impôt ni taxe ne s'applique.
+const ANARCHY_OVERRIDES = {
+  corporateTax: 0,
+  dividendTax: 0,
+  housingMultiplier: 0,
+  wealthMultiplier: 0,
+  airbnbMaisonShare: 0,
+  duelTax: 0,
+  minSalary: 0,
+};
+
 // Renvoie tous les réglages en cours : P().corporateTax, P().minSalary…
 function P() {
   const s = load();
   const out = {};
   for (const [key, lever] of Object.entries(LEVERS)) out[key] = s.values[key] ?? lever.default;
+  if (regime() === "anarchie") Object.assign(out, ANARCHY_OVERRIDES);
   return out;
 }
 
@@ -70,4 +140,17 @@ function sectorBoost(sector) {
   return (load().sectorBoosts[sector] ?? 0) > Date.now();
 }
 
-module.exports = { LEVERS, P, setLever, formatLever, boostSector, sectorBoost };
+module.exports = {
+  LEVERS,
+  P,
+  setLever,
+  formatLever,
+  boostSector,
+  sectorBoost,
+  REGIMES,
+  regime,
+  setRegime,
+  regimeChangedAt,
+  curfew,
+  setCurfew,
+};

@@ -23,7 +23,7 @@ const {
   isFrozen,
 } = require("./economie");
 // Taxe de la maison sur le pot d'un défi (réglée par le maire), versée au jackpot
-const { P } = require("./politique");
+const { P, curfew } = require("./politique");
 
 const CASINO_CHANNEL_ID = "1527054335928827954";
 const CASINO_ACCESS_ROLE_ID = "1554940931617071206";
@@ -127,6 +127,7 @@ function hasAccess(member) {
 
 // Renvoie un message d'erreur si le membre ne peut pas jouer maintenant.
 function playError(member) {
+  if (curfew()) return "🌙 **Couvre-feu** décrété par le régime : le casino est fermé jusqu'à nouvel ordre.";
   const { open, until } = getSchedule();
   if (!open) {
     return `🔒 Le casino est **fermé**. Réouverture <t:${Math.floor(until / 1000)}:R> (${SCHEDULE_TEXT}).`;

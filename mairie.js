@@ -27,8 +27,20 @@ const {
   refreshRichestLeaderboard,
 } = require("./economie");
 const { SITUATION_DELICATE_ROLE_ID } = require("./casino");
-const { listActiveCompanies, creditCompany, SECTORS } = require("./entreprises");
-const { LEVERS, P, setLever, formatLever, boostSector } = require("./politique");
+const { listActiveCompanies, listOpenCompanies, creditCompany, setCompanySuspended, SECTORS } = require("./entreprises");
+const {
+  LEVERS,
+  P,
+  setLever,
+  formatLever,
+  boostSector,
+  REGIMES,
+  regime,
+  setRegime,
+  regimeChangedAt,
+  curfew,
+  setCurfew,
+} = require("./politique");
 const { findOrCreateChannel, findOrCreateRole } = require("./salons");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
@@ -42,7 +54,16 @@ const BUDGET_SHARE = 0.3; // part des recettes de la semaine versée au budget m
 const MAYOR_SALARY = 500;
 const RELAUNCH_COST = 3000; // plan de relance d'un secteur
 const RELAUNCH_DAYS = 7;
-const PETITION_SHARE = 0.3; // 30 % des électeurs pour déclencher un référendum
+const REGIME_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // un changement de régime par mois
+const CONFISCATION_MAX = 0.15; // dictature : 15 % du solde au maximum…
+const CONFISCATION_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // … une fois par semaine et par personne
+const POLL_MS = 48 * 60 * 60 * 1000; // durée d'un vote citoyen
+const NOBLE_TITLES = {
+  duc: "🎖️ Duc / Duchesse",
+  comte: "🎖️ Comte / Comtesse",
+  baron: "🎖️ Baron / Baronne",
+  chevalier: "🎖️ Chevalier",
+};
 const REFERENDUM_MS = 48 * 60 * 60 * 1000;
 const REFERENDUM_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -211,6 +232,13 @@ async function channel(client, key) {
 }
 
 // Tout ce que fait la mairie est publié au Journal officiel.
+// Signature des actes au Journal officiel (anonymes sous la dictature : censure).
+function sign(userId, withRole = false) {
+  if (regime() === "dictature") return "— *Le Régime*";
+  const role = isMayor(userId) ? REGIMES[regime()].title.toLowerCase() : "adjoint au maire";
+  return `— <@${userId}>${withRole ? `, ${role}` : ""}`;
+}
+
 async function journal(client, title, description, color = 0xf1c40f) {
   const c = await channel(client, "journalChannelId");
   await c
@@ -286,6 +314,7 @@ function electionPanel() {
         (mayor
           ? `👑 **Maire** : <@${mayor.userId}>${mayor.adjointId ? ` · 🎖️ Adjoint : <@${mayor.adjointId}>` : ""}${mayor.interim ? " *(intérim)*" : ""}\n`
           : "👑 **Maire** : *aucun pour le moment*\n") +
+        `${REGIMES[regime()].emoji} Régime : **${REGIMES[regime()].name}**${curfew() ? " · 🌙 couvre-feu" : ""}\n` +
         `💰 Budget municipal : **${formatEuro(s.budget)}**\n\n` +
         "**Calendrier** (élection chaque trimestre : janvier, avril, juillet, octobre)\n" +
         "📝 du 1er au 3 : candidatures · 📣 du 4 au 6 : campagne · 🗳️ du 7 au 8 à 21h : vote\n\n" +
@@ -361,6 +390,7 @@ function bureauPanel() {
     .setTitle(BUREAU_TITLE)
     .setDescription(
       (s.mayor ? `👑 <@${s.mayor.userId}>${s.mayor.adjointId ? ` · 🎖️ <@${s.mayor.adjointId}>` : ""}\n\n` : "*Aucun maire en fonction.*\n\n") +
+        `${REGIMES[regime()].emoji} **Régime : ${REGIMES[regime()].name}**${curfew() ? " · 🌙 couvre-feu en cours" : ""}\n*${REGIMES[regime()].description}*\n\n` +
         `💰 **Budget : ${formatEuro(s.budget)}**\n` +
         `Chaque dimanche : ${Math.round(BUDGET_SHARE * 100)} % des recettes de la Maison, moins le salaire du maire (${formatEuro(MAYOR_SALARY)}) et les allocations.\n\n` +
         "**⚖️ Taux en vigueur**\n" +
@@ -387,6 +417,10 @@ function bureauPanel() {
       new ActionRowBuilder().addComponents(
         btn("relaunch", "Plan de relance", "🚀", ButtonStyle.Success),
         btn("event", "Événement", "🎉", ButtonStyle.Success)
+      ),
+      new ActionRowBuilder().addComponents(
+        btn("regime", "Changer de régime", "🏛️", ButtonStyle.Danger),
+        btn("powers", "Pouvoirs du régime", "✨", ButtonStyle.Primary)
       ),
     ],
   };
@@ -546,6 +580,10 @@ async function installMayor(client, userId, adjointId, interim = false) {
   s.mayor = userId ? { userId, adjointId: adjointId ?? null, since: Date.now(), interim, spent: 0 } : null;
   s.petition = { signatures: [], referendum: null, lastReferendumAt: s.petition.lastReferendumAt ?? 0 };
   save();
+  await clearNobility(client);
+  setRegime("democratie");
+  s.regimeLockedUntil = 0; // le nouveau maire peut choisir son régime tout de suite
+  save();
   await setRoles(client, userId, adjointId);
   const bureau = await channel(client, "bureauChannelId");
   if (bureau && userId) {
@@ -621,7 +659,7 @@ async function signPetition(interaction, client) {
   save();
 
   const voters = await eligibleVoters(interaction.guild);
-  const needed = Math.ceil(voters.length * PETITION_SHARE);
+  const needed = Math.ceil(voters.length * REGIMES[regime()].petition);
   if (s.petition.signatures.length >= needed) {
     s.petition.referendum = { until: Date.now() + REFERENDUM_MS, votes: {} };
     s.petition.lastReferendumAt = Date.now();
@@ -717,8 +755,8 @@ async function weeklyBudget(client) {
     }
   }
 
-  // Allocations
-  const guild = await getGuild(client);
+  // Allocations (aucune en anarchie)
+  const guild = regime() === "anarchie" ? null : await getGuild(client);
   if (guild) {
     await guild.members.fetch().catch(() => null);
     const humans = [...guild.members.cache.values()].filter((m) => !m.user.bot);
@@ -781,8 +819,40 @@ async function bureauAction(interaction, action, client) {
   const mayor = isMayor(userId);
   if (!mayor && !isAdjoint(userId)) return interaction.reply({ content: "❌ Réservé au maire et à son adjoint.", ephemeral: true });
   const s = load();
+  if (regime() === "anarchie" && ["taxes", "subsidy", "bonus", "allowances", "amnesty", "relaunch"].includes(action)) {
+    return interaction.reply({ content: "🏴 En anarchie, il n'y a ni impôts ni aides. Changez de régime pour retrouver ces pouvoirs.", ephemeral: true });
+  }
 
   switch (action) {
+    case "regime":
+      if (!mayor) return interaction.reply({ content: "❌ Seul le maire choisit le régime.", ephemeral: true });
+      if (Date.now() < (s.regimeLockedUntil ?? 0)) {
+        return interaction.reply({ content: `⏳ Prochain changement de régime possible ${ts(s.regimeLockedUntil, "R")}.`, ephemeral: true });
+      }
+      return interaction.reply({
+        content: "🏛️ Quel régime voulez-vous instaurer ? (un changement par mois)",
+        ephemeral: true,
+        components: [
+          new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId("mairie_regime")
+              .setPlaceholder("Choisir un régime")
+              .addOptions(
+                Object.entries(REGIMES).map(([id, r]) => ({
+                  label: r.name,
+                  value: id,
+                  emoji: r.emoji,
+                  description: r.description.slice(0, 100),
+                  default: id === regime(),
+                }))
+              )
+          ),
+        ],
+      });
+
+    case "powers":
+      return showRegimePowers(interaction, mayor);
+
     case "budget":
       return interaction.reply({
         embeds: [
@@ -923,7 +993,7 @@ async function applyLever(interaction, key, client) {
   await journal(
     client,
     "⚖️ Arrêté fiscal",
-    `Le maire <@${interaction.user.id}> fixe **${lever.label}** à **${formatLever(key, after)}** (avant : ${formatLever(key, before)}).`,
+    `${regime() === "dictature" ? "Le Régime" : `Le maire <@${interaction.user.id}>`} fixe **${lever.label}** à **${formatLever(key, after)}** (avant : ${formatLever(key, before)}).`,
     after > before ? 0xe74c3c : 0x2ecc71
   );
   await refreshPanels(client);
@@ -942,6 +1012,10 @@ async function handleMairieInteraction(interaction, client) {
   const official = isMayor(userId) || isAdjoint(userId);
   const deny = () => interaction.reply({ content: "❌ Réservé au maire et à son adjoint.", ephemeral: true });
 
+  if (id.startsWith("mairie_poll_")) {
+    await votePoll(interaction);
+    return true;
+  }
   if (id === "mairie_run") {
     const err = await checkCandidate(interaction.member);
     if (err) await interaction.reply({ content: err, ephemeral: true });
@@ -995,6 +1069,7 @@ async function handleMairieInteraction(interaction, client) {
   // Bureau
   else if (id.startsWith("mairie_b_")) await bureauAction(interaction, id.slice("mairie_b_".length), client);
   else if (!official) await deny();
+  else if (id.startsWith("mairie_r_") || id === "mairie_regime") await handleRegimeInteraction(interaction, client);
   else if (id === "mairie_lever") {
     if (!isMayor(userId)) { await interaction.reply({ content: "❌ Seul le maire fixe les taux.", ephemeral: true }); return true; }
     const key = interaction.values[0];
@@ -1017,7 +1092,7 @@ async function handleMairieInteraction(interaction, client) {
     const title = interaction.fields.getTextInputValue("titre").trim();
     const text = interaction.fields.getTextInputValue("texte").trim();
     count("decrees");
-    await journal(client, `📜 Arrêté municipal — ${title}`, `${text}\n\n— <@${userId}>, ${isMayor(userId) ? "maire" : "adjoint au maire"}`);
+    await journal(client, `📜 Arrêté municipal — ${title}`, `${text}\n\n${sign(userId, true)}`);
     await interaction.reply({ content: "📜 Arrêté publié au Journal officiel.", ephemeral: true });
   } else if (id === "mairie_subsidy") {
     await interaction.showModal(modal(`mairie_m_subsidy_${interaction.values[0]}`, "🏢 Subvention", [["montant", "Montant (€)"], ["motif", "Motif", TextInputStyle.Paragraph, undefined, 300]]));
@@ -1030,7 +1105,7 @@ async function handleMairieInteraction(interaction, client) {
     if (!budgetMove(-value, `Subvention à ${company.name}`)) { await interaction.reply({ content: `❌ Budget insuffisant (${formatEuro(s.budget)}).`, ephemeral: true }); return true; }
     creditCompany(companyId, value, `Subvention de la Mairie — ${motif}`.slice(0, 120));
     count("subsidies");
-    await journal(client, "🏢 Subvention", `**${formatEuro(value)}** versés à **${company.name}**.\nMotif : ${motif}\n\n— <@${userId}>`);
+    await journal(client, "🏢 Subvention", `**${formatEuro(value)}** versés à **${company.name}**.\nMotif : ${motif}\n\n${sign(userId)}`);
     await refreshPanels(client);
     await interaction.reply({ content: `🏢 ${formatEuro(value)} versés à ${company.name}.`, ephemeral: true });
   } else if (id === "mairie_bonus") {
@@ -1044,7 +1119,7 @@ async function handleMairieInteraction(interaction, client) {
     if (!budgetMove(-value, `Prime à ${target}`)) { await interaction.reply({ content: `❌ Budget insuffisant (${formatEuro(s.budget)}).`, ephemeral: true }); return true; }
     changeBalance(target, value, `Prime de la Mairie — ${motif}`.slice(0, 120));
     count("bonuses");
-    await journal(client, "🎁 Prime", `**${formatEuro(value)}** versés à <@${target}>.\nMotif : ${motif}\n\n— <@${userId}>`);
+    await journal(client, "🎁 Prime", `**${formatEuro(value)}** versés à <@${target}>.\nMotif : ${motif}\n\n${sign(userId)}`);
     await refreshPanels(client);
     await refreshRichestLeaderboard(client).catch(() => null);
     await interaction.reply({ content: `🎁 Prime de ${formatEuro(value)} versée à <@${target}>.`, ephemeral: true });
@@ -1057,7 +1132,7 @@ async function handleMairieInteraction(interaction, client) {
       "🤝 Allocations hebdomadaires",
       `Situation délicate : ${formatEuro(before.social)} → **${formatEuro(s.allowances.social)}**\n` +
         `Tous les membres : ${formatEuro(before.universal)} → **${formatEuro(s.allowances.universal)}**\n` +
-        `Nouveaux membres : ${formatEuro(before.welcome)} → **${formatEuro(s.allowances.welcome)}**\n\nVersées chaque dimanche sur le budget municipal.\n— <@${userId}>`
+        `Nouveaux membres : ${formatEuro(before.welcome)} → **${formatEuro(s.allowances.welcome)}**\n\nVersées chaque dimanche sur le budget municipal.\n${sign(userId)}`
     );
     await refreshPanels(client);
     await interaction.reply({ content: "🤝 Allocations mises à jour (versées chaque dimanche).", ephemeral: true });
@@ -1066,13 +1141,13 @@ async function handleMairieInteraction(interaction, client) {
     const debt = getTaxDebt(target);
     if (!debt) { await interaction.update({ content: `<@${target}> n'a pas de dette fiscale.`, components: [] }); return true; }
     setTaxDebt(target, null);
-    await journal(client, "🕊️ Amnistie fiscale", `La dette fiscale de <@${target}> (**${formatEuro(debt.amount)}**) est annulée.\n— <@${userId}>`);
+    await journal(client, "🕊️ Amnistie fiscale", `La dette fiscale de <@${target}> (**${formatEuro(debt.amount)}**) est annulée.\n${sign(userId)}`);
     await interaction.update({ content: `🕊️ Dette de ${formatEuro(debt.amount)} annulée.`, components: [] });
   } else if (id === "mairie_amnesty_all") {
     const debts = Object.entries(loadEconomie().taxDebts);
     const total = debts.reduce((sum, [, d]) => sum + d.amount, 0);
     for (const [uid] of debts) setTaxDebt(uid, null);
-    await journal(client, "🕊️ Amnistie fiscale générale", `**${debts.length}** dette(s) annulée(s), pour un total de **${formatEuro(round2(total))}**.\n— <@${userId}>`);
+    await journal(client, "🕊️ Amnistie fiscale générale", `**${debts.length}** dette(s) annulée(s), pour un total de **${formatEuro(round2(total))}**.\n${sign(userId)}`);
     await interaction.update({ content: `🕊️ ${debts.length} dette(s) annulée(s).`, components: [] });
   } else if (id === "mairie_relaunch") {
     const sector = interaction.values[0];
@@ -1081,7 +1156,7 @@ async function handleMairieInteraction(interaction, client) {
     }
     const until = Date.now() + RELAUNCH_DAYS * 24 * 60 * 60 * 1000;
     boostSector(sector, until);
-    await journal(client, "🚀 Plan de relance", `Secteur **${SECTORS[sector].label}** : **+50 % de clients** jusqu'au ${ts(until, "F")}.\nCoût : ${formatEuro(RELAUNCH_COST)}\n— <@${userId}>`, 0x2ecc71);
+    await journal(client, "🚀 Plan de relance", `Secteur **${SECTORS[sector].label}** : **+50 % de clients** jusqu'au ${ts(until, "F")}.\nCoût : ${formatEuro(RELAUNCH_COST)}\n${sign(userId)}`, 0x2ecc71);
     await refreshPanels(client);
     await interaction.update({ content: `🚀 Plan de relance lancé pour ${SECTORS[sector].label}.`, components: [] });
   } else if (id === "mairie_event_new") {
@@ -1099,7 +1174,7 @@ async function handleMairieInteraction(interaction, client) {
     const eid = nextId("ev");
     s.events[eid] = { id: eid, title, pot, remaining: pot };
     save();
-    await journal(client, `🎉 Événement — ${title}`, `${interaction.fields.getTextInputValue("description").trim()}\n\n💰 Cagnotte : **${formatEuro(pot)}**\n— <@${userId}>`, 0x9b59b6);
+    await journal(client, `🎉 Événement — ${title}`, `${interaction.fields.getTextInputValue("description").trim()}\n\n💰 Cagnotte : **${formatEuro(pot)}**\n${sign(userId)}`, 0x9b59b6);
     await refreshPanels(client);
     await interaction.reply({ content: `🎉 Événement créé avec ${formatEuro(pot)} de cagnotte. Gérez les gains depuis le bouton Événement.`, ephemeral: true });
   } else if (id === "mairie_event_pick") {
@@ -1142,11 +1217,345 @@ async function handleMairieInteraction(interaction, client) {
   return true;
 }
 
+// --- Régimes politiques ---
+
+async function showRegimePowers(interaction, mayor) {
+  const r = regime();
+  const s = load();
+  const row = new ActionRowBuilder();
+  let text;
+
+  if (r === "democratie") {
+    text = "🗳️ **Démocratie** : consultez les citoyens sur une question. Le vote dure 48 h et le résultat est publié au Journal officiel.";
+    row.addComponents(
+      new ButtonBuilder().setCustomId("mairie_r_poll").setLabel("Lancer un vote citoyen").setEmoji("🗳️").setStyle(ButtonStyle.Primary)
+    );
+  } else if (r === "monarchie") {
+    const nobles = Object.entries(s.nobles ?? {});
+    text =
+      "👑 **Monarchie** : distribuez des titres de noblesse.\n\n" +
+      (nobles.length ? nobles.map(([uid, t]) => `${NOBLE_TITLES[t]} — <@${uid}>`).join("\n") : "*Aucun noble pour le moment.*");
+    row.addComponents(
+      new ButtonBuilder().setCustomId("mairie_r_title").setLabel("Anoblir un membre").setEmoji("🎖️").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("mairie_r_untitle").setLabel("Retirer un titre").setEmoji("✖️").setStyle(ButtonStyle.Secondary).setDisabled(!nobles.length)
+    );
+  } else if (r === "dictature") {
+    if (!mayor) return interaction.reply({ content: "❌ Seul le dictateur exerce ces pouvoirs.", ephemeral: true });
+    text =
+      "⚔️ **Dictature** : vos pouvoirs spéciaux.\n\n" +
+      `🌙 Couvre-feu : **${curfew() ? "en cours" : "levé"}** (casino fermé, plus de voyageurs Airbnb)\n` +
+      `💰 Confiscation : jusqu'à **${Math.round(CONFISCATION_MAX * 100)} %** du solde, une fois par semaine et par personne\n` +
+      "⛔ Suspension d'une entreprise\n" +
+      "🤐 Censure : vos actes au Journal officiel ne sont plus signés";
+    row.addComponents(
+      new ButtonBuilder().setCustomId("mairie_r_curfew").setLabel(curfew() ? "Lever le couvre-feu" : "Décréter le couvre-feu").setEmoji("🌙").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("mairie_r_confiscate").setLabel("Confisquer").setEmoji("💰").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("mairie_r_suspend").setLabel("Suspendre une entreprise").setEmoji("⛔").setStyle(ButtonStyle.Danger)
+    );
+  } else {
+    return interaction.reply({ content: "🏴 **Anarchie** : aucun pouvoir spécial. Il vous reste les événements, les arrêtés et les associations.", ephemeral: true });
+  }
+  return interaction.reply({ content: text, components: [row], ephemeral: true });
+}
+
+// Retire tous les titres de noblesse (fin de la monarchie ou nouveau maire).
+async function clearNobility(client) {
+  const s = load();
+  const nobles = Object.keys(s.nobles ?? {});
+  if (!nobles.length) return;
+  const guild = await getGuild(client);
+  for (const [, title] of Object.entries(NOBLE_TITLES)) {
+    const role = guild?.roles.cache.find((r) => r.name === title);
+    if (!role) continue;
+    for (const uid of nobles) {
+      const m = await guild.members.fetch(uid).catch(() => null);
+      await m?.roles.remove(role).catch(() => null);
+    }
+  }
+  s.nobles = {};
+  save();
+}
+
+async function changeRegime(interaction, client) {
+  if (!isMayor(interaction.user.id)) return interaction.update({ content: "❌ Seul le maire choisit le régime.", components: [] });
+  const s = load();
+  const next = interaction.values[0];
+  const before = regime();
+  if (next === before) return interaction.update({ content: "ℹ️ C'est déjà le régime en vigueur.", components: [] });
+  if (Date.now() < (s.regimeLockedUntil ?? 0)) {
+    return interaction.update({ content: `⏳ Prochain changement possible ${ts(s.regimeLockedUntil, "R")}.`, components: [] });
+  }
+  if (before === "monarchie") await clearNobility(client);
+  setRegime(next);
+  s.regimeLockedUntil = Date.now() + REGIME_COOLDOWN_MS;
+  save();
+
+  const r = REGIMES[next];
+  await journal(
+    client,
+    `${r.emoji} Changement de régime : ${r.name}`,
+    `${REGIMES[before].emoji} ${REGIMES[before].name} → **${r.emoji} ${r.name}**\n\n*${r.description}*\n\n${next === "dictature" ? "— *Le Régime*" : `— <@${interaction.user.id}>, ${r.title.toLowerCase()}`}`,
+    next === "dictature" ? 0x2c2c2c : next === "anarchie" ? 0x7f8c8d : 0xf1c40f
+  );
+  const elections = await channel(client, "electionsChannelId");
+  await elections?.send({ content: `${r.emoji} **La Maison passe en ${r.name.toLowerCase()}.** ${r.description}` }).catch(() => null);
+  await refreshPanels(client);
+  await require("./impots").refreshPanel(client).catch(() => null);
+  return interaction.update({ content: `${r.emoji} Régime instauré : **${r.name}**. Prochain changement possible dans 30 jours.`, components: [] });
+}
+
+async function handleRegimeInteraction(interaction, client) {
+  const id = interaction.customId;
+  const userId = interaction.user.id;
+  const mayor = isMayor(userId);
+  const r = regime();
+
+  if (id === "mairie_regime") return changeRegime(interaction, client);
+
+  // Démocratie : vote citoyen
+  if (id === "mairie_r_poll") {
+    if (r !== "democratie") return interaction.reply({ content: "❌ Réservé à la démocratie.", ephemeral: true });
+    return interaction.showModal(
+      modal("mairie_r_mpoll", "🗳️ Vote citoyen", [["question", "Question posée aux citoyens", TextInputStyle.Paragraph, undefined, 300]])
+    );
+  }
+  if (id === "mairie_r_mpoll") {
+    const question = interaction.fields.getTextInputValue("question").trim();
+    const s = load();
+    const pid = nextId("p");
+    const until = Date.now() + POLL_MS;
+    const elections = await channel(client, "electionsChannelId");
+    const msg = await elections
+      ?.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x3498db)
+            .setTitle("🗳️ Vote citoyen")
+            .setDescription(`**${question}**\n\nProposé par <@${userId}>. Fin du vote ${ts(until, "R")}. Vote anonyme, modifiable.`),
+        ],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`mairie_poll_yes_${pid}`).setLabel("Pour").setEmoji("👍").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`mairie_poll_no_${pid}`).setLabel("Contre").setEmoji("👎").setStyle(ButtonStyle.Danger)
+          ),
+        ],
+      })
+      .catch(() => null);
+    s.polls = { ...(s.polls ?? {}), [pid]: { question, until, votes: {}, messageId: msg?.id ?? null } };
+    save();
+    return interaction.reply({ content: "🗳️ Vote citoyen lancé dans le salon des élections.", ephemeral: true });
+  }
+
+  // Monarchie : titres de noblesse
+  if (id === "mairie_r_title") {
+    if (r !== "monarchie") return interaction.reply({ content: "❌ Réservé à la monarchie.", ephemeral: true });
+    return interaction.reply({
+      content: "🎖️ Quel titre accorder ?",
+      ephemeral: true,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("mairie_r_titletype")
+            .setPlaceholder("Choisir un titre")
+            .addOptions(Object.entries(NOBLE_TITLES).map(([k, label]) => ({ label: label.replace(/^\S+ /, ""), value: k, emoji: "🎖️" })))
+        ),
+      ],
+    });
+  }
+  if (id === "mairie_r_titletype") {
+    return interaction.update({
+      content: `🎖️ ${NOBLE_TITLES[interaction.values[0]]} — à qui ?`,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new UserSelectMenuBuilder().setCustomId(`mairie_r_titleuser_${interaction.values[0]}`).setPlaceholder("Choisir un membre")
+        ),
+      ],
+    });
+  }
+  if (id.startsWith("mairie_r_titleuser_")) {
+    if (r !== "monarchie") return interaction.update({ content: "❌ Réservé à la monarchie.", components: [] });
+    const titleKey = id.slice("mairie_r_titleuser_".length);
+    const target = await interaction.guild.members.fetch(interaction.values[0]).catch(() => null);
+    if (!target || target.user.bot) return interaction.update({ content: "❌ Membre introuvable.", components: [] });
+    const s = load();
+    const role = await findOrCreateRole(interaction.guild, { name: NOBLE_TITLES[titleKey], color: 0x9b59b6, hoist: false });
+    const previous = s.nobles?.[target.id];
+    if (previous && previous !== titleKey) {
+      const old = interaction.guild.roles.cache.find((x) => x.name === NOBLE_TITLES[previous]);
+      if (old) await target.roles.remove(old).catch(() => null);
+    }
+    await target.roles.add(role).catch(() => null);
+    s.nobles = { ...(s.nobles ?? {}), [target.id]: titleKey };
+    save();
+    await journal(client, "🎖️ Anoblissement", `${target} reçoit le titre de **${NOBLE_TITLES[titleKey].replace(/^\S+ /, "")}**.\n\n${sign(userId, true)}`, 0x9b59b6);
+    return interaction.update({ content: `🎖️ ${target} est anobli(e).`, components: [] });
+  }
+  if (id === "mairie_r_untitle") {
+    const nobles = Object.entries(load().nobles ?? {});
+    if (!nobles.length) return interaction.reply({ content: "Aucun noble.", ephemeral: true });
+    return interaction.reply({
+      content: "✖️ Retirer le titre de qui ?",
+      ephemeral: true,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("mairie_r_untitleuser")
+            .setPlaceholder("Choisir un noble")
+            .addOptions(
+              nobles.slice(0, 25).map(([uid, t]) => ({
+                label: (interaction.guild.members.cache.get(uid)?.displayName ?? uid).slice(0, 100),
+                value: uid,
+                description: NOBLE_TITLES[t].replace(/^\S+ /, ""),
+              }))
+            )
+        ),
+      ],
+    });
+  }
+  if (id === "mairie_r_untitleuser") {
+    const s = load();
+    const uid = interaction.values[0];
+    const title = NOBLE_TITLES[s.nobles?.[uid]];
+    const role = title && interaction.guild.roles.cache.find((x) => x.name === title);
+    const target = await interaction.guild.members.fetch(uid).catch(() => null);
+    if (role && target) await target.roles.remove(role).catch(() => null);
+    delete s.nobles[uid];
+    save();
+    await journal(client, "✖️ Titre retiré", `<@${uid}> perd son titre de noblesse.\n\n${sign(userId, true)}`, 0x95a5a6);
+    return interaction.update({ content: "✖️ Titre retiré.", components: [] });
+  }
+
+  // Dictature : pouvoirs spéciaux (réservés au dictateur)
+  if (!mayor || r !== "dictature") {
+    return interaction.reply({ content: "❌ Réservé au dictateur, sous la dictature.", ephemeral: true });
+  }
+  if (id === "mairie_r_curfew") {
+    const on = !curfew();
+    setCurfew(on);
+    await journal(
+      client,
+      on ? "🌙 Couvre-feu" : "☀️ Fin du couvre-feu",
+      on ? "Le casino est fermé et les voyageurs Airbnb ne sont plus accueillis jusqu'à nouvel ordre.\n\n— *Le Régime*" : "Le casino et l'Airbnb reprennent leur activité.\n\n— *Le Régime*",
+      on ? 0x2c2c2c : 0x2ecc71
+    );
+    await refreshPanels(client);
+    return interaction.update({ content: on ? "🌙 Couvre-feu décrété." : "☀️ Couvre-feu levé.", components: [] });
+  }
+  if (id === "mairie_r_confiscate") {
+    return interaction.reply({
+      content: `💰 Qui doit être frappé de confiscation ? (${Math.round(CONFISCATION_MAX * 100)} % maximum, une fois par semaine)`,
+      ephemeral: true,
+      components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId("mairie_r_confiscuser").setPlaceholder("Choisir un membre"))],
+    });
+  }
+  if (id === "mairie_r_confiscuser") {
+    const target = interaction.values[0];
+    const last = load().confiscations?.[target] ?? 0;
+    if (Date.now() - last < CONFISCATION_COOLDOWN_MS) {
+      return interaction.update({ content: `⏳ <@${target}> a déjà subi une confiscation. Prochaine possible ${ts(last + CONFISCATION_COOLDOWN_MS, "R")}.`, components: [] });
+    }
+    return interaction.showModal(
+      modal(`mairie_r_mconfisc_${target}`, "💰 Confiscation", [
+        ["pourcentage", `Pourcentage du solde (1 à ${Math.round(CONFISCATION_MAX * 100)})`, TextInputStyle.Short, Math.round(CONFISCATION_MAX * 100), 3],
+        ["motif", "Motif officiel", TextInputStyle.Paragraph, undefined, 300],
+      ])
+    );
+  }
+  if (id.startsWith("mairie_r_mconfisc_")) {
+    const target = id.slice("mairie_r_mconfisc_".length);
+    const s = load();
+    if (Date.now() - (s.confiscations?.[target] ?? 0) < CONFISCATION_COOLDOWN_MS) {
+      return interaction.reply({ content: "⏳ Confiscation déjà faite cette semaine.", ephemeral: true });
+    }
+    const pct = Math.min(CONFISCATION_MAX * 100, Math.max(1, amount(interaction, "pourcentage")));
+    const motif = interaction.fields.getTextInputValue("motif").trim();
+    const taken = round2(readBalance(target) * (pct / 100));
+    if (taken <= 0) return interaction.reply({ content: "Ce membre n'a rien à confisquer.", ephemeral: true });
+    changeBalance(target, -taken, `Confiscation par le régime — ${motif}`.slice(0, 120), { force: true });
+    budgetMove(taken, `Confiscation (${pct} %)`);
+    s.confiscations = { ...(s.confiscations ?? {}), [target]: Date.now() };
+    save();
+    await journal(client, "💰 Confiscation", `**${formatEuro(taken)}** (${pct} % du solde) confisqués à <@${target}> au profit de la ville.\nMotif : ${motif}\n\n— *Le Régime*`, 0x2c2c2c);
+    const user = await client.users.fetch(target).catch(() => null);
+    await user?.send(`💰 Le régime vous a confisqué **${formatEuro(taken)}** (${pct} % de votre solde).\nMotif : ${motif}`).catch(() => null);
+    await refreshPanels(client);
+    await refreshRichestLeaderboard(client).catch(() => null);
+    return interaction.reply({ content: `💰 ${formatEuro(taken)} confisqués.`, ephemeral: true });
+  }
+  if (id === "mairie_r_suspend") {
+    const companies = listOpenCompanies();
+    if (!companies.length) return interaction.reply({ content: "Aucune entreprise.", ephemeral: true });
+    return interaction.reply({
+      content: "⛔ Quelle entreprise suspendre ou rétablir ?",
+      ephemeral: true,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("mairie_r_suspendpick")
+            .setPlaceholder("Choisir une entreprise")
+            .addOptions(
+              companies.slice(0, 25).map((c) => ({
+                label: c.name.slice(0, 100),
+                value: c.id,
+                description: c.status === "frozen" ? "Suspendue : la rétablir" : "En activité : la suspendre",
+                emoji: c.status === "frozen" ? "⛔" : "🟢",
+              }))
+            )
+        ),
+      ],
+    });
+  }
+  if (id === "mairie_r_suspendpick") {
+    const company = listOpenCompanies().find((c) => c.id === interaction.values[0]);
+    if (!company) return interaction.update({ content: "❌ Entreprise introuvable.", components: [] });
+    const suspend = company.status === "active";
+    await setCompanySuspended(client, company.id, suspend, "Décision du Régime.");
+    await journal(
+      client,
+      suspend ? "⛔ Entreprise suspendue" : "✅ Suspension levée",
+      `**${company.name}** ${suspend ? "est suspendue jusqu'à nouvel ordre" : "peut reprendre son activité"}.\n\n— *Le Régime*`,
+      suspend ? 0x2c2c2c : 0x2ecc71
+    );
+    return interaction.update({ content: suspend ? `⛔ ${company.name} est suspendue.` : `✅ ${company.name} est rétablie.`, components: [] });
+  }
+  return interaction.reply({ content: "❌ Action inconnue.", ephemeral: true });
+}
+
+// Vote citoyen (démocratie) : ouvert à tous les électeurs
+async function votePoll(interaction) {
+  const [, , choice, pid] = interaction.customId.split("_");
+  const poll = load().polls?.[pid];
+  if (!poll || Date.now() > poll.until) return interaction.reply({ content: "❌ Ce vote est terminé.", ephemeral: true });
+  if (seniority(interaction.member) < VOTER_SENIORITY_MS) return interaction.reply({ content: "❌ Il faut être membre depuis 7 jours pour voter.", ephemeral: true });
+  poll.votes[interaction.user.id] = choice === "yes";
+  save();
+  return interaction.reply({ content: `✅ Vote enregistré : **${choice === "yes" ? "pour" : "contre"}** (modifiable jusqu'à la fin).`, ephemeral: true });
+}
+
+async function closePolls(client) {
+  const s = load();
+  for (const [pid, poll] of Object.entries(s.polls ?? {})) {
+    if (Date.now() < poll.until) continue;
+    delete s.polls[pid];
+    save();
+    const votes = Object.values(poll.votes);
+    const yes = votes.filter(Boolean).length;
+    const no = votes.length - yes;
+    const verdict = yes > no ? "✅ **Adopté**" : yes < no ? "❌ **Rejeté**" : "⚖️ **Égalité**";
+    const text = `**${poll.question}**\n\n👍 Pour : **${yes}** · 👎 Contre : **${no}**\n${verdict}`;
+    const elections = await channel(client, "electionsChannelId");
+    const msg = poll.messageId ? await elections?.messages.fetch(poll.messageId).catch(() => null) : null;
+    await msg?.edit({ embeds: [new EmbedBuilder().setColor(0x3498db).setTitle("🗳️ Vote citoyen — résultat").setDescription(text)], components: [] }).catch(() => null);
+    await journal(client, "🗳️ Résultat d'un vote citoyen", text, 0x3498db);
+  }
+}
+
 // --- Démarrage ---
 
 let lastPhase = null;
 
 async function tick(client) {
+  await closePolls(client);
   const { phase } = getPhase();
   const s = load();
   if (phase !== lastPhase) {
