@@ -203,8 +203,38 @@ async function publishV3Announcement(client) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+// --- Vidéo de présentation de la V3 : publiée une seule fois, sous l'annonce ---
+
+const V3_VIDEO_FILE = require("path").join(__dirname, "assets", "la-maison-v3.mp4");
+const V3_VIDEO_NAME = "la-maison-v3.mp4";
+
+async function publishV3Video(client) {
+  const state = loadAnnonces();
+  if (state.v3VideoMessageId || !fs.existsSync(V3_VIDEO_FILE)) return;
+
+  const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const existing = recent?.find(
+    (m) => m.author.id === client.user.id && m.attachments.some((a) => a.name === V3_VIDEO_NAME)
+  );
+  if (existing) {
+    state.v3VideoMessageId = existing.id;
+  } else {
+    const message = await channel.send({
+      content: "🎬 **La Maison V3 en vidéo** 🦋",
+      files: [{ attachment: V3_VIDEO_FILE, name: V3_VIDEO_NAME }],
+    });
+    state.v3VideoMessageId = message.id;
+    console.log("Vidéo V3 publiée");
+  }
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
 module.exports = {
   setupReopeningAnnouncement,
   publishV3Announcement,
+  publishV3Video,
   ANNOUNCE_CHANNEL_ID,
 };

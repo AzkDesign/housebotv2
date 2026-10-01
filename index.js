@@ -77,7 +77,7 @@ const { setupMairie, handleMairieInteraction } = require("./mairie");
 const { setupAssociations, handleAssociationsInteraction } = require("./associations");
 const { handleProfilCommand } = require("./profil");
 const { setupEspaces, handleEspacesInteraction, isProtectedChannel } = require("./espaces");
-const { publishV3Announcement } = require("./annonce");
+const { publishV3Announcement, publishV3Video } = require("./annonce");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -553,6 +553,7 @@ client.once(Events.ClientReady, async () => {
   await step("Associations", () => setupAssociations(client));
   await step("Espaces Jeunes / Entrepreneurs", () => setupEspaces(client));
   await step("annonce V3", () => publishV3Announcement(client));
+  await step("vidéo V3", () => publishV3Video(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {
