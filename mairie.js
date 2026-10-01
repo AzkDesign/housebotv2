@@ -420,7 +420,8 @@ function bureauPanel() {
       ),
       new ActionRowBuilder().addComponents(
         btn("regime", "Changer de régime", "🏛️", ButtonStyle.Danger),
-        btn("powers", "Pouvoirs du régime", "✨", ButtonStyle.Primary)
+        btn("powers", "Pouvoirs du régime", "✨", ButtonStyle.Primary),
+        btn("assos", "Associations", "🤝", ButtonStyle.Success)
       ),
     ],
   };
@@ -852,6 +853,9 @@ async function bureauAction(interaction, action, client) {
 
     case "powers":
       return showRegimePowers(interaction, mayor);
+
+    case "assos":
+      return require("./associations").openMayorMenu(interaction);
 
     case "budget":
       return interaction.reply({
@@ -1591,4 +1595,20 @@ function getBudget() {
   return load().budget;
 }
 
-module.exports = { setupMairie, handleMairieInteraction, getBudget };
+function getCategoryId() {
+  return load().categoryId ?? null;
+}
+
+module.exports = {
+  setupMairie,
+  handleMairieInteraction,
+  getBudget,
+  // Pour les associations
+  getCategoryId,
+  getGuild,
+  journal,
+  sign,
+  isMayor,
+  isAdjoint,
+  budgetMove,
+};

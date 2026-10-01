@@ -74,6 +74,7 @@ const { setupAirbnb, handleAirbnbInteraction } = require("./airbnb");
 const { setupEntreprises, handleEntreprisesInteraction } = require("./entreprises");
 const { setupImpots, handleImpotsInteraction } = require("./impots");
 const { setupMairie, handleMairieInteraction } = require("./mairie");
+const { setupAssociations, handleAssociationsInteraction } = require("./associations");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -545,6 +546,7 @@ client.once(Events.ClientReady, async () => {
   await step("Entreprises", () => setupEntreprises(client));
   await step("Impôts", () => setupImpots(client));
   await step("Mairie", () => setupMairie(client));
+  await step("Associations", () => setupAssociations(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -578,6 +580,7 @@ async function onInteraction(interaction) {
   if (await handleEntreprisesInteraction(interaction, client)) return;
   if (await handleImpotsInteraction(interaction, client)) return;
   if (await handleMairieInteraction(interaction, client)) return;
+  if (await handleAssociationsInteraction(interaction, client)) return;
   if (await handleLevelCommand(interaction)) return;
   if (await handleEconomieInteraction(interaction, client)) return;
   if (await handleCreditInteraction(interaction, client)) return;
