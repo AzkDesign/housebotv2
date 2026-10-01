@@ -165,6 +165,10 @@ function buildV3Embeds() {
         {
           name: "🤝 Les associations",
           value: "Créées par la Mairie : rejoignez-en une, participez aux activités, ou proposez la vôtre au maire !",
+        },
+        {
+          name: "🏠 Deux espaces rien qu'à vous",
+          value: "🌸 La **Maison des Jeunes** et 💼 la **Maison des Entrepreneurs** : chacun son espace, ses salons et ses règles.",
         }
       )
       .setFooter({ text: "Prenez le temps de découvrir les nouveaux salons, et posez vos questions en ticket. Bienvenue dans la Maison V3 🦋" })
