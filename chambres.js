@@ -447,7 +447,7 @@ async function answerMove(interaction, decision, userId) {
   await interaction.update({ components: [] });
   await interaction.channel.send(`${result}\n*Ce ticket sera fermé dans 1 minute.*`).catch(() => null);
   const channel = interaction.channel;
-  setTimeout(() => channel.delete("Demande de déménagement traitée").catch(() => null), 60 * 1000);
+  setTimeout(() => require("./tickets").closeTicket(channel, { reason: "Demande de déménagement traitée", closedBy: interaction.user }), 60 * 1000);
 }
 
 async function showResidence(interaction) {

@@ -234,7 +234,7 @@ async function handleEspacesInteraction(interaction) {
       return true;
     }
     await interaction.reply("🔒 Le salon sera fermé dans 5 secondes. Prends soin de toi 💗");
-    setTimeout(() => channel.delete("Salon d'écoute fermé").catch(() => null), 5000);
+    setTimeout(() => require("./tickets").closeTicket(channel, { reason: "Salon d'écoute fermé", closedBy: interaction.user }), 5000);
     return true;
   }
   return false;

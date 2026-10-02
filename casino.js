@@ -501,7 +501,7 @@ async function handleAccessDecision(interaction, accepted, userId, client) {
     .catch(() => null);
 
   const channel = interaction.channel;
-  setTimeout(() => channel.delete("Demande casino traitée").catch(() => null), 60 * 1000);
+  setTimeout(() => require("./tickets").closeTicket(channel, { reason: `Demande casino ${accepted ? "acceptée" : "refusée"}`, closedBy: interaction.user }), 60 * 1000);
 }
 
 // --- Licence ---

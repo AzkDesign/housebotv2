@@ -497,7 +497,7 @@ async function handleIrfInteraction(interaction, client) {
         const channel = interaction.channel;
         if (!channel?.topic?.startsWith("irf-enquete:")) return true;
         await interaction.reply(`🔒 Enquête clôturée par ${interaction.user}. Suppression du salon dans 5 secondes…`);
-        setTimeout(() => channel.delete("Enquête IRF clôturée").catch(() => null), 5000);
+        setTimeout(() => require("./tickets").closeTicket(channel, { reason: "Enquête IRF clôturée", closedBy: interaction.user }), 5000);
         break;
       }
     }

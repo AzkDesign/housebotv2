@@ -443,7 +443,7 @@ async function closeTrade(guild, client, tradeId, state) {
   const channel = await guild.channels.fetch(trade.channelId).catch(() => null);
   if (channel) {
     await channel.send("✅ **Transaction terminée** — fermeture du ticket dans 5 secondes…");
-    setTimeout(() => channel.delete("Vente terminée").catch(() => null), 5000);
+    setTimeout(() => require("./tickets").closeTicket(channel, { reason: "Vente terminée" }), 5000);
   }
 
   try {

@@ -13,6 +13,7 @@ const CHANNELS = {
   casino: { name: "🎰・logs-casino", title: "🎰 Casino", color: 0xe91e63 },
   revenus: { name: "💼・logs-revenus", title: "💼 Revenus & économie", color: 0x2ecc71 },
   staff: { name: "🏛️・logs-staff", title: "🏛️ Staff & État", color: 0xe67e22 },
+  tickets: { name: "📜・logs-tickets", title: "📜 Tickets archivés", color: 0x95a5a6 },
 };
 
 // Classement d'une opération selon son libellé
@@ -106,4 +107,11 @@ async function setupLogs(client) {
   console.log("Logs prêts");
 }
 
-module.exports = { setupLogs, sendLogEmbed, categoryOf };
+// Pour l'archivage des tickets : un encadré avec un fichier joint.
+async function sendLogFile(key, embed, file) {
+  const channel = channels[key];
+  if (!channel) return;
+  await channel.send({ embeds: [embed], files: [file], allowedMentions: { parse: [] } }).catch((err) => console.error("Log fichier:", err.message));
+}
+
+module.exports = { setupLogs, sendLogEmbed, sendLogFile, categoryOf };

@@ -5,6 +5,7 @@ const { CASINO_ACCESS_ROLE_ID, ENTREPRENEUR_ROLE_ID, LICENCE_ROLE_ID, IRF_ROLE_I
 const { getResidence } = require("./chambres");
 const { getJobOf } = require("./entreprises");
 const { getLevelSummary } = require("./levels");
+const { getStarTitle } = require("./membrestar");
 
 // Chargés à la demande : la mairie et les associations s'utilisent mutuellement.
 const mairie = () => require("./mairie");
@@ -62,7 +63,7 @@ function buildCard(member, { showPrivate }) {
       }
     );
 
-  const roles = [office, title].filter(Boolean);
+  const roles = [office, title, getStarTitle(userId)].filter(Boolean);
   if (roles.length) embed.addFields({ name: "🏛️ Fonctions", value: roles.join("\n"), inline: true });
 
   embed.addFields(

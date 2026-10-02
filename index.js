@@ -80,6 +80,8 @@ const { setupEspaces, handleEspacesInteraction, isProtectedChannel, publishMixit
 const { publishV3Announcement, publishV3Video, publishRecruitmentAnnouncement } = require("./annonce");
 const { setupLogs } = require("./logs");
 const { handleRelayMessage, handleRelayInteraction } = require("./relais");
+const { startInactivityWatcher } = require("./tickets");
+const { setupMembreStar, handleStarInteraction } = require("./membrestar");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -524,6 +526,7 @@ client.once(Events.ClientReady, async () => {
   // Les commandes slash en premier, pour qu'elles soient toujours disponibles.
   await step("commandes slash", () => registerSlashCommands(client, TOKEN));
   await step("logs", () => setupLogs(client));
+  await step("tickets inactifs", () => startInactivityWatcher(client));
   await step("règlement", () => setupRulesMessage(client));
   await step("tickets", () => setupTicketPanel(client));
 
@@ -555,6 +558,7 @@ client.once(Events.ClientReady, async () => {
   await step("Mairie", () => setupMairie(client));
   await step("Associations", () => setupAssociations(client));
   await step("Espaces Jeunes / Entrepreneurs", () => setupEspaces(client));
+  await step("Membre Star", () => setupMembreStar(client));
   await step("annonce V3", () => publishV3Announcement(client));
   await step("vidéo V3", () => publishV3Video(client));
   await step("annonce recrutement", () => publishRecruitmentAnnouncement(client));
@@ -587,6 +591,7 @@ async function onInteraction(interaction) {
     return;
   }
   if (await handleRelayInteraction(interaction, client)) return;
+  if (await handleStarInteraction(interaction, client)) return;
   if (await handleClearCommand(interaction)) return;
   if (await handleProfilCommand(interaction)) return;
   if (await handleEspacesInteraction(interaction)) return;
@@ -742,7 +747,7 @@ async function onInteraction(interaction) {
 
     setTimeout(async () => {
       try {
-        await channel.delete("Ticket fermé");
+        await require("./tickets").closeTicket(channel, { reason: "Ticket fermé", closedBy: interaction.user });
       } catch (err) {
         console.error("Erreur fermeture ticket:", err.message);
       }

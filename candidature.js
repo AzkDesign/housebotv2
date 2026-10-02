@@ -131,7 +131,7 @@ function closeRow() {
 
 function scheduleTicketDeletion(channel, closedAt) {
   const remaining = closedAt + DELETE_AFTER_DECISION_MS - Date.now();
-  const run = () => channel.delete("Candidature terminée depuis 24 h").catch(() => null);
+  const run = () => require("./tickets").closeTicket(channel, { reason: "Candidature terminée depuis 24 h" });
   if (remaining <= 0) run();
   else setTimeout(run, remaining).unref?.();
 }
