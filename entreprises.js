@@ -943,13 +943,13 @@ function readContract(interaction) {
   return { role: poste, salary };
 }
 
-async function proposeContract(interaction, company, targetId, contract, client, fromOffer = false) {
+async function proposeContract(interaction, company, targetId, contract, client, fromOffer = false, jobOfferId = null) {
   const target = await interaction.guild.members.fetch(targetId).catch(() => null);
   if (!target || target.user.bot) return interaction.reply({ content: "❌ Membre introuvable.", ephemeral: true });
   if (companyOf(targetId)) return interaction.reply({ content: `❌ ${target} fait déjà partie d'une entreprise.`, ephemeral: true });
 
   const id = nextId("k");
-  state.offers[id] = { id, type: "contract", companyId: company.id, userId: targetId, ...contract, by: interaction.user.id };
+  state.offers[id] = { id, type: "contract", companyId: company.id, userId: targetId, ...contract, by: interaction.user.id, jobOfferId };
   save();
   const dm = await target.send({
     embeds: [
@@ -1006,6 +1006,7 @@ async function answerContract(interaction, id, accepted, client) {
   registryDirty = true;
   await updateChannelAccess(client, company);
   await interaction.update({ embeds: [embed.setColor(0x2ecc71).setFooter({ text: "Contrat signé ✍️" })], components: [] });
+  if (offer.jobOfferId) await fillJobOffer(client, offer.jobOfferId);
   await send(client, company.channelId, { content: `🎉 Bienvenue à <@${offer.userId}>, nouveau ${POSTES[offer.role]} de **${company.name}** !` });
 }
 
@@ -1043,35 +1044,77 @@ async function publishOffer(interaction, company, client) {
   const contract = readContract(interaction);
   if (contract.error) return interaction.reply({ content: contract.error, ephemeral: true });
 
+  const places = Math.min(20, Math.max(1, parseAmount(interaction.fields.getTextInputValue("places")) || 1));
+
   const id = nextId("o");
-  state.offers[id] = { id, type: "job", companyId: company.id, title, ...contract };
+  const job = { id, type: "job", companyId: company.id, title, description, places, hired: 0, ...contract };
+  state.offers[id] = job;
   save();
-  await send(client, state.recruitmentChannelId, {
+  const message = await send(client, state.recruitmentChannelId, jobOfferMessage(company, job));
+  job.messageId = message?.id ?? null;
+  save();
+  await interaction.reply({
+    content: `📢 Offre publiée dans <#${state.recruitmentChannelId}> pour **${places}** personne(s). Elle disparaîtra d'elle-même une fois complète.`,
+    ephemeral: true,
+  });
+}
+
+function jobOfferMessage(company, job) {
+  const left = job.places ? job.places - (job.hired ?? 0) : null;
+  return {
     embeds: [
       new EmbedBuilder()
         .setColor(0x3498db)
-        .setTitle(`📢 ${company.name} recrute : ${title}`)
+        .setTitle(`📢 ${company.name} recrute : ${job.title}`)
         .setThumbnail(company.logo)
-        .setDescription(`${SECTORS[company.sector].label}\n\n${description}`)
+        .setDescription(`${SECTORS[company.sector].label}\n\n${job.description ?? ""}`)
         .addFields(
-          { name: "Poste", value: POSTES[contract.role], inline: true },
-          { name: "Salaire", value: `${formatEuro(contract.salary)} / semaine`, inline: true }
+          { name: "Poste", value: POSTES[job.role], inline: true },
+          { name: "Salaire", value: `${formatEuro(job.salary)} / semaine`, inline: true },
+          ...(left !== null ? [{ name: "Places", value: `**${left}** restante(s) sur ${job.places}`, inline: true }] : [])
         )
         .setTimestamp(),
     ],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`ent_apply_${id}`).setLabel("Postuler").setEmoji("🙋").setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId(`ent_apply_${job.id}`).setLabel("Postuler").setEmoji("🙋").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`ent_offerclose_${job.id}`).setLabel("Retirer l'offre").setEmoji("🗑️").setStyle(ButtonStyle.Secondary)
       ),
     ],
-  });
-  await interaction.reply({ content: `📢 Offre publiée dans <#${state.recruitmentChannelId}>.`, ephemeral: true });
+  };
+}
+
+// Supprime l'offre du salon recrutement (complète ou retirée).
+async function removeJobOffer(client, job) {
+  delete state.offers[job.id];
+  save();
+  const channel = await fetchChannel(client, state.recruitmentChannelId);
+  const message = job.messageId ? await channel?.messages.fetch(job.messageId).catch(() => null) : null;
+  await message?.delete().catch(() => null);
+}
+
+// Un contrat issu d'une offre a été signé : une place de moins.
+async function fillJobOffer(client, jobId) {
+  const job = state.offers[jobId];
+  if (!job || job.type !== "job" || !job.places) return;
+  job.hired = (job.hired ?? 0) + 1;
+  save();
+  if (job.hired >= job.places) {
+    await removeJobOffer(client, job);
+    return;
+  }
+  const company = state.companies[job.companyId];
+  const channel = await fetchChannel(client, state.recruitmentChannelId);
+  const message = job.messageId ? await channel?.messages.fetch(job.messageId).catch(() => null) : null;
+  if (company) await message?.edit(jobOfferMessage(company, job)).catch(() => null);
 }
 
 async function apply(interaction, offerId, client) {
   const offer = state.offers[offerId];
   const company = offer && state.companies[offer.companyId];
-  if (!company || company.status === "bankrupt") return interaction.reply({ content: "❌ Cette offre n'est plus disponible.", ephemeral: true });
+  if (!company || company.status === "bankrupt" || (offer.places && (offer.hired ?? 0) >= offer.places)) {
+    return interaction.reply({ content: "❌ Cette offre n'est plus disponible.", ephemeral: true });
+  }
   if (companyOf(interaction.user.id)) return interaction.reply({ content: "❌ Vous faites déjà partie d'une entreprise.", ephemeral: true });
 
   await send(client, company.channelId, {
@@ -1435,7 +1478,7 @@ async function handleEntreprisesInteraction(interaction, client) {
   if (id.startsWith("ent_pay_")) { await payInvoice(interaction, parts[3], parts[2], client); return true; }
 
   // Actions internes : il faut appartenir à l'entreprise
-  const companyId = ["ent_applyok", "ent_applyno"].includes(`${parts[0]}_${parts[1]}`)
+  const companyId = ["ent_applyok", "ent_applyno", "ent_offerclose"].includes(`${parts[0]}_${parts[1]}`)
     ? state.offers[parts[2]]?.companyId
     : id.startsWith("ent_duty_") || id.startsWith("ent_client_")
       ? parts[3]
@@ -1532,6 +1575,11 @@ async function handleEntreprisesInteraction(interaction, client) {
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("titre").setLabel("Intitulé du poste").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(60)),
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("description").setLabel("Missions, profil recherché").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(800))
         );
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId("places").setLabel("Nombre de personnes recherchées").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue("1")
+          )
+        );
         await interaction.showModal(modal);
       }
       break;
@@ -1539,6 +1587,16 @@ async function handleEntreprisesInteraction(interaction, client) {
       if (!manager) await denied();
       else await publishOffer(interaction, company, client);
       break;
+    case "offerclose": {
+      const job = state.offers[parts[2]];
+      if (!manager) await denied();
+      else if (!job) await interaction.update({ components: [] });
+      else {
+        await interaction.reply({ content: `🗑️ Offre « ${job.title} » retirée du recrutement.`, ephemeral: true });
+        await removeJobOffer(client, job);
+      }
+      break;
+    }
     case "applyok":
     case "applyno": {
       if (!manager) {
@@ -1552,7 +1610,11 @@ async function handleEntreprisesInteraction(interaction, client) {
         const user = await client.users.fetch(parts[3]).catch(() => null);
         await user?.send(`🙋 Votre candidature chez **${company.name}** n'a pas été retenue.`).catch(() => null);
       } else {
-        await proposeContract(interaction, company, parts[3], { role: offer.role, salary: offer.salary }, client, true);
+        if (offer.places && (offer.hired ?? 0) >= offer.places) {
+          await interaction.update({ content: "❌ Cette offre est déjà complète.", embeds: [], components: [] });
+          break;
+        }
+        await proposeContract(interaction, company, parts[3], { role: offer.role, salary: offer.salary }, client, true, offer.id);
       }
       break;
     }
