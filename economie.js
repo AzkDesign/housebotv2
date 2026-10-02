@@ -61,10 +61,24 @@ function getBalance(state, userId) {
   return state.balances[userId] ?? 0;
 }
 
+// Écouteurs de chaque mouvement d'argent (utilisés par les logs du staff)
+const transactionListeners = [];
+function onTransaction(fn) {
+  transactionListeners.push(fn);
+}
+
 function recordTransaction(state, userId, delta, after, label) {
   const list = (state.transactions[userId] ??= []);
-  list.push({ at: Date.now(), delta, after, label });
+  const entry = { at: Date.now(), delta, after, label };
+  list.push(entry);
   if (list.length > TRANSACTIONS_KEPT) list.splice(0, list.length - TRANSACTIONS_KEPT);
+  for (const fn of transactionListeners) {
+    try {
+      fn({ userId, ...entry });
+    } catch (err) {
+      console.error("Écouteur de transaction:", err.message);
+    }
+  }
 }
 
 // Ajoute (ou retire si négatif) un montant au solde d'un membre.
@@ -296,8 +310,7 @@ async function handleArgent(interaction, client) {
 
   await interaction.reply({ embeds: [embed], ephemeral: true });
 
-  const log = await client.channels.fetch(ECONOMIE_LOG_CHANNEL_ID).catch(() => null);
-  if (log?.isTextBased()) await log.send({ embeds: [embed] }).catch(() => null);
+  await require("./logs").sendLogEmbed("staff", embed);
 
   await refreshRichestLeaderboard(client).catch((err) =>
     console.error("Classement plus riches:", err.message)
@@ -322,6 +335,7 @@ module.exports = {
   refreshRichestLeaderboard,
   handleEconomieInteraction,
   loadState,
+  onTransaction,
   changeBalance,
   readBalance,
   addToTreasury,

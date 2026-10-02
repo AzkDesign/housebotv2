@@ -437,10 +437,8 @@ async function closeTrade(guild, client, tradeId, state) {
   trade.closedAt = Date.now();
   saveState(state);
 
-  const logChannel = await guild.channels.fetch(SHOP_LOG_CHANNEL_ID).catch(() => null);
-  if (logChannel?.isTextBased()) {
-    await logChannel.send({ embeds: [buildTradeLogEmbed(trade, guild)] });
-  }
+  // Ventes de la boutique : dans les logs des achats
+  await require("./logs").sendLogEmbed("achats", buildTradeLogEmbed(trade, guild));
 
   const channel = await guild.channels.fetch(trade.channelId).catch(() => null);
   if (channel) {

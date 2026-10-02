@@ -78,6 +78,7 @@ const { setupAssociations, handleAssociationsInteraction } = require("./associat
 const { handleProfilCommand } = require("./profil");
 const { setupEspaces, handleEspacesInteraction, isProtectedChannel, publishMixiteAnnouncement } = require("./espaces");
 const { publishV3Announcement, publishV3Video, publishRecruitmentAnnouncement } = require("./annonce");
+const { setupLogs } = require("./logs");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -521,6 +522,7 @@ client.once(Events.ClientReady, async () => {
   console.log(`Connecté en tant que ${client.user.tag}`);
   // Les commandes slash en premier, pour qu'elles soient toujours disponibles.
   await step("commandes slash", () => registerSlashCommands(client, TOKEN));
+  await step("logs", () => setupLogs(client));
   await step("règlement", () => setupRulesMessage(client));
   await step("tickets", () => setupTicketPanel(client));
 

@@ -490,8 +490,7 @@ async function handleAccessDecision(interaction, accepted, userId, client) {
     )
     .catch(() => null);
 
-  const log = await client.channels.fetch(ECONOMIE_LOG_CHANNEL_ID).catch(() => null);
-  if (log?.isTextBased()) await log.send({ embeds: [embed] }).catch(() => null);
+  await require("./logs").sendLogEmbed("casino", embed);
 
   await member
     ?.send(
@@ -540,10 +539,7 @@ async function handleLicencePurchase(interaction, client) {
     ephemeral: true,
   });
 
-  const log = await client.channels.fetch(ECONOMIE_LOG_CHANNEL_ID).catch(() => null);
-  await log
-    ?.send(`🪪 ${member} a acheté une **licence** (${formatEuro(LICENCE_PRICE)}).`)
-    .catch(() => null);
+
 }
 
 function recordLicence(userId) {

@@ -61,8 +61,7 @@ function ts(ms) {
 }
 
 async function sendLog(client, embed) {
-  const log = await client.channels.fetch(ECONOMIE_LOG_CHANNEL_ID).catch(() => null);
-  if (log?.isTextBased()) await log.send({ embeds: [embed] }).catch(() => null);
+  await require("./logs").sendLogEmbed("staff", embed);
 }
 
 // --- Panneau ---
