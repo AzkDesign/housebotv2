@@ -79,6 +79,7 @@ const { handleProfilCommand } = require("./profil");
 const { setupEspaces, handleEspacesInteraction, isProtectedChannel, publishMixiteAnnouncement } = require("./espaces");
 const { publishV3Announcement, publishV3Video, publishRecruitmentAnnouncement } = require("./annonce");
 const { setupLogs } = require("./logs");
+const { handleRelayMessage, handleRelayInteraction } = require("./relais");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -561,6 +562,7 @@ client.once(Events.ClientReady, async () => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
+  await handleRelayMessage(message, client).catch((err) => console.error("Relais:", err.message));
   await handleAchatDmMessage(message, client).catch((err) =>
     console.error("MP achat:", err.message)
   );
@@ -584,6 +586,7 @@ async function onInteraction(interaction) {
     await handleCandidatureResume(interaction);
     return;
   }
+  if (await handleRelayInteraction(interaction, client)) return;
   if (await handleClearCommand(interaction)) return;
   if (await handleProfilCommand(interaction)) return;
   if (await handleEspacesInteraction(interaction)) return;
