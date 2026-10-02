@@ -28,6 +28,7 @@ const { randomPerson } = require("./airbnb");
 // Taux réglés par le maire : impôt sur les sociétés, dividendes, salaire minimum, frais…
 const { P, sectorBoost } = require("./politique");
 const { findOrCreateChannel } = require("./salons");
+const { deleteLater, deleteInteractionMessageLater, sendDossier, MINUTE } = require("./nettoyage");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 
@@ -452,7 +453,7 @@ async function submitCreation(interaction, sector, client) {
   load().companies[id] = company;
   save();
 
-  await send(client, IRF_CHANNEL_ID, {
+  await sendDossier(client, {
     content: `<@&${IRF_ROLE_ID}>`,
     allowedMentions: { roles: [IRF_ROLE_ID] },
     embeds: [
@@ -518,6 +519,7 @@ async function validateCreation(interaction, accepted, id, client) {
       embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xe74c3c).setFooter({ text: `Refusée par ${interaction.user.tag}` })],
       components: [],
     });
+    deleteInteractionMessageLater(interaction, 2 * MINUTE);
     const user = await client.users.fetch(company.ownerId).catch(() => null);
     await user?.send(`❌ L'IRF a refusé l'immatriculation de **${company.name}**. Vos ${formatEuro(cost)} ont été remboursés.`).catch(() => null);
     return;
@@ -574,6 +576,7 @@ async function validateCreation(interaction, accepted, id, client) {
     embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x2ecc71).setFooter({ text: `Immatriculée par ${interaction.user.tag}` })],
     components: [],
   });
+  deleteInteractionMessageLater(interaction, 2 * MINUTE);
 }
 
 // --- Panneau de l'entreprise ---
@@ -731,6 +734,7 @@ async function answerClient(interaction, company, requestId, accepted) {
   if (!accepted || company.status !== "active") {
     save();
     await interaction.update({ embeds: [embed.setColor(0x95a5a6).setTitle("❌ Client refusé").setFooter({ text: `Refusé par ${interaction.user.tag}` })], components: [] });
+    deleteInteractionMessageLater(interaction, 2 * MINUTE);
     return;
   }
 
@@ -745,6 +749,7 @@ async function answerClient(interaction, company, requestId, accepted) {
     embeds: [embed.setColor(0x2ecc71).setTitle("✅ Client servi").setFooter({ text: `Pris en charge par ${interaction.user.tag} — ${formatEuro(request.price)} encaissés` })],
     components: [],
   });
+  deleteInteractionMessageLater(interaction, 2 * MINUTE);
 }
 
 async function tick(client) {
@@ -771,6 +776,7 @@ async function tick(client) {
       await msg
         ?.edit({ embeds: [EmbedBuilder.from(msg.embeds[0]).setColor(0x95a5a6).setTitle("⌛ Client parti").setFooter({ text: "Personne n'a répondu à temps" })], components: [] })
         .catch(() => null);
+      deleteLater(msg, MINUTE);
     }
 
     // Nouveau client
@@ -945,9 +951,7 @@ async function proposeContract(interaction, company, targetId, contract, client,
   const id = nextId("k");
   state.offers[id] = { id, type: "contract", companyId: company.id, userId: targetId, ...contract, by: interaction.user.id };
   save();
-  await send(client, state.recruitmentChannelId, {
-    content: `${target}`,
-    allowedMentions: { users: [targetId] },
+  const dm = await target.send({
     embeds: [
       new EmbedBuilder()
         .setColor(0x2ecc71)
@@ -965,8 +969,16 @@ async function proposeContract(interaction, company, targetId, contract, client,
         new ButtonBuilder().setCustomId(`ent_contract_no_${id}`).setLabel("Décliner").setStyle(ButtonStyle.Secondary)
       ),
     ],
-  });
-  const content = `✍️ Contrat proposé à ${target} dans <#${state.recruitmentChannelId}>.`;
+  }).catch(() => null);
+  if (!dm) {
+    delete state.offers[id];
+    save();
+    const content = `❌ Impossible d'envoyer le contrat à ${target} : ses messages privés sont fermés. Demandez-lui de les ouvrir, puis réessayez.`;
+    if (fromOffer) return interaction.update({ content, embeds: [], components: [] });
+    return interaction.reply({ content, ephemeral: true });
+  }
+  const content = `✍️ Contrat envoyé en message privé à ${target}.`;
+  if (fromOffer) deleteInteractionMessageLater(interaction, 2 * MINUTE);
   if (fromOffer) await interaction.update({ content, embeds: [], components: [] });
   else await interaction.reply({ content, ephemeral: true });
 }
@@ -1132,7 +1144,8 @@ async function payInvoice(interaction, id, mode, client) {
     delete state.invoices[id];
     save();
     await interaction.update({ embeds: [embed.setColor(0xe74c3c).setFooter({ text: "⚠️ Facture contestée — l'IRF est prévenue" })], components: [] });
-    await send(client, IRF_CHANNEL_ID, {
+    deleteInteractionMessageLater(interaction, 2 * MINUTE);
+    await sendDossier(client, {
       allowedMentions: { roles: [IRF_ROLE_ID] },
       content: `<@&${IRF_ROLE_ID}> ⚠️ <@${invoice.to}> conteste la facture n°${id.slice(1)} de **${company?.name ?? "?"}** (${formatEuro(invoice.amount)} — ${invoice.label}).`,
     });
@@ -1141,6 +1154,7 @@ async function payInvoice(interaction, id, mode, client) {
   if (!company || company.status === "bankrupt") {
     delete state.invoices[id];
     save();
+    deleteInteractionMessageLater(interaction, 2 * MINUTE);
     return interaction.update({ embeds: [embed.setColor(0x95a5a6).setFooter({ text: "Entreprise fermée — facture annulée" })], components: [] });
   }
 
@@ -1165,6 +1179,7 @@ async function payInvoice(interaction, id, mode, client) {
   dirtyPanels.add(company.id);
   registryDirty = true;
   await interaction.update({ embeds: [embed.setColor(0x2ecc71).setFooter({ text: `✅ Payée${mode === "pro" ? " par l'entreprise" : ""}` })], components: [] });
+  deleteInteractionMessageLater(interaction, 2 * MINUTE);
   await refreshRichestLeaderboard(client).catch(() => null);
 }
 
@@ -1242,7 +1257,7 @@ async function weeklyClose(client) {
     if (company.unpaidWeeks >= UNPAID_WEEKS_BEFORE_BANKRUPTCY) {
       company.status = "bankrupt";
       company.onDuty = {};
-      await send(client, IRF_CHANNEL_ID, {
+      await sendDossier(client, {
         content: `<@&${IRF_ROLE_ID}>`,
         allowedMentions: { roles: [IRF_ROLE_ID] },
         embeds: [
@@ -1365,10 +1380,12 @@ async function handleIrfAction(interaction, action, company, client) {
     company.unpaidWeeks = UNPAID_WEEKS_BEFORE_BANKRUPTCY - 1;
     save();
     await send(client, company.channelId, { content: "⏳ **L'IRF accorde un dernier délai** : les salaires de dimanche prochain doivent être payés." });
+    deleteInteractionMessageLater(interaction, MINUTE);
     return interaction.update({ embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setFooter({ text: `Délai accordé par ${interaction.user.tag}` })], components: [] });
   }
   if (action === "liquidate") {
     await liquidate(client, company, interaction.user.tag);
+    deleteInteractionMessageLater(interaction, MINUTE);
     return interaction.update({ content: `⚖️ **${company.name}** a été liquidée.`, embeds: [], components: [] });
   }
 }
@@ -1531,6 +1548,7 @@ async function handleEntreprisesInteraction(interaction, client) {
       const offer = state.offers[parts[2]];
       if (parts[1] === "applyno" || !offer) {
         await interaction.update({ components: [], embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x95a5a6).setFooter({ text: "Candidature refusée" })] });
+        deleteInteractionMessageLater(interaction, 2 * MINUTE);
         const user = await client.users.fetch(parts[3]).catch(() => null);
         await user?.send(`🙋 Votre candidature chez **${company.name}** n'a pas été retenue.`).catch(() => null);
       } else {

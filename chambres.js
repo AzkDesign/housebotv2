@@ -19,6 +19,7 @@ const {
 } = require("./economie");
 // Maison 2 : mixte, réservée aux Entrepreneurs (adultes)
 const ENTREPRENEUR_ROLE_ID = "1554940569732517909";
+const { deleteLater, deleteInteractionMessageLater, getDossiersChannel, MINUTE, HOUR } = require("./nettoyage");
 
 const CHAMBRES_CHANNEL_ID = "1509983864624386048";
 const TICKET_CATEGORY_ID = "1509977402485510345";
@@ -291,7 +292,8 @@ async function announceMove(client, userId, fromRoom, toRoom) {
     const arrow = to.stars > from.stars ? "⬆️" : to.stars < from.stars ? "⬇️" : "📦";
     text = `${arrow} <@${userId}> quitte **${from.emoji} ${from.name}** (${roomLabel(fromRoom)}) pour **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
   }
-  await channel.send({ content: text, allowedMentions: { users: [] } }).catch(() => null);
+  const message = await channel.send({ content: text, allowedMentions: { users: [] } }).catch(() => null);
+  deleteLater(message, MINUTE);
 }
 
 // --- Demande de déménagement (ticket payant) ---

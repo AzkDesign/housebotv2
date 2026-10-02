@@ -20,6 +20,7 @@ const {
 } = require("./economie");
 // Part de la Maison sur chaque séjour, réglée par le maire (80 % par défaut)
 const { P, curfew } = require("./politique");
+const { deleteLater, deleteInteractionMessageLater, getDossiersChannel, MINUTE, HOUR } = require("./nettoyage");
 const hostShare = () => Math.round((1 - P().airbnbMaisonShare) * 100) / 100;
 
 const AIRBNB_CHANNEL_ID = "1527544352090357881";
@@ -394,10 +395,11 @@ async function sendToChannel(client, payload) {
   return channel.send(payload).catch(() => null);
 }
 
-async function editRequestMessage(client, request, payload) {
+async function editRequestMessage(client, request, payload, deleteAfter = 0) {
   const channel = await client.channels.fetch(AIRBNB_CHANNEL_ID).catch(() => null);
   const msg = await channel?.messages.fetch(request.messageId).catch(() => null);
   if (msg) await msg.edit(payload).catch(() => null);
+  if (msg && deleteAfter) deleteLater(msg, deleteAfter);
 }
 
 // --- Boucle : demandes, départs, expirations ---
@@ -475,7 +477,7 @@ async function tick(client) {
         requestEmbed(request, null, "Sans réponse — le voyageur a réservé ailleurs").setColor(0x95a5a6).setTitle("⌛ Demande expirée"),
       ],
       components: [],
-    });
+    }, MINUTE);
   }
 
   // Départs des voyageurs et avis
@@ -489,7 +491,7 @@ async function tick(client) {
     listing.ratingSum = (listing.ratingSum ?? 0) + review.stars;
     changed = true;
     panelDirty = true;
-    await sendToChannel(client, {
+    const departure = await sendToChannel(client, {
       content: `<@${listing.hostId}>`,
       allowedMentions: { users: [listing.hostId] },
       embeds: [
@@ -503,6 +505,7 @@ async function tick(client) {
           .setTimestamp(),
       ],
     });
+    deleteLater(departure, 30 * MINUTE);
   }
 
   // Nouvelles demandes pour les hôtes en ligne
@@ -645,6 +648,7 @@ async function validateListing(interaction, accepted, id) {
     .setTitle(accepted ? "✅ Bien validé" : "❌ Bien refusé")
     .setFooter({ text: `${accepted ? "Validé" : "Refusé"} par ${interaction.user.tag}` });
   await interaction.update({ content: `<@${listing.hostId}>`, embeds: [embed], components: [] });
+  deleteInteractionMessageLater(interaction, 2 * MINUTE);
 }
 
 async function toggleHost(interaction) {
@@ -876,6 +880,7 @@ async function answerRequest(interaction, accepted, id, client) {
       .setColor(0x95a5a6)
       .setTitle("❌ Demande refusée");
     await interaction.update({ embeds: [embed], components: [] });
+    deleteInteractionMessageLater(interaction, 2 * MINUTE);
     return;
   }
 
@@ -914,6 +919,7 @@ async function answerRequest(interaction, accepted, id, client) {
     )
     .setTimestamp();
   await interaction.update({ content: `<@${request.hostId}>`, embeds: [embed], components: [] });
+  deleteInteractionMessageLater(interaction, 2 * MINUTE);
 }
 
 // --- Routage ---

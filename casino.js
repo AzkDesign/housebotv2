@@ -24,6 +24,7 @@ const {
 } = require("./economie");
 // Taxe de la maison sur le pot d'un défi (réglée par le maire), versée au jackpot
 const { P, curfew } = require("./politique");
+const { deleteLater, deleteInteractionMessageLater, getDossiersChannel, MINUTE, HOUR } = require("./nettoyage");
 
 const CASINO_CHANNEL_ID = "1527054335928827954";
 const CASINO_ACCESS_ROLE_ID = "1554940931617071206";
@@ -325,9 +326,10 @@ async function setupCasino(client) {
         await refreshPanel(client);
         if (opened) {
           const channel = await client.channels.fetch(CASINO_CHANNEL_ID).catch(() => null);
-          await channel
+          const ping = await channel
             ?.send(`🎰 **Le casino est ouvert !** <@&${CASINO_ACCESS_ROLE_ID}> <@&${ENTREPRENEUR_ROLE_ID}>`)
             .catch(() => null);
+          deleteLater(ping, 3 * HOUR);
         }
       }
       if (balancesDirty) {
@@ -915,9 +917,10 @@ async function playSlots(interaction, spins, bet, client) {
 
   if (jackpotWon) {
     const channel = await client.channels.fetch(CASINO_CHANNEL_ID).catch(() => null);
-    await channel
+    const announce = await channel
       ?.send(`💰🎰 **JACKPOT !** ${interaction.user} vient de remporter le **JACKPOT** à la machine à sous !`)
       .catch(() => null);
+    deleteLater(announce, HOUR);
   }
 }
 
@@ -988,6 +991,7 @@ async function createDuel(interaction, opponentId, bet, client) {
     message
       .edit({ embeds: [EmbedBuilder.from(embed).setColor(0x95a5a6).setFooter({ text: "Défi expiré" })], components: [] })
       .catch(() => null);
+    deleteLater(message, MINUTE);
   }, DUEL_TIMEOUT_MS);
   duels.set(id, duel);
 
@@ -1009,6 +1013,7 @@ async function handleDuelResponse(interaction, accepted, id) {
       .setColor(0x95a5a6)
       .setFooter({ text: userId === duel.opponentId ? "Défi refusé" : "Défi annulé" });
     await interaction.update({ embeds: [embed], components: [] });
+    deleteInteractionMessageLater(interaction, MINUTE);
     return;
   }
   if (userId !== duel.opponentId) {
@@ -1035,6 +1040,7 @@ async function handleDuelResponse(interaction, accepted, id) {
       .setColor(0x95a5a6)
       .setFooter({ text: "Défi annulé — le lanceur n'a plus assez d'argent" });
     await interaction.update({ embeds: [embed], components: [] });
+    deleteInteractionMessageLater(interaction, MINUTE);
     return;
   }
 
@@ -1061,6 +1067,7 @@ async function handleDuelResponse(interaction, accepted, id) {
     )
     .setTimestamp();
   await interaction.update({ content: "", embeds: [embed], components: [] });
+  deleteInteractionMessageLater(interaction, 5 * MINUTE);
 }
 
 // --- Routage des interactions ---

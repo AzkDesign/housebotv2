@@ -257,7 +257,7 @@ function findOpenTicket(guild, memberId) {
       ch.type === ChannelType.GuildText &&
       (ch.topic === memberId ||
         ch.topic === `candidature:${memberId}` ||
-        ch.topic?.startsWith(`candidature:vote:${memberId}:`))
+        (ch.topic?.startsWith(`candidature:vote:${memberId}:`) && !ch.topic.includes(":closed")))
   );
 }
 

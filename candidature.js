@@ -119,6 +119,23 @@ const CANDIDATURE_QUESTIONS = [
   },
 ];
 
+// Bouton « Fermer le ticket » (géré par index.js) et suppression automatique après la décision.
+const CLOSE_TICKET_BUTTON_ID = "close_ticket";
+const DELETE_AFTER_DECISION_MS = 24 * 60 * 60 * 1000;
+
+function closeRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(CLOSE_TICKET_BUTTON_ID).setLabel("Fermer le ticket").setEmoji("🔒").setStyle(ButtonStyle.Danger)
+  );
+}
+
+function scheduleTicketDeletion(channel, closedAt) {
+  const remaining = closedAt + DELETE_AFTER_DECISION_MS - Date.now();
+  const run = () => channel.delete("Candidature terminée depuis 24 h").catch(() => null);
+  if (remaining <= 0) run();
+  else setTimeout(run, remaining).unref?.();
+}
+
 const activeSessions = new Map();
 const candidatureVotes = new Map();
 const reminderTimeouts = new Map();
@@ -365,9 +382,10 @@ async function notifyCandidateResult(channel, accepted, reason) {
         ? "Félicitations ! Votre candidature a été **acceptée**.\nUn membre du staff vous contactera prochainement."
         : `Votre candidature n'a pas été retenue.\n${reason || "Merci pour votre intérêt."}`
     )
+    .setFooter({ text: "Ce ticket sera supprimé automatiquement dans 24 h." })
     .setTimestamp();
 
-  await channel.send({ embeds: [embed] }).catch(() => null);
+  await channel.send({ embeds: [embed], components: [closeRow()] }).catch(() => null);
 }
 
 async function closeCandidatureVoting(channel, guild, stats) {
@@ -385,9 +403,11 @@ async function closeCandidatureVoting(channel, guild, stats) {
     if (msg) await msg.edit({ components: [] }).catch(() => null);
   }
 
+  const closedAt = Date.now();
   await channel
-    .setTopic(`${channel.topic}:closed`)
+    .setTopic(`${channel.topic}:closed:${closedAt}`)
     .catch(() => null);
+  scheduleTicketDeletion(channel, closedAt);
 }
 
 // Donne le rôle correspondant au profil choisi dans le formulaire.
@@ -536,8 +556,26 @@ async function restoreCandidatureReminders(client) {
       if (channel.parentId !== CANDIDATURE_CATEGORY_ID) continue;
       if (channel.type !== ChannelType.GuildText) continue;
       if (!channel.topic?.startsWith("candidature:vote:")) continue;
-      if (channel.topic.includes(":closed") || channel.topic.includes(":reminded"))
+
+      if (channel.topic.includes(":closed")) {
+        const closedAt = parseInt(channel.topic.split(":closed:")[1], 10);
+        if (closedAt) scheduleTicketDeletion(channel, closedAt);
+        else {
+          // ancien ticket terminé, sans date : supprimé dans 24 h
+          const now = Date.now();
+          await channel.setTopic(`${channel.topic}:${now}`).catch(() => null);
+          scheduleTicketDeletion(channel, now);
+        }
         continue;
+      }
+
+      // Ancien ticket en attente sans bouton de fermeture : on l'ajoute une fois
+      const recent = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+      const hasClose = recent?.some((m) => m.components?.some((row) => row.components?.some((c) => c.customId === CLOSE_TICKET_BUTTON_ID)));
+      if (recent && !hasClose) {
+        await channel.send({ content: "🔒 Vous pouvez fermer ce ticket à tout moment.", components: [closeRow()] }).catch(() => null);
+      }
+      if (channel.topic.includes(":reminded")) continue;
 
       const parts = channel.topic.split(":");
       const memberId = parts[2];
@@ -637,7 +675,7 @@ async function finishCandidature(channel, member, answers) {
   await channel.send("✅ Formulaire terminé — préparation de votre candidature…");
   await clearChannel(channel);
 
-  await channel.send({ embeds: [buildWaitingEmbed()] });
+  await channel.send({ embeds: [buildWaitingEmbed()], components: [closeRow()] });
 
   const stats = getVoteState(channel.id);
   stats.answers = answers;

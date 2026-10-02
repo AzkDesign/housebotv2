@@ -30,6 +30,7 @@ const { hasJob, getCategoryId } = require("./entreprises");
 // Multiplicateurs de taxe d'habitation et d'impôt sur la fortune réglés par le maire
 const { P, formatLever } = require("./politique");
 const { findOrCreateChannel } = require("./salons");
+const { deleteLater, deleteInteractionMessageLater, getDossiersChannel, MINUTE, HOUR } = require("./nettoyage");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 // La taxe d'habitation dépend du quartier où l'on dort (voir chambres.js)
@@ -313,7 +314,7 @@ async function collectTaxes(client) {
   if (totals.impotFortune > 0) addToTreasury("impotFortune", round2(totals.impotFortune));
 
   for (const [userId, debt] of debtors) {
-    await irfChannel?.send({
+    await (await getDossiersChannel(client))?.send({
       content: `<@&${IRF_ROLE_ID}>`,
       allowedMentions: { roles: [IRF_ROLE_ID] },
       embeds: [
@@ -378,10 +379,11 @@ async function runControls(client, guild) {
   const others = users.filter((id) => !targets.has(id) && (eco.balances[id] ?? 0) > 0).sort(() => Math.random() - 0.5);
   for (const id of others.slice(0, RANDOM_CONTROLS)) targets.set(id, ["🎲 Contrôle aléatoire"]);
 
-  const channel = await client.channels.fetch(IRF_CHANNEL_ID).catch(() => null);
+  const channel = await getDossiersChannel(client);
   if (!channel?.isTextBased() || !targets.size) return;
 
-  await channel.send(`🔎 **Contrôles fiscaux de la semaine** — ${targets.size} dossier(s) <@&${IRF_ROLE_ID}>`).catch(() => null);
+  const header = await channel.send(`🔎 **Contrôles fiscaux de la semaine** — ${targets.size} dossier(s) <@&${IRF_ROLE_ID}>`).catch(() => null);
+  deleteLater(header, 12 * HOUR);
   const s = load();
   for (const [userId, reasons] of targets) {
     s.counter += 1;
@@ -438,6 +440,7 @@ async function applyRedressement(interaction, control, client) {
     ],
     components: [],
   });
+  deleteInteractionMessageLater(interaction, MINUTE);
   const user = await client.users.fetch(userId).catch(() => null);
   await user
     ?.send(`⚖️ **Redressement fiscal** de ${formatEuro(amount)} suite à un contrôle de l'IRF.\nMotif : ${reason}${missing > 0 ? `\n${formatEuro(missing)} ajoutés à votre dette fiscale.` : ""}`)
@@ -524,6 +527,7 @@ async function handleImpotsInteraction(interaction, client) {
       embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setFooter({ text: `🔒 Compte gelé par ${interaction.user.tag}` })],
       components: [],
     });
+    deleteInteractionMessageLater(interaction, MINUTE);
     const user = await client.users.fetch(userId).catch(() => null);
     await user?.send("🔒 Votre compte a été **gelé** par l'IRF pour dette fiscale persistante. Remboursez-la au Centre des impôts.").catch(() => null);
     return true;
@@ -543,6 +547,7 @@ async function handleImpotsInteraction(interaction, client) {
         embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x2ecc71).setFooter({ text: `✅ Rien à signaler — ${interaction.user.tag}` })],
         components: [],
       });
+      deleteInteractionMessageLater(interaction, MINUTE);
     } else if (id.startsWith("tax_ctrl_fix_")) {
       await interaction.showModal(
         new ModalBuilder()
