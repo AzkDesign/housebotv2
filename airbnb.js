@@ -528,8 +528,31 @@ async function tick(client) {
   }
 }
 
+// Au démarrage : supprime les anciens messages déjà traités qui encombrent le salon.
+const CLEAN_TITLES = ["✅ Bien validé", "❌ Bien refusé", "✏️ Bien modifié", "⌛ Demande expirée", "❌ Demande refusée", "✅ Réservation confirmée"];
+async function cleanOldMessages(client) {
+  const channel = await client.channels.fetch(AIRBNB_CHANNEL_ID).catch(() => null);
+  if (!channel?.isTextBased()) return;
+  const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  if (!messages) return;
+  const now = Date.now();
+  let count = 0;
+  for (const m of messages.values()) {
+    if (m.author.id !== client.user.id || m.components.length) continue; // jamais un message encore actif
+    const title = m.embeds[0]?.title ?? "";
+    const done = CLEAN_TITLES.some((t) => title.startsWith(t)) && now - m.createdTimestamp > MINUTE;
+    const oldDeparture = title.startsWith("🧳 Départ") && now - m.createdTimestamp > 30 * MINUTE;
+    if (done || oldDeparture) {
+      await m.delete().catch(() => null);
+      count++;
+    }
+  }
+  if (count) console.log(`Airbnb : ${count} ancien(s) message(s) nettoyé(s)`);
+}
+
 async function setupAirbnb(client) {
   await refreshPanel(client);
+  await cleanOldMessages(client);
   setInterval(() => {
     tick(client).catch((err) => console.error("Airbnb:", err.message));
   }, 60 * 1000);
@@ -648,7 +671,7 @@ async function validateListing(interaction, accepted, id) {
     .setTitle(accepted ? "✅ Bien validé" : "❌ Bien refusé")
     .setFooter({ text: `${accepted ? "Validé" : "Refusé"} par ${interaction.user.tag}` });
   await interaction.update({ content: `<@${listing.hostId}>`, embeds: [embed], components: [] });
-  deleteInteractionMessageLater(interaction, 2 * MINUTE);
+  deleteInteractionMessageLater(interaction, MINUTE);
 }
 
 async function toggleHost(interaction) {
