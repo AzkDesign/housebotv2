@@ -8,6 +8,10 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   AttachmentBuilder,
   PermissionFlagsBits,
 } = require("discord.js");
@@ -136,6 +140,9 @@ function load() {
   state.optIn ??= {};
   state.rewards ??= {};
   state.wild ??= null;
+  state.market ??= []; // annonces du marché (cartes retirées de l'inventaire pendant la vente)
+  state.sales ??= []; // historique des ventes (cote)
+  state.trades ??= {}; // propositions d'échange
   state.packs ??= {}; // userId -> { « g1_standard »: nombre de boosters fermés }
   return state;
 }
@@ -4506,6 +4513,664 @@ async function albumPayload(target, own, view = "cover", page = 0) {
   return { embeds: [embed], files: [file], components: rows };
 }
 
+// --- Échanges et marché ---
+// Cote d'une carte : prix médian des dernières ventes, sinon un prix de référence selon la rareté (×3 en holo).
+const COTE_BASE = { commune: 150, peucommune: 300, rare: 750, epique: 3000, legendaire: 12000, mythique: 45000 };
+const MARKET_FEE = 0.05, MARKET_MAX = 10, MARKET_DAYS = 7, TRADE_HOURS = 24, MK_PER_PAGE = 8, TRADE_MAX_CARDS = 5;
+const cardOfKey = (key) => findCard(String(key).replace("*", ""));
+const isHoloKey = (key) => String(key).endsWith("*");
+function coteOf(key) {
+  const card = cardOfKey(key);
+  if (!card) return 0;
+  const recent = load().sales.filter((s) => s.key === key).slice(-5).map((s) => s.price).sort((a, b) => a - b);
+  if (recent.length >= 2) return recent[Math.floor(recent.length / 2)];
+  return COTE_BASE[card.rarity] * (isHoloKey(key) ? 3 : 1);
+}
+const euro = (n) => canvasText(formatEuro(Math.round(n)));
+function ago(ms) {
+  const min = Math.floor((Date.now() - ms) / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  if (min < 1440) return `il y a ${Math.floor(min / 60)} h`;
+  return `il y a ${Math.floor(min / 1440)} j`;
+}
+// déplace un exemplaire d'une carte d'un inventaire à un autre (to = null : la carte sort de l'inventaire)
+function moveKey(from, to, key) {
+  const s = load();
+  const a = s.inv[from];
+  if (!a?.[key]) return false;
+  a[key]--;
+  if (!a[key]) delete a[key];
+  if (to) {
+    const b = (s.inv[to] ??= {});
+    b[key] = (b[key] ?? 0) + 1;
+  }
+  return true;
+}
+function ownedKeys(userId, series = "all") {
+  return Object.entries(load().inv[userId] ?? {})
+    .filter(([k, n]) => n > 0 && cardOfKey(k) && (series === "all" || seriesOf(cardOfKey(k)) === series))
+    .sort(([a, na], [b, nb]) => ORDER.indexOf(cardOfKey(b).rarity) - ORDER.indexOf(cardOfKey(a).rarity) || nb - na);
+}
+function keyLabel(key) {
+  const card = cardOfKey(key);
+  return card ? `${card.name}${isHoloKey(key) ? " ✦ holo" : ""}` : key;
+}
+function seriesOptions(selected) {
+  return [
+    { label: "Toutes les séries", value: "all", emoji: "📚", default: selected === "all" },
+    ...ALBUM_GROUPS.map((g) => ({ label: SERIES_LABELS[g].replace(/^\S+ /, ""), value: g, emoji: SERIES_LABELS[g].split(" ")[0], default: selected === g })),
+  ];
+}
+function coinIcon(ctx, x, y, r) {
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 1, x, y, r);
+  g.addColorStop(0, "#fff7d6");
+  g.addColorStop(0.5, "#f59e0b");
+  g.addColorStop(1, "#92400e");
+  disc(ctx, x, y, r, g);
+  ctx.strokeStyle = "rgba(120,53,15,0.8)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.78, 0, TAU);
+  ctx.stroke();
+  ctx.fillStyle = "#78350f";
+  ctx.font = `${Math.round(r * 1.1)}px CardTitle`;
+  const align = ctx.textAlign;
+  ctx.textAlign = "center";
+  ctx.fillText("€", x, y + r * 0.38);
+  ctx.textAlign = align;
+}
+// fond commun : velours, guillochis, cadre doré et coins ornés
+function velvet(ctx, W, H) {
+  const gold = METAL.legendaire;
+  const bg = ctx.createRadialGradient(W / 2, H * 0.4, 60, W / 2, H / 2, W * 0.8);
+  bg.addColorStop(0, "#3a1418");
+  bg.addColorStop(1, "#090304");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  guilloche(ctx, 0, 0, W, H, gold[0]);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = metalGradient(ctx, W, H, gold);
+  roundRect(ctx, 10, 10, W - 20, H - 20, 22);
+  ctx.stroke();
+  corners(ctx, { x: 18, y: 18, w: W - 36, h: H - 36 }, gold[1]);
+}
+function chip(ctx, x, y, label, value, align = "left") {
+  ctx.font = "15px CardBold";
+  const vw = ctx.measureText(value).width;
+  ctx.font = "12px CardText";
+  const lw = ctx.measureText(label).width;
+  const w = Math.max(vw, lw) + 32;
+  const left = align === "right" ? x - w : x;
+  roundRect(ctx, left, y, w, 46, 12);
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.fill();
+  ctx.strokeStyle = rgba(METAL.legendaire[0], 0.4);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#a08a7a";
+  ctx.fillText(label, left + 16, y + 18);
+  ctx.font = "15px CardBold";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(value, left + 16, y + 37);
+  return w;
+}
+
+// --- Marché : rendu de la vitrine ---
+const mkViews = new Map(); // userId -> { series, rarity, sort, page }
+function mkView(userId) {
+  if (!mkViews.has(userId)) mkViews.set(userId, { series: "all", rarity: "all", sort: "recent", page: 0 });
+  return mkViews.get(userId);
+}
+const MK_SORTS = {
+  recent: ["Plus récentes", "🕒", (a, b) => b.at - a.at],
+  prix: ["Prix croissant", "⬆️", (a, b) => a.price - b.price],
+  prixdesc: ["Prix décroissant", "⬇️", (a, b) => b.price - a.price],
+  rarete: ["Plus rares d'abord", "💎", (a, b) => ORDER.indexOf(cardOfKey(b.key).rarity) - ORDER.indexOf(cardOfKey(a.key).rarity) || a.price - b.price],
+  affaire: ["Meilleures affaires", "🏷️", (a, b) => a.price / coteOf(a.key) - b.price / coteOf(b.key)],
+};
+function filteredListings(view) {
+  let list = load().market.filter((l) => cardOfKey(l.key));
+  if (view.series !== "all") list = list.filter((l) => seriesOf(cardOfKey(l.key)) === view.series);
+  if (view.rarity !== "all") list = list.filter((l) => cardOfKey(l.key).rarity === view.rarity);
+  return list.sort((MK_SORTS[view.sort] ?? MK_SORTS.recent)[2]);
+}
+async function drawMarket(view, viewerId) {
+  const all = filteredListings(view), pages = Math.max(1, Math.ceil(all.length / MK_PER_PAGE));
+  view.page = Math.min(Math.max(0, view.page), pages - 1);
+  const slice = all.slice(view.page * MK_PER_PAGE, (view.page + 1) * MK_PER_PAGE);
+  const W = 1200, H = 1000, gold = METAL.legendaire;
+  const c = createCanvas(W, H);
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  velvet(ctx, W, H);
+
+  // En-tête
+  coinIcon(ctx, 82, 86, 34);
+  ctx.font = "34px CardEngrave";
+  ctx.fillStyle = "#fde68a";
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 8;
+  ctx.fillText("MARCHÉ DE LA MAISON", 134, 84);
+  ctx.shadowBlur = 0;
+  ctx.font = "19px CardItalic";
+  ctx.fillStyle = "#ecc979";
+  ctx.fillText(`Achetez et vendez vos cartes entre membres · commission de ${Math.round(MARKET_FEE * 100)} %`, 136, 116);
+  const day = Date.now() - 86400000, sales = load().sales.filter((s) => s.at >= day);
+  let cx = W - 44;
+  for (const [label, value] of [
+    ["Volume 24 h", euro(sales.reduce((a, s) => a + s.price, 0))],
+    ["Ventes 24 h", String(sales.length)],
+    ["Annonces", String(load().market.length)],
+  ]) cx -= chip(ctx, cx, 62, label, value, "right") + 10;
+  // filtres actifs
+  const filters = [
+    view.series === "all" ? "Toutes les séries" : SERIES_LABELS[view.series].replace(/^\S+ /, ""),
+    view.rarity === "all" ? "Toutes raretés" : RARITIES[view.rarity].name,
+    MK_SORTS[view.sort]?.[0] ?? "Plus récentes",
+  ];
+  ctx.font = "15px CardBold";
+  let fx = 48;
+  ctx.textAlign = "center";
+  for (const f of filters) {
+    const w = ctx.measureText(f).width + 30;
+    pill(ctx, fx + w / 2, 160, f, "rgba(255,255,255,0.08)", "#f5e6c8");
+    fx += w + 10;
+  }
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#cbb9a9";
+  ctx.font = "15px CardText";
+  ctx.fillText(`${all.length} annonce${all.length > 1 ? "s" : ""} · page ${view.page + 1} / ${pages}`, W - 48, 166);
+  ctx.textAlign = "left";
+
+  // Vitrine : 4 × 2 annonces
+  const tw = 266, th = 380, gap = 18, x0 = (W - (4 * tw + 3 * gap)) / 2, y0 = 190;
+  for (let i = 0; i < MK_PER_PAGE; i++) {
+    const x = x0 + (i % 4) * (tw + gap), y = y0 + Math.floor(i / 4) * (th + 14);
+    const l = slice[i];
+    roundRect(ctx, x, y, tw, th, 16);
+    if (!l) {
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fill();
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      continue;
+    }
+    const card = cardOfKey(l.key), holo = isHoloKey(l.key), m = METAL[card.rarity], cote = coteOf(l.key), ratio = l.price / cote;
+    const deal = ratio <= 0.8, mine = l.seller === viewerId;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 6;
+    const tg = ctx.createLinearGradient(0, y, 0, y + th);
+    tg.addColorStop(0, "rgba(44,18,20,0.96)");
+    tg.addColorStop(1, "rgba(14,5,6,0.96)");
+    ctx.fillStyle = tg;
+    ctx.fill();
+    ctx.restore();
+    ctx.lineWidth = deal ? 3 : 2;
+    ctx.strokeStyle = deal ? metalGradient(ctx, W, H, gold) : rgba(m[1], 0.85);
+    roundRect(ctx, x, y, tw, th, 16);
+    ctx.stroke();
+    glow(ctx, x + tw / 2, y + 128, 120, m[4], 0.18 + ORDER.indexOf(card.rarity) * 0.04);
+    // carte
+    const cw = 160, ch = 224, cxp = x + (tw - cw) / 2, cyp = y + 16;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.7)";
+    ctx.shadowBlur = 14;
+    ctx.drawImage(await cardThumb(card, holo, cw, ch), cxp, cyp, cw, ch);
+    ctx.restore();
+    if (deal) ribbon(ctx, cxp, cyp, cw, ch, "AFFAIRE");
+    // numéro de l'annonce (repris dans le menu d'achat)
+    disc(ctx, x + 24, y + 24, 17, metalGradient(ctx, W, H, gold));
+    ctx.fillStyle = "#2a1305";
+    ctx.font = "16px CardBold";
+    ctx.textAlign = "center";
+    ctx.fillText(String(i + 1), x + 24, y + 30);
+    if (mine) {
+      ctx.font = "10px CardBold";
+      pill(ctx, x + tw - 56, y + 24, "VOTRE ANNONCE", "#2563eb", "#ffffff");
+    }
+    // nom, rareté, prix, cote, vendeur
+    ctx.font = `${fitText(ctx, card.name, tw - 30, 18, "CardBold")}px CardBold`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(card.name, x + tw / 2, y + 264);
+    ctx.font = "11px CardBold";
+    const rarityW = ctx.measureText(RARITIES[card.rarity].name.toUpperCase()).width + 30;
+    const holoW = holo ? ctx.measureText("HOLO").width + 30 : 0;
+    const startX = x + tw / 2 - (rarityW + (holo ? holoW + 6 : 0)) / 2;
+    pill(ctx, startX + rarityW / 2, y + 288, RARITIES[card.rarity].name.toUpperCase(), m[1], "#ffffff");
+    if (holo) pill(ctx, startX + rarityW + 6 + holoW / 2, y + 288, "HOLO", "rainbow", "#0d0507");
+    ctx.font = "32px CardTitle";
+    ctx.fillStyle = "#fde68a";
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 6;
+    ctx.fillText(euro(l.price), x + tw / 2, y + 330);
+    ctx.shadowBlur = 0;
+    const diff = Math.round((ratio - 1) * 100);
+    ctx.font = "13px CardBold";
+    ctx.fillStyle = diff <= -10 ? "#4ade80" : diff >= 10 ? "#f87171" : "#cbb9a9";
+    ctx.fillText(`cote ${euro(cote)} · ${diff > 0 ? "+" : ""}${diff} %`, x + tw / 2, y + 350);
+    ctx.font = "12px CardText";
+    ctx.fillStyle = "#a08a7a";
+    ctx.fillText(`par ${String(l.sellerName ?? "?").slice(0, 18)} · ${ago(l.at)}`, x + tw / 2, y + 369);
+    ctx.textAlign = "left";
+  }
+  if (!slice.length) {
+    ctx.textAlign = "center";
+    ctx.font = "26px CardItalic";
+    ctx.fillStyle = "#ecc979";
+    ctx.fillText(all.length ? "Aucune annonce sur cette page." : "Aucune annonce pour le moment.", W / 2, y0 + th - 10);
+    ctx.font = "16px CardText";
+    ctx.fillStyle = "#cbb9a9";
+    ctx.fillText("Mettez une carte en vente avec le bouton « Vendre une carte ».", W / 2, y0 + th + 22);
+    ctx.textAlign = "left";
+  }
+  // Pied
+  ctx.textAlign = "center";
+  for (let p = 0; p < pages; p++) {
+    diamond(ctx, W / 2 + (p - (pages - 1) / 2) * 20, H - 46, 5);
+    if (p === view.page) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = "#71717a";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+  }
+  ctx.font = "12px CardEngrave";
+  ctx.fillStyle = "#a08a7a";
+  spaced(ctx, "CHOISISSEZ LE NUMÉRO D'UNE ANNONCE DANS LE MENU POUR L'ACHETER", W / 2, H - 22, 2);
+  ctx.textAlign = "left";
+  return { canvas: c, slice, pages };
+}
+function disabledSelect(customId, placeholder) {
+  return new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(placeholder).setDisabled(true).addOptions([{ label: "—", value: "none" }]);
+}
+async function marketPayload(user) {
+  const view = mkView(user.id);
+  const { canvas, slice, pages } = await drawMarket(view, user.id);
+  const file = new AttachmentBuilder(await canvas.encode("jpeg", 92), { name: "marche.jpg" });
+  const embed = new EmbedBuilder()
+    .setColor(0xe9c46a)
+    .setTitle("🏪 Marché de la Maison")
+    .setDescription("Filtrez, triez, puis choisissez une annonce par son **numéro** pour l'acheter. Pour vendre, utilisez **Vendre une carte** (ou le bouton 💰 sur une carte de votre album).")
+    .setImage("attachment://marche.jpg")
+    .setFooter({ text: `Commission de ${Math.round(MARKET_FEE * 100)} % sur chaque vente · annonces valables ${MARKET_DAYS} jours · ${MARKET_MAX} annonces maximum par membre` });
+  const rows = [
+    new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_mk_series").setPlaceholder("Série").addOptions(seriesOptions(view.series))),
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("carte_mk_rarity")
+        .setPlaceholder("Rareté")
+        .addOptions([{ label: "Toutes les raretés", value: "all", emoji: "🎴", default: view.rarity === "all" }, ...ORDER.map((r) => ({ label: RARITIES[r].name, value: r, emoji: RARITIES[r].emoji, default: view.rarity === r }))])
+    ),
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("carte_mk_sort")
+        .setPlaceholder("Trier")
+        .addOptions(Object.entries(MK_SORTS).map(([k, [label, emoji]]) => ({ label, value: k, emoji, default: view.sort === k })))
+    ),
+    new ActionRowBuilder().addComponents(
+      slice.length
+        ? new StringSelectMenuBuilder()
+            .setCustomId("carte_mk_buy")
+            .setPlaceholder("🛒 Acheter l'annonce n°…")
+            .addOptions(
+              slice.map((l, i) => {
+                const card = cardOfKey(l.key);
+                return { label: `${i + 1}. ${keyLabel(l.key)}`.slice(0, 100), value: l.id, emoji: RARITIES[card.rarity].emoji, description: `${euro(l.price)} · ${RARITIES[card.rarity].name} · par ${l.sellerName ?? "?"}`.slice(0, 100) };
+              })
+            )
+        : disabledSelect("carte_mk_buy", "Aucune annonce à acheter")
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("carte_mk_prev").setEmoji("◀️").setStyle(ButtonStyle.Secondary).setDisabled(view.page === 0),
+      new ButtonBuilder().setCustomId("carte_mk_next").setEmoji("▶️").setStyle(ButtonStyle.Secondary).setDisabled(view.page >= pages - 1),
+      new ButtonBuilder().setCustomId("carte_mk_sell").setLabel("Vendre une carte").setEmoji("💰").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("carte_mk_mine").setLabel("Mes annonces").setEmoji("📋").setStyle(ButtonStyle.Secondary)
+    ),
+  ];
+  return { embeds: [embed], files: [file], components: rows };
+}
+function priceModal(key) {
+  const card = cardOfKey(key);
+  return new ModalBuilder()
+    .setCustomId(`carte_mk_pf_${key}`)
+    .setTitle(`Vendre : ${keyLabel(key)}`.slice(0, 45))
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("prix")
+          .setLabel(`Prix de vente en € (cote : ${euro(coteOf(key))})`.slice(0, 45))
+          .setPlaceholder(`Par exemple ${Math.round(coteOf(key))}`)
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(12)
+      )
+    );
+}
+const parseAmount = (text) => Math.round(Number(String(text ?? "").replace(/[\s€  ]/g, "").replace(",", ".")));
+function sellPickerPayload(userId, series = "all") {
+  const keys = ownedKeys(userId, series).slice(0, 25);
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x16a34a)
+        .setTitle("💰 Vendre une carte")
+        .setDescription("Choisissez la série puis la carte à mettre en vente. La carte est retirée de votre album pendant la vente et vous est rendue si vous annulez ou si l'annonce expire.")
+        .setFooter({ text: `Commission de ${Math.round(MARKET_FEE * 100)} % prélevée à la vente` }),
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_mk_ss").setPlaceholder("Série").addOptions(seriesOptions(series))),
+      new ActionRowBuilder().addComponents(
+        keys.length
+          ? new StringSelectMenuBuilder()
+              .setCustomId("carte_mk_sc")
+              .setPlaceholder("Carte à vendre…")
+              .addOptions(keys.map(([k, n]) => ({ label: keyLabel(k).slice(0, 100), value: k, emoji: RARITIES[cardOfKey(k).rarity].emoji, description: `${RARITIES[cardOfKey(k).rarity].name} · ×${n} · cote ${euro(coteOf(k))}` })))
+          : disabledSelect("carte_mk_sc", "Aucune carte dans cette série")
+      ),
+    ],
+    files: [],
+  };
+}
+
+// --- Échanges : rendu de la table d'échange ---
+const TRADE_STATUS = {
+  draft: ["BROUILLON — EN PRÉPARATION", "#2563eb"],
+  pending: ["EN ATTENTE DE RÉPONSE", "#d97706"],
+  done: ["ÉCHANGE CONCLU", "#16a34a"],
+  refused: ["ÉCHANGE REFUSÉ", "#dc2626"],
+  cancelled: ["ÉCHANGE ANNULÉ", "#52525b"],
+  expired: ["PROPOSITION EXPIRÉE", "#52525b"],
+  failed: ["ÉCHANGE IMPOSSIBLE", "#dc2626"],
+};
+const sideValue = (keys, money) => keys.reduce((a, k) => a + coteOf(k), 0) + (money ?? 0);
+function swapArrows(ctx, x, y, r, color) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+  for (const dir of [1, -1]) {
+    const yy = y + dir * r * 0.28;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.55 * dir, yy);
+    ctx.lineTo(x + r * 0.45 * dir, yy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + r * 0.62 * dir, yy);
+    ctx.lineTo(x + r * 0.3 * dir, yy - r * 0.22);
+    ctx.lineTo(x + r * 0.3 * dir, yy + r * 0.22);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.lineCap = "butt";
+}
+async function drawTrade(tr) {
+  const W = 1200, H = 740, gold = METAL.legendaire;
+  const c = createCanvas(W, H);
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  velvet(ctx, W, H);
+  ctx.textAlign = "center";
+  ctx.font = "30px CardEngrave";
+  ctx.fillStyle = "#fde68a";
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 8;
+  spaced(ctx, "PROPOSITION D'ÉCHANGE", W / 2, 64, 4);
+  ctx.shadowBlur = 0;
+  const [statusLabel, statusColor] = TRADE_STATUS[tr.status] ?? TRADE_STATUS.pending;
+  ctx.font = "14px CardBold";
+  pill(ctx, W / 2, 98, statusLabel, statusColor, "#ffffff");
+  ctx.textAlign = "left";
+
+  const sides = [
+    { name: tr.fromName, avatar: tr.fromAvatar, keys: tr.give, money: tr.giveMoney, verb: "donne" },
+    { name: tr.toName, avatar: tr.toAvatar, keys: tr.take, money: tr.takeMoney, verb: tr.status === "done" ? "a donné" : "donnerait" },
+  ];
+  const values = sides.map((sd) => sideValue(sd.keys, sd.money));
+  for (const [i, sd] of sides.entries()) {
+    const px = i === 0 ? 36 : 644, py = 128, pw = 520, ph = 502;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 18;
+    roundRect(ctx, px, py, pw, ph, 18);
+    const pg = ctx.createLinearGradient(0, py, 0, py + ph);
+    pg.addColorStop(0, "rgba(44,18,20,0.94)");
+    pg.addColorStop(1, "rgba(14,5,6,0.94)");
+    ctx.fillStyle = pg;
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = rgba(gold[0], 0.45);
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, px, py, pw, ph, 18);
+    ctx.stroke();
+    // membre
+    const av = sd.avatar ? await fetchImage(`avatar:${sd.avatar}`, sd.avatar) : null;
+    disc(ctx, px + 52, py + 52, 34, metalGradient(ctx, W, H, gold));
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(px + 52, py + 52, 29, 0, TAU);
+    ctx.clip();
+    if (av) ctx.drawImage(av, px + 23, py + 23, 58, 58);
+    else disc(ctx, px + 52, py + 52, 29, "#3f3f46");
+    ctx.restore();
+    ctx.font = `${fitText(ctx, sd.name ?? "?", pw - 130, 30, "CardTitle")}px CardTitle`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(sd.name ?? "?", px + 100, py + 54);
+    ctx.font = "17px CardItalic";
+    ctx.fillStyle = "#ecc979";
+    ctx.fillText(sd.verb, px + 102, py + 80);
+    // cartes en éventail
+    const n = sd.keys.length, cw = 150, ch = 210, area = pw - 60;
+    const step = n > 1 ? Math.min(cw + 16, (area - cw) / (n - 1)) : 0, total = n > 1 ? step * (n - 1) + cw : cw;
+    for (const [k, key] of sd.keys.entries()) {
+      const card = cardOfKey(key);
+      if (!card) continue;
+      const x = px + (pw - total) / 2 + k * step, rot = n > 3 ? (k - (n - 1) / 2) * 0.05 : 0;
+      ctx.save();
+      ctx.translate(x + cw / 2, py + 120 + ch / 2 + Math.abs(k - (n - 1) / 2) * (n > 3 ? 6 : 0));
+      ctx.rotate(rot);
+      ctx.shadowColor = "rgba(0,0,0,0.7)";
+      ctx.shadowBlur = 16;
+      glow(ctx, 0, 0, 110, METAL[card.rarity][4], 0.2);
+      ctx.drawImage(await cardThumb(card, isHoloKey(key), cw, ch), -cw / 2, -ch / 2, cw, ch);
+      ctx.restore();
+    }
+    if (!n && !sd.money) {
+      roundRect(ctx, px + pw / 2 - 75, py + 120, 150, 210, 12);
+      ctx.setLineDash([7, 6]);
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.textAlign = "center";
+      ctx.font = "18px CardItalic";
+      ctx.fillStyle = "#a08a7a";
+      ctx.fillText("Rien", px + pw / 2, py + 230);
+      ctx.textAlign = "left";
+    }
+    // noms des cartes
+    ctx.textAlign = "center";
+    ctx.font = "13px CardBold";
+    ctx.fillStyle = "#cbb9a9";
+    const names = sd.keys.map(keyLabel).join(" · ");
+    ctx.font = `${fitText(ctx, names, pw - 40, 14, "CardBold")}px CardBold`;
+    ctx.fillText(names, px + pw / 2, py + 362);
+    // argent
+    if (sd.money) {
+      coinIcon(ctx, px + pw / 2 - 90, py + 400, 18);
+      ctx.font = "28px CardTitle";
+      ctx.fillStyle = "#fde68a";
+      ctx.textAlign = "left";
+      ctx.fillText(`+ ${euro(sd.money)}`, px + pw / 2 - 62, py + 410);
+      ctx.textAlign = "center";
+    }
+    // valeur estimée
+    ctx.strokeStyle = rgba(gold[0], 0.3);
+    ctx.beginPath();
+    ctx.moveTo(px + 30, py + 444);
+    ctx.lineTo(px + pw - 30, py + 444);
+    ctx.stroke();
+    ctx.font = "14px CardText";
+    ctx.fillStyle = "#a08a7a";
+    ctx.fillText("VALEUR ESTIMÉE", px + pw / 2, py + 468);
+    ctx.font = "22px CardBold";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(euro(values[i]), px + pw / 2, py + 492);
+    ctx.textAlign = "left";
+  }
+  // médaillon central
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 16;
+  disc(ctx, W / 2, 380, 46, metalGradient(ctx, W, H, gold));
+  ctx.restore();
+  disc(ctx, W / 2, 380, 38, "#1a0a0d");
+  swapArrows(ctx, W / 2, 380, 36, gold[0]);
+
+  // jauge d'équilibre
+  const tot = values[0] + values[1], share = tot ? values[0] / tot : 0.5, gx = 300, gw = 600, gy = 676;
+  roundRect(ctx, gx, gy, gw, 12, 6);
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fill();
+  roundRect(ctx, gx, gy, Math.max(12, gw * share), 12, 6);
+  const gg = ctx.createLinearGradient(gx, 0, gx + gw, 0);
+  gg.addColorStop(0, gold[3]);
+  gg.addColorStop(1, gold[0]);
+  ctx.fillStyle = gg;
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(gx + gw / 2 - 1, gy - 5, 2, 22);
+  const diff = tot ? Math.abs(values[0] - values[1]) / Math.max(values[0], values[1]) : 0;
+  const winner = values[0] > values[1] ? sides[1].name : sides[0].name;
+  ctx.textAlign = "center";
+  ctx.font = "15px CardBold";
+  ctx.fillStyle = diff <= 0.2 ? "#4ade80" : "#fbbf24";
+  ctx.fillText(diff <= 0.2 ? "Échange équilibré" : `Avantage ${winner} (+${Math.round(diff * 100)} %)`, W / 2, gy - 10);
+  ctx.font = "12px CardText";
+  ctx.fillStyle = "#a08a7a";
+  ctx.fillText(sides[0].name ?? "", gx - 10 - ctx.measureText(sides[0].name ?? "").width / 2, gy + 10);
+  ctx.fillText(sides[1].name ?? "", gx + gw + 10 + ctx.measureText(sides[1].name ?? "").width / 2, gy + 10);
+  if (tr.status === "pending") {
+    const left = Math.max(0, tr.at + TRADE_HOURS * 3600000 - Date.now());
+    ctx.fillText(`Seul(e) ${sides[1].name} peut accepter · expire dans ${Math.floor(left / 3600000)} h ${Math.floor((left % 3600000) / 60000)} min`, W / 2, H - 24);
+  }
+  ctx.textAlign = "left";
+  return c;
+}
+async function tradeImage(tr) {
+  return new AttachmentBuilder(await (await drawTrade(tr)).encode("jpeg", 92), { name: "echange.jpg" });
+}
+const drafts = new Map(); // userId -> brouillon d'échange en cours
+function newDraft(from, to, fromName, toName) {
+  return {
+    from: from.id,
+    to: to.id,
+    fromName: fromName ?? from.displayName ?? from.username,
+    toName: toName ?? to.displayName ?? to.username,
+    fromAvatar: from.displayAvatarURL({ extension: "png", size: 128 }),
+    toAvatar: to.displayAvatarURL({ extension: "png", size: 128 }),
+    give: [],
+    take: [],
+    giveMoney: 0,
+    takeMoney: 0,
+    gf: "all",
+    tf: "all",
+    status: "draft",
+    at: Date.now(),
+  };
+}
+function cardSelect(customId, placeholder, keys, selected) {
+  const options = keys.slice(0, 25).map(([k, n]) => ({
+    label: keyLabel(k).slice(0, 100),
+    value: k,
+    emoji: RARITIES[cardOfKey(k).rarity].emoji,
+    description: `${RARITIES[cardOfKey(k).rarity].name} · ×${n} · cote ${euro(coteOf(k))}`.slice(0, 100),
+    default: selected.includes(k),
+  }));
+  if (!options.length) return disabledSelect(customId, `${placeholder} (aucune carte)`);
+  return new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(placeholder).setMinValues(0).setMaxValues(Math.min(TRADE_MAX_CARDS, options.length)).addOptions(options);
+}
+async function draftPayload(d) {
+  const embed = new EmbedBuilder()
+    .setColor(0x2563eb)
+    .setTitle(`🔄 Échange avec ${d.toName}`)
+    .setDescription(
+      "**1.** Choisissez les cartes que vous **donnez** (jusqu'à 5)\n" +
+        `**2.** Choisissez les cartes que vous **demandez** à ${d.toName} (jusqu'à 5)\n` +
+        "**3.** Ajoutez de l'argent si besoin avec 💶\n" +
+        "**4.** Envoyez : la proposition s'affiche dans le salon des cartes et l'autre membre a 24 h pour répondre."
+    )
+    .setImage("attachment://echange.jpg");
+  return {
+    embeds: [embed],
+    files: [await tradeImage(d)],
+    components: [
+      new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_tr_gf").setPlaceholder("Mes cartes : série").addOptions(seriesOptions(d.gf))),
+      new ActionRowBuilder().addComponents(cardSelect("carte_tr_give", "Cartes que je donne…", ownedKeys(d.from, d.gf), d.give)),
+      new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_tr_tf").setPlaceholder(`Cartes de ${d.toName} : série`.slice(0, 150)).addOptions(seriesOptions(d.tf))),
+      new ActionRowBuilder().addComponents(cardSelect("carte_tr_take", `Cartes que je demande à ${d.toName}…`.slice(0, 150), ownedKeys(d.to, d.tf), d.take)),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("carte_tr_money").setLabel("Argent").setEmoji("💶").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("carte_tr_send").setLabel("Envoyer la proposition").setEmoji("✉️").setStyle(ButtonStyle.Success).setDisabled(!d.give.length && !d.take.length && !d.giveMoney && !d.takeMoney),
+        new ButtonBuilder().setCustomId("carte_tr_cancel").setLabel("Abandonner").setStyle(ButtonStyle.Danger)
+      ),
+    ],
+  };
+}
+// fusionne une sélection faite dans une liste filtrée avec les cartes déjà choisies dans les autres séries
+function mergeSelection(previous, visibleKeys, values) {
+  const visible = new Set(visibleKeys);
+  return [...previous.filter((k) => !visible.has(k)), ...values.filter((v) => v !== "none")].slice(0, TRADE_MAX_CARDS);
+}
+// vérifie qu'un échange est encore possible : cartes possédées en quantité suffisante, argent disponible
+function tradeProblem(tr) {
+  const need = (userId, keys) => {
+    const counts = {};
+    for (const k of keys) counts[k] = (counts[k] ?? 0) + 1;
+    return Object.entries(counts).find(([k, n]) => (load().inv[userId]?.[k] ?? 0) < n)?.[0];
+  };
+  const a = need(tr.from, tr.give);
+  if (a) return `${tr.fromName} ne possède plus **${keyLabel(a)}**.`;
+  const b = need(tr.to, tr.take);
+  if (b) return `${tr.toName} ne possède plus **${keyLabel(b)}**.`;
+  if (tr.giveMoney && readBalance(tr.from) < tr.giveMoney) return `${tr.fromName} n'a plus assez d'argent.`;
+  if (tr.takeMoney && readBalance(tr.to) < tr.takeMoney) return `${tr.toName} n'a pas assez d'argent.`;
+  return null;
+}
+function tradeButtons(id) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`carte_tr_ok_${id}`).setLabel("Accepter").setEmoji("✅").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`carte_tr_no_${id}`).setLabel("Refuser").setEmoji("✖️").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`carte_tr_x_${id}`).setLabel("Annuler (auteur)").setStyle(ButtonStyle.Secondary)
+  );
+}
+function tradeEmbed(tr, extra = "") {
+  const [label] = TRADE_STATUS[tr.status] ?? TRADE_STATUS.pending;
+  const list = (keys, money) => [...keys.map((k) => `${RARITIES[cardOfKey(k)?.rarity]?.emoji ?? "▫️"} ${keyLabel(k)}`), ...(money ? [`💶 ${formatEuro(money)}`] : [])].join("\n") || "*Rien*";
+  return new EmbedBuilder()
+    .setColor(parseInt((TRADE_STATUS[tr.status] ?? TRADE_STATUS.pending)[1].slice(1), 16))
+    .setTitle(`🔄 ${label.charAt(0) + label.slice(1).toLowerCase()}`)
+    .addFields({ name: `${tr.fromName} donne`, value: list(tr.give, tr.giveMoney), inline: true }, { name: `${tr.toName} donne`, value: list(tr.take, tr.takeMoney), inline: true })
+    .setDescription(extra || null)
+    .setImage("attachment://echange.jpg");
+}
+async function closeTrade(id, status, client) {
+  const tr = load().trades[id];
+  if (!tr || tr.status !== "pending") return;
+  tr.status = status;
+  save();
+  const msg = tr.messageId ? await channelRef?.messages.fetch(tr.messageId).catch(() => null) : null;
+  await msg?.edit({ embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [] }).catch(() => null);
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function openBooster(interaction, client, pulls, title, pack = null) {
@@ -4739,6 +5404,7 @@ async function panelMessage() {
             `👑 **Prestige** — 3 cartes dont une **épique** garantie · **${formatEuro(boosterPrice("prestige"))}**${soldes}\n` +
             `🎁 **Booster gratuit** — ${daily} chaque jour\n\n` +
             "🎒 Les boosters achetés vont dans votre **inventaire** (`/inventaire`) : ouvrez-les tout de suite ou gardez-les. Seuls les boosters de la génération en cours sont vendus.\n" +
+            "🏪 **Marché** (`/marche`) : achetez et vendez des cartes entre membres · 🔄 **Échanges** (`/echange`) : proposez cartes et argent contre cartes.\n" +
             "**Raretés** : ⚪ Commune · 🟢 Peu commune · 🔵 Rare · 🟣 Épique · 🟡 Légendaire · 🔴 Mythique · ✦ Holo (5 %)\n" +
             "✨ Des **cartes sauvages** apparaissent ici de temps en temps : soyez le premier à les attraper !\n" +
             "♻️ Recyclez vos doublons en **poussière d'étoile** pour fabriquer la carte de votre choix."
@@ -4760,6 +5426,10 @@ async function panelMessage() {
         new ButtonBuilder().setCustomId("carte_album").setLabel("Mon album").setEmoji("📒").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("carte_dust").setLabel("Poussière d'étoile").setEmoji("✨").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("carte_member").setLabel("Ma carte de membre").setEmoji("👤").setStyle(ButtonStyle.Secondary)
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("carte_mk").setLabel("Marché").setEmoji("🏪").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("carte_tr").setLabel("Échanger").setEmoji("🔄").setStyle(ButtonStyle.Primary)
       ),
     ],
   };
@@ -4785,6 +5455,23 @@ async function refreshPanel(client) {
 
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "marche") {
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await marketPayload(interaction.user));
+    return true;
+  }
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "echange") {
+    const target = interaction.options.getUser("membre");
+    if (!target || target.bot || target.id === interaction.user.id) {
+      await interaction.reply({ content: "❌ Choisissez un autre membre (pas vous-même, ni un bot).", ephemeral: true });
+      return true;
+    }
+    const d = newDraft(interaction.user, target, interaction.member?.displayName, interaction.options.getMember("membre")?.displayName);
+    drafts.set(interaction.user.id, d);
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await draftPayload(d));
+    return true;
+  }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "album") {
     const target = interaction.options.getUser("membre") ?? interaction.user;
     if (target.bot) {
@@ -4809,6 +5496,347 @@ async function handleCartesInteraction(interaction, client) {
   if (typeof id !== "string" || !id.startsWith("carte_")) return false;
   const userId = interaction.user.id;
   load();
+
+  // --- Marché ---
+  if (id === "carte_mk") {
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await marketPayload(interaction.user));
+    return true;
+  }
+  if (["carte_mk_series", "carte_mk_rarity", "carte_mk_sort", "carte_mk_prev", "carte_mk_next"].includes(id)) {
+    const view = mkView(userId);
+    if (id === "carte_mk_series") view.series = interaction.values[0];
+    if (id === "carte_mk_rarity") view.rarity = interaction.values[0];
+    if (id === "carte_mk_sort") view.sort = interaction.values[0];
+    if (id === "carte_mk_prev") view.page--;
+    else if (id === "carte_mk_next") view.page++;
+    else view.page = 0;
+    await interaction.deferUpdate();
+    await interaction.editReply(await marketPayload(interaction.user));
+    return true;
+  }
+  if (id === "carte_mk_buy") {
+    const l = load().market.find((x) => x.id === interaction.values[0]);
+    if (!l) {
+      await interaction.reply({ content: "❌ Cette annonce n'existe plus.", ephemeral: true });
+      return true;
+    }
+    if (l.seller === userId) {
+      await interaction.reply({ content: "ℹ️ C'est votre propre annonce. Vous pouvez la retirer depuis **Mes annonces**.", ephemeral: true });
+      return true;
+    }
+    const card = cardOfKey(l.key), cote = coteOf(l.key), diff = Math.round((l.price / cote - 1) * 100);
+    await interaction.deferReply({ ephemeral: true });
+    const file = await cardFile(card, isHoloKey(l.key));
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(parseInt(RARITIES[card.rarity].color.slice(1), 16))
+          .setTitle(`🛒 Acheter ${keyLabel(l.key)} ?`)
+          .setDescription(
+            `**Prix : ${formatEuro(l.price)}**\n` +
+              `Cote : ${formatEuro(cote)} (${diff > 0 ? "+" : ""}${diff} %${diff <= -20 ? " · bonne affaire !" : ""})\n` +
+              `Rareté : ${RARITIES[card.rarity].emoji} ${RARITIES[card.rarity].name}${isHoloKey(l.key) ? " ✦ holo" : ""}\n` +
+              `Vendeur : ${l.sellerName} · mise en vente ${ago(l.at)}\n\n` +
+              `Votre solde : **${formatEuro(readBalance(userId))}**${ownedIds(userId).has(card.id) ? "\n*Vous avez déjà cette carte : ce sera un doublon.*" : ""}`
+          )
+          .setImage(`attachment://${file.name}`),
+      ],
+      files: [file],
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`carte_mk_ok_${l.id}`).setLabel(`Confirmer l'achat (${canvasText(formatEuro(l.price))})`).setEmoji("✅").setStyle(ButtonStyle.Success))],
+    });
+    return true;
+  }
+  if (id.startsWith("carte_mk_ok_")) {
+    const s = load();
+    const idx = s.market.findIndex((x) => x.id === id.slice("carte_mk_ok_".length));
+    if (idx < 0) {
+      await interaction.update({ content: "❌ Trop tard : cette annonce a été vendue ou retirée.", embeds: [], components: [], attachments: [] });
+      return true;
+    }
+    const l = s.market[idx], card = cardOfKey(l.key);
+    if (l.seller === userId) return true;
+    if (changeBalance(userId, -l.price, `Achat au marché des cartes : ${keyLabel(l.key)}`) === null) {
+      await interaction.reply({ content: `❌ Il vous faut **${formatEuro(l.price)}** (vous avez ${formatEuro(readBalance(userId))}), ou votre compte est gelé.`, ephemeral: true });
+      return true;
+    }
+    s.market.splice(idx, 1);
+    const fee = Math.round(l.price * MARKET_FEE), net = l.price - fee;
+    changeBalance(l.seller, net, `Vente au marché des cartes : ${keyLabel(l.key)}`, { force: true });
+    const inv = (s.inv[userId] ??= {});
+    inv[l.key] = (inv[l.key] ?? 0) + 1;
+    s.sales.push({ key: l.key, price: l.price, at: Date.now(), seller: l.seller, buyer: userId });
+    if (s.sales.length > 300) s.sales.splice(0, s.sales.length - 300);
+    save();
+    await interaction.update({
+      content: null,
+      embeds: [new EmbedBuilder().setColor(0x16a34a).setTitle("✅ Achat réussi").setDescription(`**${keyLabel(l.key)}** rejoint votre album pour **${formatEuro(l.price)}**.\nNouveau solde : ${formatEuro(readBalance(userId))}`)],
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_mk").setLabel("Retour au marché").setEmoji("🏪").setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId("carte_album").setLabel("Album").setEmoji("📒").setStyle(ButtonStyle.Secondary))],
+      attachments: [],
+    });
+    const buyerName = interaction.member?.displayName ?? interaction.user.username;
+    client.users
+      .fetch(l.seller)
+      .then((u) => u.send(`💰 Votre carte **${keyLabel(l.key)}** a été achetée par **${buyerName}** pour **${formatEuro(l.price)}**. Vous recevez **${formatEuro(net)}** après la commission de ${Math.round(MARKET_FEE * 100)} %.`))
+      .catch(() => null);
+    require("./logs")
+      .sendLogEmbed("achats", new EmbedBuilder().setColor(0xe9c46a).setTitle("🏪 Vente au marché des cartes").setDescription(`${keyLabel(l.key)} — ${formatEuro(l.price)}\nVendeur : <@${l.seller}> (reçoit ${formatEuro(net)})\nAcheteur : <@${userId}>`).setTimestamp())
+      .catch(() => null);
+    if (ORDER.indexOf(card.rarity) >= ORDER.indexOf("legendaire") || l.price >= 20000) {
+      const msg = await channelRef?.send({ content: `🏪 **Grosse vente au marché !** ${RARITIES[card.rarity].emoji} **${keyLabel(l.key)}** vient de partir pour **${formatEuro(l.price)}**.`, allowedMentions: { parse: [] } }).catch(() => null);
+      deleteLater(msg, 360 * MINUTE);
+    }
+    await checkSeriesRewards(client, userId);
+    panelDirty = true;
+    return true;
+  }
+  if (id === "carte_mk_sell") {
+    await interaction.reply({ ...sellPickerPayload(userId), ephemeral: true });
+    return true;
+  }
+  if (id === "carte_mk_ss") {
+    await interaction.update(sellPickerPayload(userId, interaction.values[0]));
+    return true;
+  }
+  if (id === "carte_mk_sc" || id.startsWith("carte_mk_sellkey_")) {
+    const key = id === "carte_mk_sc" ? interaction.values[0] : id.slice("carte_mk_sellkey_".length);
+    if (!load().inv[userId]?.[key]) {
+      await interaction.reply({ content: "❌ Vous n'avez pas (ou plus) cette carte.", ephemeral: true });
+      return true;
+    }
+    if (load().market.filter((l) => l.seller === userId).length >= MARKET_MAX) {
+      await interaction.reply({ content: `❌ Vous avez déjà ${MARKET_MAX} annonces en cours. Retirez-en une depuis **Mes annonces**.`, ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(priceModal(key));
+    return true;
+  }
+  if (id.startsWith("carte_mk_pf_")) {
+    const key = id.slice("carte_mk_pf_".length), card = cardOfKey(key);
+    const price = parseAmount(interaction.fields.getTextInputValue("prix"));
+    if (!card || !Number.isFinite(price) || price < 10 || price > 100000000) {
+      await interaction.reply({ content: "❌ Prix invalide : entrez un montant entre 10 € et 100 000 000 €.", ephemeral: true });
+      return true;
+    }
+    if (load().market.filter((l) => l.seller === userId).length >= MARKET_MAX) {
+      await interaction.reply({ content: `❌ Vous avez déjà ${MARKET_MAX} annonces en cours.`, ephemeral: true });
+      return true;
+    }
+    if (!moveKey(userId, null, key)) {
+      await interaction.reply({ content: "❌ Vous n'avez plus cette carte.", ephemeral: true });
+      return true;
+    }
+    const listing = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), seller: userId, sellerName: interaction.member?.displayName ?? interaction.user.username, key, price, at: Date.now() };
+    load().market.push(listing);
+    save();
+    await interaction.deferReply({ ephemeral: true });
+    const cote = coteOf(key), file = await cardFile(card, isHoloKey(key));
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x16a34a)
+          .setTitle(`💰 ${keyLabel(key)} est en vente`)
+          .setDescription(
+            `**Prix : ${formatEuro(price)}** (cote ${formatEuro(cote)})\n` +
+              `Vous recevrez **${formatEuro(price - Math.round(price * MARKET_FEE))}** après la commission de ${Math.round(MARKET_FEE * 100)} %.\n` +
+              `L'annonce reste ${MARKET_DAYS} jours ; sans acheteur, la carte revient dans votre album.`
+          )
+          .setImage(`attachment://${file.name}`),
+      ],
+      files: [file],
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_mk").setLabel("Voir le marché").setEmoji("🏪").setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId("carte_mk_mine").setLabel("Mes annonces").setEmoji("📋").setStyle(ButtonStyle.Secondary))],
+    });
+    panelDirty = true;
+    return true;
+  }
+  if (id === "carte_mk_mine") {
+    const mine = load().market.filter((l) => l.seller === userId).sort((a, b) => b.at - a.at);
+    const lines = mine.map((l) => {
+      const left = Math.max(0, Math.ceil((l.at + MARKET_DAYS * 86400000 - Date.now()) / 86400000));
+      return `${RARITIES[cardOfKey(l.key).rarity].emoji} **${keyLabel(l.key)}** — ${formatEuro(l.price)} · ${ago(l.at)} · expire dans ${left} j`;
+    });
+    await interaction.reply({
+      ephemeral: true,
+      embeds: [new EmbedBuilder().setColor(0xe9c46a).setTitle(`📋 Mes annonces (${mine.length}/${MARKET_MAX})`).setDescription(lines.join("\n") || "*Aucune annonce en cours.*")],
+      components: mine.length
+        ? [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_mk_cancel").setPlaceholder("↩️ Retirer une annonce…").addOptions(mine.slice(0, 25).map((l) => ({ label: keyLabel(l.key).slice(0, 100), value: l.id, description: formatEuro(l.price).slice(0, 100), emoji: RARITIES[cardOfKey(l.key).rarity].emoji }))))]
+        : [],
+    });
+    return true;
+  }
+  if (id === "carte_mk_cancel") {
+    const s = load();
+    const idx = s.market.findIndex((l) => l.id === interaction.values[0] && l.seller === userId);
+    if (idx < 0) {
+      await interaction.update({ content: "❌ Cette annonce n'existe plus (déjà vendue ?).", embeds: [], components: [] });
+      return true;
+    }
+    const [l] = s.market.splice(idx, 1);
+    const inv = (s.inv[userId] ??= {});
+    inv[l.key] = (inv[l.key] ?? 0) + 1;
+    save();
+    await interaction.update({ content: `↩️ **${keyLabel(l.key)}** est retirée du marché et revient dans votre album.`, embeds: [], components: [] });
+    panelDirty = true;
+    return true;
+  }
+
+  // --- Échanges ---
+  if (id === "carte_tr") {
+    await interaction.reply({
+      ephemeral: true,
+      content: "🔄 Avec qui voulez-vous échanger des cartes ?",
+      components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId("carte_tr_pick").setPlaceholder("Choisir un membre…"))],
+    });
+    return true;
+  }
+  if (id === "carte_tr_pick") {
+    const target = interaction.users.first();
+    if (!target || target.bot || target.id === userId) {
+      await interaction.update({ content: "❌ Choisissez un autre membre (pas vous-même, ni un bot).", components: interaction.message.components });
+      return true;
+    }
+    const d = newDraft(interaction.user, target, interaction.member?.displayName, interaction.members?.first()?.displayName);
+    drafts.set(userId, d);
+    await interaction.deferUpdate();
+    await interaction.editReply({ content: null, ...(await draftPayload(d)) });
+    return true;
+  }
+  if (["carte_tr_gf", "carte_tr_tf", "carte_tr_give", "carte_tr_take", "carte_tr_money", "carte_tr_mf", "carte_tr_send", "carte_tr_cancel"].includes(id)) {
+    const d = drafts.get(userId);
+    if (!d) {
+      await interaction.reply({ content: "⌛ Ce brouillon d'échange a expiré. Relancez `/echange`.", ephemeral: true });
+      return true;
+    }
+    if (id === "carte_tr_cancel") {
+      drafts.delete(userId);
+      await interaction.update({ content: "🗑️ Échange abandonné.", embeds: [], components: [], attachments: [] });
+      return true;
+    }
+    if (id === "carte_tr_money") {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId("carte_tr_mf")
+          .setTitle("Argent dans l'échange")
+          .addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("give").setLabel("Argent que vous donnez (€)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(d.giveMoney ? String(d.giveMoney) : "")),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("take").setLabel(`Argent que vous demandez à ${d.toName}`.slice(0, 45)).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(d.takeMoney ? String(d.takeMoney) : ""))
+          )
+      );
+      return true;
+    }
+    if (id === "carte_tr_mf") {
+      const give = parseAmount(interaction.fields.getTextInputValue("give") || "0"), take = parseAmount(interaction.fields.getTextInputValue("take") || "0");
+      if (![give, take].every((v) => Number.isFinite(v) && v >= 0 && v <= 100000000)) {
+        await interaction.reply({ content: "❌ Montant invalide (entre 0 et 100 000 000 €).", ephemeral: true });
+        return true;
+      }
+      if (give > readBalance(userId)) {
+        await interaction.reply({ content: `❌ Vous n'avez que ${formatEuro(readBalance(userId))}.`, ephemeral: true });
+        return true;
+      }
+      d.giveMoney = give;
+      d.takeMoney = take;
+    }
+    if (id === "carte_tr_gf") d.gf = interaction.values[0];
+    if (id === "carte_tr_tf") d.tf = interaction.values[0];
+    if (id === "carte_tr_give") d.give = mergeSelection(d.give, ownedKeys(d.from, d.gf).slice(0, 25).map(([k]) => k), interaction.values);
+    if (id === "carte_tr_take") d.take = mergeSelection(d.take, ownedKeys(d.to, d.tf).slice(0, 25).map(([k]) => k), interaction.values);
+    if (id === "carte_tr_send") {
+      const problem = tradeProblem(d);
+      if (problem || !channelRef) {
+        await interaction.reply({ content: `❌ ${problem ?? "Le salon des cartes est introuvable."}`, ephemeral: true });
+        return true;
+      }
+      await interaction.deferUpdate();
+      const tid = Date.now().toString(36);
+      const tr = { ...d, id: tid, status: "pending", at: Date.now() };
+      delete tr.gf;
+      delete tr.tf;
+      load().trades[tid] = tr;
+      save();
+      const msg = await channelRef
+        .send({ content: `🔄 <@${tr.to}>, **${tr.fromName}** vous propose un échange de cartes !`, embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [tradeButtons(tid)], allowedMentions: { users: [tr.to] } })
+        .catch(() => null);
+      if (!msg) {
+        delete load().trades[tid];
+        save();
+        await interaction.editReply({ content: "❌ Impossible de publier la proposition.", embeds: [], components: [], attachments: [] });
+        return true;
+      }
+      tr.messageId = msg.id;
+      save();
+      drafts.delete(userId);
+      client.users.fetch(tr.to).then((u) => u.send(`📬 **${tr.fromName}** vous propose un échange de cartes : ${msg.url}`)).catch(() => null);
+      await interaction.editReply({ content: `✅ Proposition envoyée dans ${channelRef} ! ${tr.toName} a ${TRADE_HOURS} h pour répondre.`, embeds: [], components: [], attachments: [] });
+      return true;
+    }
+    await interaction.deferUpdate();
+    await interaction.editReply(await draftPayload(d));
+    return true;
+  }
+  const trAction = /^carte_tr_(ok|no|x)_(\w+)$/.exec(id);
+  if (trAction) {
+    const [, action, tid] = trAction;
+    const tr = load().trades[tid];
+    if (!tr || tr.status !== "pending") {
+      await interaction.reply({ content: "ℹ️ Cette proposition n'est plus active.", ephemeral: true });
+      return true;
+    }
+    if (Date.now() > tr.at + TRADE_HOURS * 3600000) {
+      await interaction.deferUpdate();
+      await closeTrade(tid, "expired");
+      return true;
+    }
+    if ((action === "ok" || action === "no") && userId !== tr.to) {
+      await interaction.reply({ content: `⛔ Seul(e) **${tr.toName}** peut répondre à cette proposition.`, ephemeral: true });
+      return true;
+    }
+    if (action === "x" && userId !== tr.from) {
+      await interaction.reply({ content: `⛔ Seul(e) **${tr.fromName}** peut annuler sa proposition.`, ephemeral: true });
+      return true;
+    }
+    await interaction.deferUpdate();
+    if (action !== "ok") {
+      tr.status = action === "no" ? "refused" : "cancelled";
+      save();
+      await interaction.editReply({ embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [] });
+      return true;
+    }
+    let problem = tradeProblem(tr);
+    const label = `Échange de cartes entre ${tr.fromName} et ${tr.toName}`;
+    if (!problem && tr.giveMoney) {
+      if (changeBalance(tr.from, -tr.giveMoney, label) === null) problem = `${tr.fromName} ne peut pas payer (compte gelé ou fonds insuffisants).`;
+      else changeBalance(tr.to, tr.giveMoney, label, { force: true });
+    }
+    if (!problem && tr.takeMoney) {
+      if (changeBalance(tr.to, -tr.takeMoney, label) === null) {
+        problem = `${tr.toName} ne peut pas payer (compte gelé ou fonds insuffisants).`;
+        if (tr.giveMoney) {
+          changeBalance(tr.to, -tr.giveMoney, `${label} (annulé)`, { force: true });
+          changeBalance(tr.from, tr.giveMoney, `${label} (annulé)`, { force: true });
+        }
+      } else changeBalance(tr.from, tr.takeMoney, label, { force: true });
+    }
+    if (problem) {
+      tr.status = "failed";
+      save();
+      await interaction.editReply({ embeds: [tradeEmbed(tr, `⚠️ ${problem}`)], files: [await tradeImage(tr)], components: [] });
+      return true;
+    }
+    for (const k of tr.give) moveKey(tr.from, tr.to, k);
+    for (const k of tr.take) moveKey(tr.to, tr.from, k);
+    tr.status = "done";
+    tr.doneAt = Date.now();
+    save();
+    await interaction.editReply({ content: `🤝 Échange conclu entre <@${tr.from}> et <@${tr.to}> !`, embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [], allowedMentions: { parse: [] } });
+    require("./logs")
+      .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`<@${tr.from}> donne : ${tr.give.map(keyLabel).join(", ") || "rien"}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n<@${tr.to}> donne : ${tr.take.map(keyLabel).join(", ") || "rien"}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
+      .catch(() => null);
+    await checkSeriesRewards(client, tr.from);
+    await checkSeriesRewards(client, tr.to);
+    panelDirty = true;
+    return true;
+  }
 
   // Achat d'un ou plusieurs boosters : ils vont dans l'inventaire
   const buy = /^carte_(?:booster|buy)_(standard|premium|prestige)(?:_(\d+))?$/.exec(id);
@@ -4987,7 +6015,12 @@ async function handleCartesInteraction(interaction, client) {
       ephemeral: true,
       embeds: [new EmbedBuilder().setColor(parseInt(RARITIES[card.rarity].color.slice(1), 16)).setTitle(card.name).setImage(`attachment://${file.name}`)],
       files: [file],
-      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`carte_show_${card.id}`).setLabel("Montrer à tout le monde").setEmoji("📣").setStyle(ButtonStyle.Secondary))],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`carte_show_${card.id}`).setLabel("Montrer à tout le monde").setEmoji("📣").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`carte_mk_sellkey_${holo ? `${card.id}*` : card.id}`).setLabel("Vendre au marché").setEmoji("💰").setStyle(ButtonStyle.Success)
+        ),
+      ],
     });
     return true;
   }
@@ -5208,6 +6241,24 @@ async function setupCartes(client) {
       if (Date.now() >= nextWildAt) {
         nextWildAt = Date.now() + (60 + Math.random() * 120) * MINUTE; // toutes les 1 à 3 heures
         await spawnWild(client);
+      }
+      for (const [tid, tr] of Object.entries(load().trades)) {
+        if (tr.status === "pending" && Date.now() > tr.at + TRADE_HOURS * 3600000) await closeTrade(tid, "expired");
+        else if (tr.status !== "pending" && Date.now() - tr.at > 7 * 86400000) {
+          delete load().trades[tid];
+          save();
+        }
+      }
+      const expired = load().market.filter((l) => Date.now() - l.at > MARKET_DAYS * 86400000);
+      for (const l of expired) {
+        load().market.splice(load().market.indexOf(l), 1);
+        const inv = (load().inv[l.seller] ??= {});
+        inv[l.key] = (inv[l.key] ?? 0) + 1;
+        client.users.fetch(l.seller).then((u) => u.send(`↩️ Votre annonce **${keyLabel(l.key)}** a expiré sans acheteur : la carte revient dans votre album.`)).catch(() => null);
+      }
+      if (expired.length) {
+        save();
+        panelDirty = true;
       }
       if (panelDirty) {
         panelDirty = false;
