@@ -327,7 +327,7 @@ async function drawSpread(results, title, gained) {
 }
 
 // --- Album en images ---
-const albumGroups = () => ["paris", "maison", ...(CURRENT_GEN >= 2 ? ["voyage"] : []), "entreprises", "membres", "evenements"];
+const albumGroups = () => ["paris", "maison", ...(CURRENT_GEN >= 2 ? ["voyage"] : []), "entreprises", "membres", "saisons", "evenements"];
 const ALBUM_PER_PAGE = 21;
 const seriesCards = (group) => allCards().filter((c) => seriesOf(c) === group);
 const thumbCache = new Map();
@@ -414,7 +414,8 @@ function medallion(ctx, x, y, r, series, gold) {
 }
 
 async function drawAlbumCover(user) {
-  const userId = user.id, W = 1200, H = 856, gold = METAL.legendaire;
+  const rowsCount = Math.ceil(albumGroups().length / 3);
+  const userId = user.id, W = 1200, H = 248 + rowsCount * 282 + 50, gold = METAL.legendaire;
   const c = createCanvas(W, H);
   const ctx = c.getContext("2d");
   ctx.imageSmoothingQuality = "high";
@@ -462,7 +463,12 @@ async function drawAlbumCover(user) {
   ctx.stroke();
 
   const inv = load().inv[userId] ?? {};
-  const tiles = albumGroups().length > 5 ? [[44, 248], [420, 248], [796, 248], [44, 530], [420, 530], [796, 530]] : [[44, 248], [420, 248], [796, 248], [232, 530], [608, 530]];
+  // tuiles par rangées de trois, la dernière rangée centrée
+  const groupsList = albumGroups();
+  const tiles = groupsList.map((_, i) => {
+    const row = Math.floor(i / 3), inRow = Math.min(3, groupsList.length - row * 3), col = i % 3;
+    return [600 - (inRow * 360 + (inRow - 1) * 16) / 2 + col * 376, 248 + row * 282];
+  });
   for (const [i, g] of albumGroups().entries()) {
     const [tx, ty] = tiles[i], tw = 360, th = 262, list = seriesCards(g), have = list.filter((card) => owned.has(card.id));
     const done = Boolean(load().rewards[userId]?.[g]) || (list.length > 0 && have.length === list.length);

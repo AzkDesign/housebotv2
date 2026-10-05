@@ -28,6 +28,8 @@ function elementOf(card) {
     const best = ["ACT", "ANC", "FOR", "STA", "CHA"].sort((a, b) => (card.memberStats[b] ?? 0) - (card.memberStats[a] ?? 0))[0];
     return { ACT: "foudre", ANC: "pierre", FOR: "chance", STA: "lumiere", CHA: "air" }[best];
   }
+  if (card.id.startsWith("hw_")) return "ombre";
+  if (card.id.startsWith("xm_")) return "glace";
   return ART.FICHES[ART.illustrationKey(card)]?.[2] ?? SERIES_ELEMENT[seriesOf(card)] ?? "lumiere";
 }
 const artCache = new Map();

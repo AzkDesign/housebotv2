@@ -9,7 +9,7 @@ const ACTIONS = {
   special: { label: "Spécial", emoji: "💥", color: "#f59e0b" },
   switch: { label: "Changement", emoji: "🔄", color: "#22c55e" },
 };
-const SPECIAL_NAMES = { voyage: "Tour du monde", paris: "Lumière de Paris", maison: "Pouvoir de la Maison", entreprises: "OPA hostile", evenements: "Moment historique", membres: "Coup de maître" };
+const SPECIAL_NAMES = { saisons: "Magie de saison", voyage: "Tour du monde", paris: "Lumière de Paris", maison: "Pouvoir de la Maison", entreprises: "OPA hostile", evenements: "Moment historique", membres: "Coup de maître" };
 const ARENA_TIERS = [
   [1550, "Légende", "#f472b6"],
   [1400, "Diamant", "#67e8f9"],
@@ -105,9 +105,9 @@ function resolveRoundState(b) {
     dmg *= 0.85 + Math.random() * 0.3;
     const mult = typeMult(att.series, def.series);
     dmg *= mult;
-    const crit = Math.random() < att.luck / 350;
+    const crit = Math.random() < (att.luck / 350) * (ruleIs("critiques") ? 2 : 1);
     if (crit) dmg *= 1.5;
-    const dodge = type === "attack" && Math.random() < def.luck / 700;
+    const dodge = type === "attack" && Math.random() < (def.luck / 700) * (ruleIs("esquive") ? 2 : 1);
     let guarded = false, broke = false, interrupt = false, weakened = false;
     if (defAct === "guard") {
       if (type === "special") {
@@ -115,7 +115,7 @@ function resolveRoundState(b) {
         broke = true;
         broken[1 - i] = true;
       } else {
-        dmg *= GUARD_DECAY[Math.min(2, foe.guardStreak - 1)];
+        dmg *= ruleIs("fer") ? GUARD_DECAY[0] : GUARD_DECAY[Math.min(2, foe.guardStreak - 1)];
         guarded = true;
       }
     }
@@ -129,6 +129,7 @@ function resolveRoundState(b) {
       weakened = true;
     }
     if (dodge) dmg = 0;
+    if (ruleIs("rage")) dmg *= 1.25;
     dmg = Math.round(dmg);
     const from = def.hp;
     def.hp = Math.max(0, def.hp - dmg);
@@ -142,8 +143,8 @@ function resolveRoundState(b) {
         : `${att.name} ${type === "special" ? `lance ${att.special}` : att.attackName && att.attackName !== "Attaque" ? `utilise ${att.attackName}` : "attaque"} : −${dmg} PV à ${def.name}${tags.length ? ` (${tags.join(", ")})` : ""}`,
     });
     // contre-attaque de la garde (seulement si la garde tient encore)
-    if (type === "attack" && defAct === "guard" && !dodge && def.hp > 0 && foe.guardStreak <= 2) {
-      const c = Math.round((10 + def.atk * 0.55) * 0.3);
+    if (type === "attack" && defAct === "guard" && !dodge && def.hp > 0 && (foe.guardStreak <= 2 || ruleIs("fer"))) {
+      const c = Math.round((10 + def.atk * 0.55) * 0.3 * (ruleIs("rage") ? 1.25 : 1));
       const cf = att.hp;
       att.hp = Math.max(0, att.hp - c);
       events.push({ kind: "counter", side: 1 - i, attIdx: foe.active, defIdx: me.active, dmg: c, from: cf, to: att.hp });
@@ -1106,7 +1107,8 @@ async function livePayload(b) {
         `*Les choix restent secrets jusqu'à la révélation. Sans réponse, la carte se met en garde.*` +
         (b.mise ? `\n💰 Mise : **${formatEuro(b.mise)}** chacun` : "")
     )
-    .setImage("attachment://arene.jpg");
+    .setImage("attachment://arene.jpg")
+    .setFooter({ text: `Défi de la semaine : ${weeklyRule()[1]} — ${weeklyRule()[2]}` });
   return { content: null, embeds: [embed], files: [img], components: battleComponents(b) };
 }
 async function teamPayload(b) {
@@ -1156,7 +1158,7 @@ const RULES_EMBED = () =>
 
 // --- Déroulement ---
 function playerOf(user, name, isAI = false) {
-  return { id: user.id, name, avatar: user.displayAvatarURL({ extension: "png", size: 128 }), isAI, team: [], active: 0, energy: 1, choice: null, ready: false, afk: 0 };
+  return { id: user.id, name, avatar: user.displayAvatarURL({ extension: "png", size: 128 }), isAI, team: [], active: 0, energy: ruleIs("surcharge") ? 3 : 1, choice: null, ready: false, afk: 0 };
 }
 function escrow(b) {
   const st = load();
@@ -1178,8 +1180,8 @@ async function startBattle(client, a, bUser, opts) {
   battles.set(id, b);
   for (const p of players) if (!p.isAI) userBattle.set(p.id, id);
   escrow(b);
-  const thread = await channelRef?.threads.create({ name: `⚔️ ${players[0].name} vs ${players[1].name}`.slice(0, 95), autoArchiveDuration: 60, reason: "Combat de cartes" }).catch(() => null);
-  b.channel = thread ?? channelRef;
+  const thread = await chan("arene")?.threads.create({ name: `⚔️ ${players[0].name} vs ${players[1].name}`.slice(0, 95), autoArchiveDuration: 60, reason: "Combat de cartes" }).catch(() => null);
+  b.channel = thread ?? chan("arene");
   b.thread = thread;
   const mentions = players.filter((p) => !p.isAI).map((p) => `<@${p.id}>`).join(" ");
   b.message = await b.channel.send({ content: `${mentions} — le combat va commencer !`, ...(await teamPayload(b)), allowedMentions: { users: players.filter((p) => !p.isAI).map((p) => p.id) } }).catch(() => null);
@@ -1373,6 +1375,14 @@ async function finishBattle(client, b, winner, reason) {
     lines.push(`📊 Classement : ${A.name} ${da >= 0 ? "+" : ""}${da} (${sa.elo}) · ${B.name} ${db >= 0 ? "+" : ""}${db} (${sb.elo})`);
   }
   bump("battles");
+  for (const [i, p] of b.players.entries()) {
+    if (p.isAI) continue;
+    if (winner === i) {
+      ustat(p.id, "wins");
+      ustat(p.id, "streak");
+      arenaWeeklyWin(p.id).catch(() => null);
+    } else if (winner >= 0) resetStreak(p.id);
+  }
   if (winner >= 0 && !b.players[winner].isAI) questProgress(b.players[winner].id, "win_fight");
   // contre la Maison : chaque victoire rapproche du niveau suivant
   if (b.ai && winner === 0) {
@@ -1417,6 +1427,7 @@ async function finishBattle(client, b, winner, reason) {
   }
   delete load().arenaEscrow[b.id];
   save();
+  for (const p of b.players) if (!p.isAI) checkAchievements(p.id).catch(() => null);
   const banner = winner >= 0 ? `VICTOIRE DE ${b.players[winner].name.toUpperCase()}` : "MATCH NUL";
   const subtitle = `${reason === "abandon" ? "par abandon" : reason === "K.O." ? `en ${b.round} manche${b.round > 1 ? "s" : ""}` : reason}`;
   const img = new AttachmentBuilder(await (await drawArena(b, { banner: banner.slice(0, 34), subtitle })).encode("jpeg", 90), { name: "arene.jpg" });
@@ -1429,7 +1440,7 @@ async function finishBattle(client, b, winner, reason) {
     })
     .catch(() => null);
   if (b.thread) {
-    await channelRef
+    await chan("arene")
       ?.send({ content: `⚔️ ${winner >= 0 ? `**${b.players[winner].name}** bat **${b.players[1 - winner].name}**` : `Match nul entre **${A.name}** et **${B.name}**`} ${subtitle} — ${b.thread}`, allowedMentions: { parse: [] } })
       .then((m) => deleteLater(m, MINUTE))
       .catch(() => null);
@@ -1501,7 +1512,7 @@ async function sendChallenge(client, interaction, target, targetName, mise) {
   const fromName = interaction.member?.displayName ?? interaction.user.username;
   const ch = { id: cid, from: interaction.user, fromName, to: target, toName: targetName, mise };
   const sa = arenaStats(userId), sb = arenaStats(target.id);
-  ch.message = await channelRef
+  ch.message = await chan("arene")
     ?.send({
       content: `⚔️ <@${target.id}>, **${fromName}** vous défie en combat de cartes !`,
       embeds: [

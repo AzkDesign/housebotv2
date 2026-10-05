@@ -66,6 +66,15 @@ async function registerSlashCommands(client, token) {
       .addBooleanOption((o) => o.setName("prive").setDescription("Afficher la carte seulement pour vous (avec vos infos privées)"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("succes")
+      .setDescription("Vos succès des Cartes de la Maison et le titre affiché sur votre profil")
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName("vitrine")
+      .setDescription("Votre vitrine : vos trois plus belles cartes (ou celle d'un membre)")
+      .addUserOption((o) => o.setName("membre").setDescription("Voir la vitrine d'un autre membre"))
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("codex")
       .setDescription("Le codex des cartes : toutes celles qui vous manquent et comment les obtenir")
       .toJSON(),
@@ -99,7 +108,8 @@ async function registerSlashCommands(client, token) {
     new SlashCommandBuilder()
       .setName("generation")
       .setDescription("(Gérants) Voir ou lancer la génération de cartes suivante")
-      .addStringOption((o) => o.setName("action").setDescription("Que faire").setRequired(true).addChoices({ name: "Voir l'état", value: "statut" }, { name: "Lancer la génération suivante", value: "lancer" }))
+      .addStringOption((o) => o.setName("action").setDescription("Que faire").setRequired(true).addChoices({ name: "Voir l'état", value: "statut" }, { name: "Lancer la génération suivante", value: "lancer" }, { name: "Programmer le lancement", value: "programmer" }, { name: "Annuler le lancement programmé", value: "annuler" }))
+      .addIntegerOption((o) => o.setName("jours").setDescription("Pour « programmer » : dans combien de jours (21 par défaut)").setMinValue(1).setMaxValue(90))
       .toJSON(),
     new SlashCommandBuilder()
       .setName("combat")

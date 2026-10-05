@@ -1,5 +1,15 @@
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "succes") {
+    await interaction.reply(achievementsPayload(interaction.user.id));
+    return true;
+  }
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "vitrine") {
+    const target = interaction.options.getUser("membre") ?? interaction.user;
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await showcasePayload(target, target.id === interaction.user.id));
+    return true;
+  }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "codex") {
     await interaction.deferReply({ ephemeral: true });
     await interaction.editReply(await codexPayload(interaction.user));
@@ -35,7 +45,27 @@ async function handleCartesInteraction(interaction, client) {
       return true;
     }
     const next = CURRENT_GEN + 1;
-    if (interaction.options.getString("action") !== "lancer") {
+    const action = interaction.options.getString("action");
+    if (action === "programmer") {
+      const days = interaction.options.getInteger("jours") ?? 21;
+      if (!GENERATIONS[next]) {
+        await interaction.reply({ content: "❌ Aucune génération suivante n'est prête.", ephemeral: true });
+        return true;
+      }
+      load().genLaunchAt = Date.now() + days * 86400000;
+      save();
+      panelDirty = true;
+      await interaction.reply({ content: `🗓️ **${GENERATIONS[next].name} — ${GENERATIONS[next].title}** sera lancée automatiquement <t:${Math.floor(load().genLaunchAt / 1000)}:F> (<t:${Math.floor(load().genLaunchAt / 1000)}:R>). Le compte à rebours s'affiche dans le salon des cartes.`, ephemeral: true });
+      return true;
+    }
+    if (action === "annuler") {
+      delete load().genLaunchAt;
+      save();
+      panelDirty = true;
+      await interaction.reply({ content: "🗓️ Lancement programmé annulé.", ephemeral: true });
+      return true;
+    }
+    if (action !== "lancer") {
       await interaction.reply({ content: `🃏 Génération en cours : **${GENERATIONS[CURRENT_GEN].name} — ${GENERATIONS[CURRENT_GEN].title}**.\n${GENERATIONS[next] ? `Prête à être lancée : **${GENERATIONS[next].name} — ${GENERATIONS[next].title}** (${SERIES.voyage?.cards.length ?? 0} nouvelles cartes). Utilisez \`/generation action:lancer\`.` : "Aucune génération suivante n'est prête pour le moment."}`, ephemeral: true });
       return true;
     }
@@ -44,22 +74,8 @@ async function handleCartesInteraction(interaction, client) {
       return true;
     }
     await interaction.deferReply({ ephemeral: true });
-    load().currentGen = next;
-    CURRENT_GEN = next;
-    vitrineCache = null;
-    save();
-    const G = GENERATIONS[next];
-    await channelRef
-      ?.send({
-        content: "@everyone",
-        allowedMentions: { parse: ["everyone"] },
-        embeds: [new EmbedBuilder().setColor(0x38bdf8).setTitle(`🌍 ${G.name} — ${G.title} est lancée !`).setDescription(`De nouvelles cartes à collectionner, de nouveaux boosters et une nouvelle série dans l'album. Les boosters de l'ancienne génération restent ouvrables dans votre inventaire, mais ne sont plus vendus.`).setImage("attachment://vitrine.jpg")],
-        files: [await vitrineFile()],
-      })
-      .catch(() => null);
-    panelDirty = true;
-    for (const type of PACK_ORDER) packShineGif(CURRENT_GEN, type).catch(() => null);
-    await interaction.editReply({ content: `✅ ${G.name} — ${G.title} est lancée et annoncée dans ${channelRef}.` });
+    const G = await launchNextGeneration();
+    await interaction.editReply({ content: `✅ ${G.name} — ${G.title} est lancée et annoncée dans ${chan("annonces")}.` });
     return true;
   }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "combat") {
@@ -71,7 +87,7 @@ async function handleCartesInteraction(interaction, client) {
     }
     await interaction.deferReply({ ephemeral: true });
     const err = await sendChallenge(client, interaction, target, interaction.options.getMember("membre")?.displayName ?? target.username, mise);
-    await interaction.editReply({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${channelRef} !` });
+    await interaction.editReply({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${chan("arene")} !` });
     return true;
   }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "arene") {
@@ -124,6 +140,38 @@ async function handleCartesInteraction(interaction, client) {
   if (typeof id !== "string" || !id.startsWith("carte_")) return false;
   const userId = interaction.user.id;
   load();
+
+  // --- Succès et vitrine ---
+  if (id === "carte_succ") {
+    await interaction.reply(achievementsPayload(userId));
+    return true;
+  }
+  if (id === "carte_succ_titre") {
+    achOf(userId).title = interaction.values[0];
+    save();
+    await interaction.update(achievementsPayload(userId));
+    return true;
+  }
+  if (id === "carte_vit") {
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await showcasePayload(interaction.user, true));
+    return true;
+  }
+  if (id === "carte_vit_set") {
+    load().showcase[userId] = interaction.values.slice(0, 3);
+    save();
+    await interaction.deferUpdate();
+    await interaction.editReply(await showcasePayload(interaction.user, true));
+    return true;
+  }
+  if (id === "carte_vit_show") {
+    await interaction.deferReply({ ephemeral: true });
+    const payload = await showcasePayload(interaction.user, false);
+    const sent = await chan("discussion")?.send({ content: `🖼️ ${interaction.user} présente sa vitrine :`, ...payload, allowedMentions: { parse: [] } }).catch(() => null);
+    deleteLater(sent, MINUTE);
+    await interaction.editReply({ content: sent ? `✅ Votre vitrine est affichée dans ${chan("discussion")}.` : "❌ Impossible de publier la vitrine." });
+    return true;
+  }
 
   // --- Codex ---
   if (id === "carte_cx") {
@@ -178,7 +226,7 @@ async function handleCartesInteraction(interaction, client) {
   if (id === "carte_bt_pick") {
     const target = interaction.users.first();
     const err = await sendChallenge(client, interaction, target, interaction.members?.first()?.displayName ?? target?.username ?? "?", 0);
-    await interaction.update({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${channelRef} !`, embeds: [], components: [] });
+    await interaction.update({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${chan("arene")} !`, embeds: [], components: [] });
     return true;
   }
   if (id === "carte_bt_ai") {
@@ -467,6 +515,8 @@ async function handleCartesInteraction(interaction, client) {
     bump("marketVolume", l.price);
     bump("marketFees", fee);
     questProgress(userId, "market");
+    ustat(l.seller, "sales");
+    checkAchievements(l.seller).catch(() => null);
     pairAlert(userId, l.seller, "achats au marché", `${keyLabel(l.key)} pour ${formatEuro(l.price)}`).catch(() => null);
     cheapSaleAlert(l, userId, coteBefore).catch(() => null);
     if (s.sales.length > 300) s.sales.splice(0, s.sales.length - 300);
@@ -486,7 +536,7 @@ async function handleCartesInteraction(interaction, client) {
       .sendLogEmbed("achats", new EmbedBuilder().setColor(0xe9c46a).setTitle("🏪 Vente au marché des cartes").setDescription(`${keyLabel(l.key)} — ${formatEuro(l.price)}\nVendeur : <@${l.seller}> (reçoit ${formatEuro(net)})\nAcheteur : <@${userId}>`).setTimestamp())
       .catch(() => null);
     if (ORDER.indexOf(card.rarity) >= ORDER.indexOf("legendaire") || l.price >= 20000) {
-      const msg = await channelRef?.send({ content: `🏪 **Grosse vente au marché !** ${RARITIES[card.rarity].emoji} **${keyLabel(l.key)}** vient de partir pour **${formatEuro(l.price)}**.`, allowedMentions: { parse: [] } }).catch(() => null);
+      const msg = await chan("marche")?.send({ content: `🏪 **Grosse vente au marché !** ${RARITIES[card.rarity].emoji} **${keyLabel(l.key)}** vient de partir pour **${formatEuro(l.price)}**.`, allowedMentions: { parse: [] } }).catch(() => null);
       deleteLater(msg, MINUTE);
     }
     await checkSeriesRewards(client, userId);
@@ -663,7 +713,7 @@ async function handleCartesInteraction(interaction, client) {
       delete tr.tf;
       load().trades[tid] = tr;
       save();
-      const msg = await channelRef
+      const msg = await chan("echanges")
         .send({ content: `🔄 <@${tr.to}>, **${tr.fromName}** vous propose un échange de cartes !`, embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [tradeButtons(tid)], allowedMentions: { users: [tr.to] } })
         .catch(() => null);
       if (!msg) {
@@ -673,10 +723,11 @@ async function handleCartesInteraction(interaction, client) {
         return true;
       }
       tr.messageId = msg.id;
+      tr.channelId = msg.channel?.id ?? msg.channelId;
       save();
       drafts.delete(userId);
       client.users.fetch(tr.to).then((u) => u.send(`📬 **${tr.fromName}** vous propose un échange de cartes : ${msg.url}`)).catch(() => null);
-      await interaction.editReply({ content: `✅ Proposition envoyée dans ${channelRef} ! ${tr.toName} a ${TRADE_HOURS} h pour répondre.`, embeds: [], components: [], attachments: [] });
+      await interaction.editReply({ content: `✅ Proposition envoyée dans ${chan("echanges")} ! ${tr.toName} a ${TRADE_HOURS} h pour répondre.`, embeds: [], components: [], attachments: [] });
       return true;
     }
     await interaction.deferUpdate();
@@ -740,6 +791,8 @@ async function handleCartesInteraction(interaction, client) {
     bump("trades");
     questProgress(tr.from, "trade");
     questProgress(tr.to, "trade");
+    ustat(tr.from, "trades");
+    ustat(tr.to, "trades");
     pairAlert(tr.from, tr.to, "échanges", `${tr.give.map(keyLabel).join(", ") || "rien"} contre ${tr.take.map(keyLabel).join(", ") || "rien"}`).catch(() => null);
     tr.doneAt = Date.now();
     save();
@@ -755,9 +808,13 @@ async function handleCartesInteraction(interaction, client) {
   }
 
   // Achat d'un ou plusieurs boosters : ils vont dans l'inventaire
-  const buy = /^carte_(?:booster|buy)_(standard|premium|prestige)(?:_(\d+))?$/.exec(id);
+  const buy = /^carte_(?:booster|buy)_(standard|premium|prestige|frisson|givre)(?:_(\d+))?$/.exec(id);
   if (buy) {
     const type = buy[1], n = Math.min(10, Math.max(1, Number(buy[2] ?? 1))), P = PACKS[type];
+    if (P.season && activeSeason() !== P.season) {
+      await interaction.reply({ content: `${P.emoji} Le booster ${P.name} n'est vendu que pendant ${SEASONAL[P.season].name} (${SEASONAL[P.season].dates}).`, ephemeral: true });
+      return true;
+    }
     const price = boosterPrice(type) * n;
     if (changeBalance(userId, -price, `Achat de ${n} booster(s) de cartes ${P.name} (${GENERATIONS[CURRENT_GEN].code})`) === null) {
       await interaction.reply({ content: `❌ ${n > 1 ? `${n} boosters` : "Le booster"} ${P.name} coûte${n > 1 ? "nt" : ""} **${formatEuro(price)}** (vous avez ${formatEuro(readBalance(userId))}), ou votre compte est gelé.`, ephemeral: true });
@@ -845,9 +902,9 @@ async function handleCartesInteraction(interaction, client) {
   if (id === "carte_inv_show") {
     await interaction.deferReply({ ephemeral: true });
     const payload = await inventoryPayload(interaction.user, false);
-    const sent = await channelRef?.send({ content: `📣 ${interaction.user} montre son inventaire :`, ...payload, allowedMentions: { parse: [] } }).catch(() => null);
+    const sent = await chan("discussion")?.send({ content: `📣 ${interaction.user} montre son inventaire :`, ...payload, allowedMentions: { parse: [] } }).catch(() => null);
     deleteLater(sent, MINUTE);
-    await interaction.editReply({ content: sent ? `✅ Votre inventaire est affiché dans ${channelRef}.` : "❌ Impossible de publier l'inventaire pour le moment." });
+    await interaction.editReply({ content: sent ? `✅ Votre inventaire est affiché dans ${chan("discussion")}.` : "❌ Impossible de publier l'inventaire pour le moment." });
     return true;
   }
 
@@ -872,6 +929,8 @@ async function handleCartesInteraction(interaction, client) {
       }
     }
     questProgress(userId, "open_pack", total);
+    ustat(userId, "packs", total);
+    for (const p of results) if (p.card.shiny) ustat(userId, "shiny");
     bump("packsOpened", total);
     const counts = ORDER.map((r) => [r, results.filter((p) => p.card.rarity === r).length]).filter(([, n]) => n);
     const best = [...results].sort((a, b) => ORDER.indexOf(b.card.rarity) - ORDER.indexOf(a.card.rarity) || b.holo - a.holo).slice(0, 8);
@@ -954,7 +1013,7 @@ async function handleCartesInteraction(interaction, client) {
     const card = findCard(id.slice("carte_show_".length));
     if (!card || !ownedIds(userId).has(card.id)) { await interaction.reply({ content: "❌ Vous n'avez pas cette carte.", ephemeral: true }); return true; }
     const holo = Boolean(load().inv[userId]?.[`${card.id}*`]);
-    const msg = await channelRef
+    const msg = await chan("discussion")
       ?.send({ content: `📣 ${interaction.user} montre sa carte :`, files: [await cardFile(card, holo)], allowedMentions: { parse: [] } })
       .catch(() => null);
     deleteLater(msg, MINUTE);
@@ -1079,6 +1138,7 @@ async function handleCartesInteraction(interaction, client) {
     const card = findCard(w.cardId);
     if (card) give(userId, card, w.holo);
     questProgress(userId, "wild");
+    ustat(userId, "wild");
     await interaction.update({
       embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setTitle("⚡ Carte attrapée !").setDescription(`${interaction.user} attrape **${card?.name}** !`)],
       components: [],
@@ -1150,6 +1210,10 @@ function getCollectionSummary(userId) {
   const lines = [`${n} carte(s) · ${collectionScore(userId)} pts`];
   if (best) lines.push(`⭐ ${best.card.name}${best.holo ? " ✦" : ""} (${RARITIES[best.card.rarity].name})`);
   if (arena && arena.w + arena.l + arena.d > 0) lines.push(`⚔️ ${tierOf(arena.elo)[1]} · ${arena.elo} pts`);
+  const title = achievementTitle(userId), unlocked = Object.keys(load().achievements[userId]?.unlocked ?? {}).length;
+  if (unlocked) lines.push(`🏅 ${title ?? ""} · ${unlocked}/${ACHIEVEMENTS.length} succès`);
+  const vit = (load().showcase[userId] ?? []).filter((k) => (load().inv[userId]?.[k] ?? 0) > 0).map(keyLabel);
+  if (vit.length) lines.push(`🖼️ ${vit.join(" · ")}`);
   return lines.join("\n");
 }
 

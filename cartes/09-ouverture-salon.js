@@ -5,6 +5,8 @@ async function openBooster(interaction, client, pulls, title, pack = null) {
   const results = pulls.map((p) => ({ ...p, isNew: give(userId, p.card, p.holo) }));
   questProgress(userId, "open_pack");
   bump("packsOpened");
+  ustat(userId, "packs");
+  for (const p of results) if (p.card.shiny) ustat(userId, "shiny");
   const gained = collectionScore(userId) - scoreBefore;
   const n = results.length, best = results[n - 1];
   // Les animations se préparent à la suite, pendant qu'on regarde les précédentes
@@ -85,10 +87,10 @@ async function openBooster(interaction, client, pulls, title, pack = null) {
 }
 
 async function announcePull(client, user, p) {
-  if (!channelRef) return;
+  if (!chan("annonces")) return;
   const r = RARITIES[p.card.rarity];
   const file = await cardFile(p.card, p.holo);
-  const msg = await channelRef
+  const msg = await chan("annonces")
     .send({
       embeds: [
         new EmbedBuilder()
@@ -135,11 +137,12 @@ async function checkSeriesRewards(client, userId) {
       const member = await guild.members.fetch(userId).catch(() => null);
       if (role && member) await member.roles.add(role).catch(() => null);
     }
-    await channelRef
+    await chan("annonces")
       ?.send({ content: `🏆 <@${userId}> a complété la série **${series.emoji} ${series.name}** ! Récompense : **${formatEuro(series.reward)}**, **500 ✨** et le rôle Collectionneur ${series.name}.`, allowedMentions: { users: [userId] } })
       .then((m) => deleteLater(m, MINUTE))
       .catch(() => null);
   }
+  await checkAchievements(userId);
 }
 
 // --- Poussière d'étoile ---
@@ -170,14 +173,14 @@ const WILD_WEIGHTS = { commune: 40, peucommune: 30, rare: 18, epique: 9, legenda
 let nextWildAt = Date.now() + (30 + Math.random() * 60) * MINUTE;
 
 async function spawnWild(client) {
-  if (!channelRef) return;
+  if (!chan("sauvages")) return;
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
   if (hour < 9 || hour >= 23) return;
   const { card, holo } = drawOne(null, WILD_WEIGHTS);
   const r = RARITIES[card.rarity];
   const id = String(Date.now());
   const file = await cardFile(card, holo);
-  const msg = await channelRef
+  const msg = await chan("sauvages")
     .send({
       embeds: [
         new EmbedBuilder()
@@ -235,9 +238,13 @@ async function panelMessage() {
             "🏪 **Marché** (`/marche`) : achetez et vendez des cartes entre membres · 🔄 **Échanges** (`/echange`) : proposez cartes et argent contre cartes.\n" +
             "⚔️ **Arène** (`/combat`) : combats de cartes en direct, avec mises, paris et classement.\n" +
             "🎯 **Quêtes du jour** (`/quetes`) · ❔ **Guide complet** (`/aide-cartes`)\n" +
+            (activeSeason() ? `${PACKS[SEASONAL[activeSeason()].pack].emoji} **${SEASONAL[activeSeason()].name} — ${SEASONAL[activeSeason()].title}** : booster **${PACKS[SEASONAL[activeSeason()].pack].name}** en édition limitée (${SEASONAL[activeSeason()].dates}) · **${formatEuro(boosterPrice(SEASONAL[activeSeason()].pack))}**\n` : "") +
+            (load().genLaunchAt && GENERATIONS[CURRENT_GEN + 1] ? `🌍 **${GENERATIONS[CURRENT_GEN + 1].name} — ${GENERATIONS[CURRENT_GEN + 1].title}** arrive <t:${Math.floor(load().genLaunchAt / 1000)}:R> !\n` : "") +
+            `⚔️ **Défi de la semaine** : ${weeklyRule()[1]} — ${weeklyRule()[2]}\n` +
+            "🏅 **Succès** (`/succes`) · 🖼️ **Vitrine** (`/vitrine`) · 🏆 classements en direct\n" +
             (weeklyCard() ? `🌟 **Carte de la semaine** : ${weeklyCard().name} — trois fois plus fréquente dans les boosters !\n` : "") +
             "**Raretés** : ⚪ Commune · 🟢 Peu commune · 🔵 Rare · 🟣 Épique · 🟡 Légendaire · 🔴 Mythique · ✦ Holo (5 %)\n" +
-            "✨ Des **cartes sauvages** apparaissent ici de temps en temps : soyez le premier à les attraper !\n" +
+            `✨ Des **cartes sauvages** apparaissent dans ${chan("sauvages")} de temps en temps : soyez le premier à les attraper !\n` +
             "♻️ Recyclez vos doublons en **poussière d'étoile** pour fabriquer la carte de votre choix."
         )
         .addFields({ name: "🏆 Meilleurs collectionneurs", value: leaderboard() || "*Personne pour le moment.*" })
@@ -250,7 +257,8 @@ async function panelMessage() {
         new ButtonBuilder().setCustomId("carte_booster_standard").setLabel("Standard").setEmoji("📦").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("carte_booster_premium").setLabel("Premium").setEmoji("💎").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("carte_booster_prestige").setLabel("Prestige").setEmoji("👑").setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId("carte_daily").setLabel("Booster gratuit").setEmoji("🎁").setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId("carte_daily").setLabel("Booster gratuit").setEmoji("🎁").setStyle(ButtonStyle.Success),
+        ...(activeSeason() ? [new ButtonBuilder().setCustomId(`carte_booster_${SEASONAL[activeSeason()].pack}`).setLabel(PACKS[SEASONAL[activeSeason()].pack].name).setEmoji(PACKS[SEASONAL[activeSeason()].pack].emoji).setStyle(ButtonStyle.Danger)] : [])
       ),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("carte_inv").setLabel("Inventaire").setEmoji("🎒").setStyle(ButtonStyle.Success),
@@ -265,6 +273,10 @@ async function panelMessage() {
         new ButtonBuilder().setCustomId("carte_bt").setLabel("Arène").setEmoji("⚔️").setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId("carte_qt").setLabel("Quêtes").setEmoji("🎯").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("carte_aide_open").setLabel("Guide").setEmoji("❔").setStyle(ButtonStyle.Secondary)
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("carte_succ").setLabel("Succès").setEmoji("🏅").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("carte_vit").setLabel("Ma vitrine").setEmoji("🖼️").setStyle(ButtonStyle.Secondary)
       ),
     ],
   };

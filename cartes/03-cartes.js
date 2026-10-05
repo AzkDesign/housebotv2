@@ -21,6 +21,7 @@ function kindOf(card) {
   if (series === "entreprises") return `Entreprise · ${SECTOR_NAMES[card.sector] ?? "La Maison"}`;
   if (series === "membres") return "Membre de la Maison";
   if (series === "evenements") return "Événement exceptionnel";
+  if (series === "saisons") return `Édition limitée · ${SEASONAL[seasonOfCard(card)]?.name ?? "Saison"}`;
   return `${KINDS[card.id] ?? "Carte"} · ${SERIES[series]?.name ?? "La Maison"}`;
 }
 

@@ -708,7 +708,8 @@ async function closeTrade(id, status, client) {
   if (!tr || tr.status !== "pending") return;
   tr.status = status;
   save();
-  const msg = tr.messageId ? await channelRef?.messages.fetch(tr.messageId).catch(() => null) : null;
+  const tch = tr.channelId ? await channelRef?.client.channels.fetch(tr.channelId).catch(() => null) : channelRef;
+  const msg = tr.messageId ? await tch?.messages.fetch(tr.messageId).catch(() => null) : null;
   await msg?.edit({ embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [] }).catch(() => null);
   deleteLater(msg, MINUTE);
 }

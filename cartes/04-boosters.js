@@ -56,7 +56,7 @@ const BOOSTERS = {
   prestige: { name: "Prestige", emoji: "👑", price: 5000, size: 3, guarantee: "epique" },
 };
 function boosterPrice(key) {
-  const base = BOOSTERS[key].price;
+  const base = (BOOSTERS[key] ?? PACKS[key]).price;
   return lawActive("soldesBoosters") ? Math.round(base * (1 - lawParam("soldesBoosters") / 100)) : base;
 }
 
@@ -97,6 +97,9 @@ const PACKS = {
   premium: { ...BOOSTERS.premium, tagline: "5 CARTES · 1 RARE GARANTIE", colors: ["#1d4ed8", "#60a5fa", "#0b1340"], accent: "#bfdbfe", metal: "rare", pattern: "losanges", foil: 0.24 },
   prestige: { ...BOOSTERS.prestige, tagline: "3 CARTES · 1 ÉPIQUE GARANTIE", colors: ["#292524", "#57534e", "#050404"], accent: "#fbbf24", metal: "legendaire", pattern: "artdeco", foil: 0.16 },
   jour: { name: "Cadeau du jour", emoji: "🎁", price: 0, size: 1, guarantee: null, tagline: "BOOSTER GRATUIT", colors: ["#047857", "#34d399", "#022c22"], accent: "#a7f3d0", metal: "peucommune", pattern: "confettis", foil: 0.16 },
+  // boosters saisonniers, vendus seulement pendant leur événement
+  frisson: { name: "Frisson", emoji: "🎃", price: 1200, size: 4, guarantee: null, season: "halloween", tagline: "4 CARTES · 1 CARTE D'HALLOWEEN GARANTIE", colors: ["#c2410c", "#fb923c", "#1c0a00"], accent: "#fdba74", metal: "legendaire", pattern: "artdeco", foil: 0.2, featured: ["hw_citrouille", "hw_fantome", "hw_chat"] },
+  givre: { name: "Givré", emoji: "❄️", price: 1200, size: 4, guarantee: null, season: "noel", tagline: "4 CARTES · 1 CARTE DE NOËL GARANTIE", colors: ["#0e7490", "#67e8f9", "#082f49"], accent: "#e0f2fe", metal: "rare", pattern: "losanges", foil: 0.22, featured: ["xm_flocon", "xm_sapin", "xm_renne"] },
 };
 const PACK_ORDER = ["standard", "premium", "prestige", "jour"];
 const packKey = (gen, type) => `g${gen}_${type}`;
@@ -128,6 +131,7 @@ function takePack(userId, key) {
   return true;
 }
 function packPulls(gen, type) {
+  if (PACKS[type].season) return seasonPackPulls(gen, type);
   const P = PACKS[type];
   const size = type === "jour" ? (lawActive("boosterDouble") ? 2 : 1) : P.size;
   const pulls = Array.from({ length: size }, () => drawOne(null, null, gen));
@@ -282,7 +286,7 @@ async function drawPackBase(gen, type) {
   }
 
   // Éventail des cartes vedettes de la génération
-  const feat = G.featured[type].map(findCard).filter(Boolean);
+  const feat = (P.featured ?? G.featured[type] ?? []).map(findCard).filter(Boolean);
   for (const i of [0, 2, 1]) {
     const card = feat[i];
     if (!card) continue;
@@ -345,19 +349,20 @@ async function drawPackBase(gen, type) {
   ctx.stroke();
   ctx.font = "21px CardEngrave";
   ctx.fillStyle = "rgba(255,255,255,0.5)";
-  spaced(ctx, G.name.toUpperCase(), W / 2, 164, 3);
+  const plaque = P.season ? "ÉDITION LIMITÉE" : G.name.toUpperCase(), coverTitle = P.season ? SEASONAL[P.season].title : G.title;
+  spaced(ctx, plaque, W / 2, 164, 3);
   ctx.fillStyle = "#1a0802";
-  spaced(ctx, G.name.toUpperCase(), W / 2, 163, 3);
+  spaced(ctx, plaque, W / 2, 163, 3);
   ctx.font = "52px CardItalic";
   ctx.textAlign = "center";
   ctx.lineJoin = "round";
   ctx.lineWidth = 8;
   ctx.strokeStyle = "rgba(0,0,0,0.55)";
-  ctx.strokeText(G.title, W / 2, 246);
+  ctx.strokeText(coverTitle, W / 2, 246);
   ctx.shadowColor = P.accent;
   ctx.shadowBlur = 18;
   ctx.fillStyle = "#ffffff";
-  ctx.fillText(G.title, W / 2, 246);
+  ctx.fillText(coverTitle, W / 2, 246);
   ctx.shadowBlur = 0;
 
   // Nom du booster en lettres de métal
@@ -863,7 +868,7 @@ async function drawInventory(user) {
   const owned = ownedIds(userId);
   const groups = albumGroups();
   for (const [i, g] of groups.entries()) {
-    const y = 596 + i * (groups.length > 5 ? 27 : 32), list = allCards().filter((card) => seriesOf(card) === g), have = list.filter((card) => owned.has(card.id)).length;
+    const y = 596 + i * (groups.length > 6 ? 23 : groups.length > 5 ? 27 : 32), list = allCards().filter((card) => seriesOf(card) === g), have = list.filter((card) => owned.has(card.id)).length;
     const pct = list.length ? have / list.length : 0;
     seriesIcon(ctx, g, 60, y, 8, gold[0]);
     ctx.font = "15px CardBold";
@@ -1091,10 +1096,11 @@ function shopPayload() {
         .setTitle(`🛒 Boutique — ${G.name} : ${G.title}`)
         .setDescription(
           ["standard", "premium", "prestige"].map((t) => `${PACKS[t].emoji} **${PACKS[t].name}** — ${PACKS[t].tagline.toLowerCase()} · **${formatEuro(boosterPrice(t))}**${soldes}`).join("\n") +
+            (activeSeason() ? `\n${PACKS[SEASONAL[activeSeason()].pack].emoji} **${PACKS[SEASONAL[activeSeason()].pack].name}** — ${PACKS[SEASONAL[activeSeason()].pack].tagline.toLowerCase()} · **${formatEuro(boosterPrice(SEASONAL[activeSeason()].pack))}** *(édition limitée : ${SEASONAL[activeSeason()].dates})*` : "") +
             "\n\nLes boosters achetés vont dans votre inventaire : ouvrez-les quand vous voulez. Quand une nouvelle génération sortira, ceux-ci ne seront plus vendus."
         ),
     ],
-    components: ["standard", "premium", "prestige"].map((t) =>
+    components: ["standard", "premium", "prestige", ...(activeSeason() ? [SEASONAL[activeSeason()].pack] : [])].map((t) =>
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`carte_buy_${t}_1`).setLabel(`${PACKS[t].name} ×1`).setEmoji(PACKS[t].emoji).setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`carte_buy_${t}_5`).setLabel(`×5 (${canvasText(formatEuro(boosterPrice(t) * 5))})`).setStyle(ButtonStyle.Secondary),

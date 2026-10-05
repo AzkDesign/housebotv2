@@ -14,6 +14,7 @@ async function setupCartes(client) {
   });
   state.channelId = channelRef.id;
   save();
+  await setupCardCategory(client, guild, annonces).catch((err) => console.error("Catégorie des cartes:", err.message));
   refundInterruptedBattles();
   await syncMemberCards(guild);
   client.on("guildMemberUpdate", (_, member) => {
@@ -29,11 +30,13 @@ async function setupCartes(client) {
   setInterval(() => syncMemberCards(guild).catch((err) => console.error("Cartes de membres:", err.message)), 24 * 60 * MINUTE);
   await refreshPanel(client);
   await pickWeeklyCard().catch(() => null);
+  await announceWeeklyRule().catch(() => null);
+  await refreshLeaderboards().catch(() => null);
   publishCardsAnnouncement().catch((err) => console.error("Annonce des cartes:", err.message));
   // prépare les animations des boosters en arrière-plan : le premier acheteur n'attend pas
   setTimeout(async () => {
     for (const card of allCards()) await artImage(card).catch(() => null); // illustrations 3D pour l'album
-    for (const type of PACK_ORDER) {
+    for (const type of [...PACK_ORDER, ...(activeSeason() ? [SEASONAL[activeSeason()].pack] : [])]) {
       await packShineGif(CURRENT_GEN, type).catch(() => null);
       await packOpenGif(CURRENT_GEN, type).catch(() => null);
     }
@@ -46,6 +49,11 @@ async function setupCartes(client) {
         await spawnWild(client);
       }
       snapshotCotes();
+      await announceSeason();
+      await announceWeeklyRule();
+      await checkScheduledGeneration();
+      await dailyBackup().catch((err) => console.error("Sauvegarde des cartes:", err.message));
+      if (new Date().getMinutes() % 10 === 0) await refreshLeaderboards().catch(() => null);
       await pickWeeklyCard();
       await checkArenaSeason(client);
       const st = load();

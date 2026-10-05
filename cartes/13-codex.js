@@ -10,11 +10,13 @@ const EVENT_HOW = {
   ev_champion: "Finir 1er d'une saison d'Arène",
   ev_podium: "Finir sur le podium d'une saison",
 };
-const craftableGroups = () => albumGroups().filter((g) => g !== "evenements");
+const craftableGroups = () => albumGroups().filter((g) => g !== "evenements" && g !== "saisons");
 // comment obtenir une carte : [icône, texte court, couleur]
 function howToGet(card) {
   if (card.shiny) return ["🍀", "Shiny · 1 chance sur 250", "#34d399"];
   if (EVENT_HOW[card.id]) return ["🎖️", EVENT_HOW[card.id], "#fbbf24"];
+  const season = seasonOfCard(card);
+  if (season && !load().market.some((l) => l.key.replace("*", "") === card.id)) return [PACKS[SEASONAL[season].pack].emoji, `Booster ${PACKS[SEASONAL[season].pack].name} · ${SEASONAL[season].dates}`, "#fb923c"];
   const listings = load().market.filter((l) => l.key.replace("*", "") === card.id);
   if (listings.length) return ["🏪", `Au marché dès ${euro(Math.min(...listings.map((l) => l.price)))}`, "#4ade80"];
   const craft = craftableGroups().includes(seriesOf(card)) ? ` · ${craftCost(card)} ✨` : "";

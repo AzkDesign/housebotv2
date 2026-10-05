@@ -192,6 +192,10 @@ function load() {
   state.pairs ??= {}; // échanges et ventes entre deux mêmes membres (anti double compte)
   state.pairAlerted ??= {};
   state.quests ??= {}; // quêtes du jour
+  state.userStats ??= {}; // statistiques de jeu (succès)
+  state.achievements ??= {}; // succès débloqués et titre choisi
+  state.showcase ??= {}; // vitrine : trois cartes exposées
+  state.arenaWeekly ??= {}; // défi d'Arène de la semaine
   CURRENT_GEN = state.currentGen ?? 1; // userId -> { « g1_standard »: nombre de boosters fermés }
   return state;
 }
@@ -228,7 +232,7 @@ function memberCards(activeOnly = false) {
 // séries fixes déjà lancées (une série d'une génération future reste cachée)
 const launchedSeries = () => Object.values(SERIES).filter((sr) => (sr.gen ?? 1) <= CURRENT_GEN);
 function allCards() {
-  return [...launchedSeries().flatMap((sr) => sr.cards), ...companyCards(), ...memberCards(), ...Object.values(EVENTS), ...Object.values(SHINIES)];
+  return [...launchedSeries().flatMap((sr) => sr.cards), ...companyCards(), ...memberCards(), ...Object.values(EVENTS), ...Object.values(SHINIES), ...Object.values(SEASON_CARDS)];
 }
 function boosterPool() {
   return [...launchedSeries().flatMap((sr) => sr.cards), ...companyCards(), ...memberCards(true)];
@@ -242,9 +246,10 @@ function seriesOf(card) {
   if (card.id.startsWith("co_")) return "entreprises";
   if (card.id.startsWith("mb_")) return "membres";
   if (card.id.startsWith("v_")) return "voyage";
+  if (card.id.startsWith("hw_") || card.id.startsWith("xm_")) return "saisons";
   return "evenements";
 }
-const SERIES_LABELS = { paris: "🗼 Paris", maison: "🏡 La Maison", voyage: "🌍 Le Grand Voyage", entreprises: "🏢 Les Entreprises", membres: "👤 Les Membres", evenements: "⚡ Événements" };
+const SERIES_LABELS = { paris: "🗼 Paris", maison: "🏡 La Maison", voyage: "🌍 Le Grand Voyage", saisons: "🎃 Saisons", entreprises: "🏢 Les Entreprises", membres: "👤 Les Membres", evenements: "⚡ Événements" };
 
 // Statistiques stables (pour les futures batailles), selon la rareté
 function statsOf(card) {

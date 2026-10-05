@@ -169,6 +169,7 @@ function claimQuests(userId) {
   if (money) changeBalance(userId, money, "Quêtes des cartes", { force: true });
   bump("questMoney", money);
   bump("quests", n);
+  ustat(userId, "quests", n);
   save();
   return { dust, money, n, bonus };
 }
@@ -177,7 +178,7 @@ function claimQuests(userId) {
 function mondayKey() {
   const paris = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" }));
   paris.setDate(paris.getDate() - ((paris.getDay() + 6) % 7));
-  return paris.toISOString().slice(0, 10);
+  return `${paris.getFullYear()}-${String(paris.getMonth() + 1).padStart(2, "0")}-${String(paris.getDate()).padStart(2, "0")}`;
 }
 const weeklyCard = () => (load().weeklyCard?.week === mondayKey() ? findCard(load().weeklyCard.id) : null);
 async function pickWeeklyCard() {
@@ -189,9 +190,9 @@ async function pickWeeklyCard() {
   const old = st.weeklyCard?.messageId;
   st.weeklyCard = { week: mondayKey(), id: card.id };
   save();
-  if (old) await channelRef?.messages.delete(old).catch(() => null);
+  if (old) for (const ch of [chan("annonces"), channelRef]) await ch?.messages.delete(old).catch(() => null);
   const file = await cardFile(card, false);
-  const msg = await channelRef
+  const msg = await chan("annonces")
     ?.send({
       embeds: [
         new EmbedBuilder()
@@ -242,7 +243,7 @@ async function checkArenaSeason(client) {
   }
   st.arenaSeason = { n: n + 1, month: monthKey() };
   save();
-  await channelRef
+  await chan("arene")
     ?.send({
       embeds: [
         new EmbedBuilder()
@@ -266,6 +267,8 @@ function cardsGuideTopics() {
     ["marche", "Marché et échanges", "🏪", `**Marché** (\`/marche\`) : mettez une carte en vente au prix de votre choix, achetez celles des autres. La **cote** suit la circulation : moins une carte est répandue, plus elle vaut cher. Commission de 5 %, annonces valables 7 jours.\n\n**Échanges** (\`/echange\`) : proposez cartes et argent contre les cartes d'un autre membre ; il a 24 h pour accepter.\n\n⏳ Il faut être sur le serveur depuis au moins ${MIN_SENIORITY_DAYS} jours pour échanger, vendre, acheter ou parier.`],
     ["arene", "Arène et combats", "⚔️", "`/combat @membre` (avec une mise si vous voulez) ou **affrontez la Maison**. Chaque joueur choisit 3 cartes.\n\nChaque manche, choisissez **en secret** : ⚔️ Attaque, 🛡️ Garde, 💥 Spécial (3 ⚡) ou 🔄 Changer.\n**Triangle** : la Garde bat l'Attaque, l'Attaque interrompt le Spécial, le Spécial brise la Garde. La garde s'use si vous la répétez.\n**Types** : Paris bat Entreprises, qui battent La Maison, qui bat Paris.\n\n🏆 Une **saison** par mois : le top 3 gagne une carte exclusive, de la poussière, et le n°1 le rôle **Champion de l'Arène**. Les spectateurs peuvent **parier** pendant les 2 premières manches."],
     ["quetes", "Quêtes du jour", "🎯", "`/quetes` : trois quêtes par jour (ouvrir un booster, gagner un combat, vendre une carte…). Elles se valident toutes seules quand vous jouez. Chaque quête rapporte de la poussière et de l'argent, et les trois ensemble donnent **un booster Standard en bonus**."],
+    ["succes", "Succès, titres et vitrine", "🏅", "`/succes` : 18 succès à débloquer (boosters, collection, holos, Shiny, combats, ventes, échanges…). Chacun rapporte de la poussière d'étoile et un **titre** à afficher sur votre `/profil`.\n🖼️ `/vitrine` : exposez vos **trois plus belles cartes**, visibles sur votre profil et à montrer dans la discussion.\n🏆 Les **classements** se mettent à jour en direct dans leur salon."],
+    ["saisons", "Événements saisonniers", "🎃", "Pendant **Halloween** (20 oct. – 5 nov.) et **Noël** (1er déc. – 6 janv.), un booster en **édition limitée** est vendu : 4 cartes, dont au moins une des **7 cartes exclusives** de l'événement. Le booster disparaît à la fin de l'événement, mais les cartes restent pour toujours.\n⚔️ Chaque semaine, l'Arène a aussi sa **règle spéciale** : gagnez 3 combats pour remporter un booster Premium."],
     ["membres", "Cartes de membres", "👤", "Chaque membre de la Maison a **sa propre carte**, créée automatiquement : sa photo, ses PV et deux attaques. **Plus son rôle est haut, plus sa carte est forte** (de Résident Argent à Icône de la Maison). Les statistiques viennent de son activité, de son ancienneté, de sa fortune et de ses élections Membre Star."],
   ];
 }
