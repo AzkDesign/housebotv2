@@ -65,6 +65,11 @@ async function registerSlashCommands(client, token) {
       .addUserOption((o) => o.setName("membre").setDescription("Le membre (vous par défaut)"))
       .addBooleanOption((o) => o.setName("prive").setDescription("Afficher la carte seulement pour vous (avec vos infos privées)"))
       .toJSON(),
+    new SlashCommandBuilder()
+      .setName("inventaire")
+      .setDescription("Vos boosters de cartes, votre collection et vos statistiques")
+      .addUserOption((o) => o.setName("membre").setDescription("Voir l'inventaire d'un autre membre"))
+      .toJSON(),
   ];
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -77,7 +82,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear et /profil enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil et /inventaire enregistrées");
 }
 
 module.exports = { registerSlashCommands };
