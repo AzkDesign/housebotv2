@@ -66,6 +66,38 @@ async function registerSlashCommands(client, token) {
       .addBooleanOption((o) => o.setName("prive").setDescription("Afficher la carte seulement pour vous (avec vos infos privées)"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("quetes")
+      .setDescription("Vos trois quêtes du jour des Cartes de la Maison")
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName("aide-cartes")
+      .setDescription("Le guide complet des Cartes de la Maison")
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName("carte-offrir")
+      .setDescription("(Gérants) Offrir une carte d'événement à un membre")
+      .addUserOption((o) => o.setName("membre").setDescription("Le membre qui reçoit la carte").setRequired(true))
+      .addStringOption((o) =>
+        o
+          .setName("carte")
+          .setDescription("La carte d'événement")
+          .setRequired(true)
+          .addChoices(
+            { name: "Star de la semaine (épique)", value: "ev_star" },
+            { name: "Élu(e) Maire (légendaire)", value: "ev_maire" },
+            { name: "Jackpot ! (légendaire)", value: "ev_jackpot" },
+            { name: "Podium de l'Arène (légendaire)", value: "ev_podium" },
+            { name: "Champion de l'Arène (mythique)", value: "ev_champion" }
+          )
+      )
+      .addBooleanOption((o) => o.setName("holo").setDescription("Version holographique"))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName("generation")
+      .setDescription("(Gérants) Voir ou lancer la génération de cartes suivante")
+      .addStringOption((o) => o.setName("action").setDescription("Que faire").setRequired(true).addChoices({ name: "Voir l'état", value: "statut" }, { name: "Lancer la génération suivante", value: "lancer" }))
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("combat")
       .setDescription("Défier un membre en combat de cartes (ou ouvrir l'Arène)")
       .addUserOption((o) => o.setName("membre").setDescription("Le membre à défier (vide : menu de l'Arène)"))
@@ -106,7 +138,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat et /arene enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir et /generation enregistrées");
 }
 
 module.exports = { registerSlashCommands };
