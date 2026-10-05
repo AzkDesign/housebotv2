@@ -143,6 +143,7 @@ function load() {
   state.market ??= []; // annonces du marché (cartes retirées de l'inventaire pendant la vente)
   state.sales ??= []; // historique des ventes (cote)
   state.trades ??= {}; // propositions d'échange
+  state.coteHistory ??= {}; // relevés quotidiens des cotes (tendance)
   state.packs ??= {}; // userId -> { « g1_standard »: nombre de boosters fermés }
   return state;
 }
@@ -4519,13 +4520,67 @@ const COTE_BASE = { commune: 150, peucommune: 300, rare: 750, epique: 3000, lege
 const MARKET_FEE = 0.05, MARKET_MAX = 10, MARKET_DAYS = 7, TRADE_HOURS = 24, MK_PER_PAGE = 8, TRADE_MAX_CARDS = 5;
 const cardOfKey = (key) => findCard(String(key).replace("*", ""));
 const isHoloKey = (key) => String(key).endsWith("*");
+// Nombre d'exemplaires en jeu (inventaires + annonces du marché), recalculé au plus toutes les 30 s
+let supplyCache = null;
+function supplyMap() {
+  if (supplyCache && Date.now() - supplyCache.at < 30000) return supplyCache.map;
+  const map = {};
+  for (const inv of Object.values(load().inv)) for (const [k, n] of Object.entries(inv)) if (n > 0) map[k] = (map[k] ?? 0) + n;
+  for (const l of load().market) map[l.key] = (map[l.key] ?? 0) + 1;
+  supplyCache = { at: Date.now(), map };
+  return map;
+}
+const circulation = (key) => supplyMap()[key] ?? 0;
+// circulation moyenne des cartes de même rareté (et même version, holo ou non)
+function avgCirculation(rarity, holo) {
+  const cards = allCards().filter((c) => c.rarity === rarity);
+  if (!cards.length) return 0;
+  const map = supplyMap();
+  return cards.reduce((a, c) => a + (map[holo ? `${c.id}*` : c.id] ?? 0), 0) / cards.length;
+}
+// Cote d'une carte :
+//  · prix de base selon la rareté (×3 en holo)
+//  · × rareté réelle en jeu : moins d'exemplaires que la moyenne de sa rareté = plus cher (de ×0,5 à ×3)
+//  · × pression du marché : beaucoup d'annonces pour la même carte = un peu moins cher
+//  · mélangé à 50 % avec le prix médian des ventes des 14 derniers jours
 function coteOf(key) {
   const card = cardOfKey(key);
   if (!card) return 0;
-  const recent = load().sales.filter((s) => s.key === key).slice(-5).map((s) => s.price).sort((a, b) => a - b);
-  if (recent.length >= 2) return recent[Math.floor(recent.length / 2)];
-  return COTE_BASE[card.rarity] * (isHoloKey(key) ? 3 : 1);
+  const holo = isHoloKey(key);
+  const base = COTE_BASE[card.rarity] * (holo ? 3 : 1);
+  const scarcity = Math.min(3, Math.max(0.5, Math.sqrt((avgCirculation(card.rarity, holo) + 1) / (circulation(key) + 1))));
+  const listed = load().market.filter((l) => l.key === key).length;
+  let price = (base * scarcity) / (1 + 0.08 * listed);
+  const recent = load()
+    .sales.filter((x) => x.key === key && Date.now() - x.at < 14 * 86400000)
+    .slice(-5)
+    .map((x) => x.price)
+    .sort((a, b) => a - b);
+  if (recent.length >= 2) price = price * 0.5 + recent[Math.floor(recent.length / 2)] * 0.5;
+  return Math.max(10, Math.round(price / 10) * 10);
 }
+// Relevé quotidien des cotes, pour afficher la tendance sur 7 jours
+function snapshotCotes() {
+  const st = load();
+  const day = dayKey();
+  if (st.coteDay === day) return;
+  st.coteDay = day;
+  const keys = new Set([...Object.keys(supplyMap()), ...st.market.map((l) => l.key)]);
+  for (const k of keys) {
+    if (!cardOfKey(k)) continue;
+    const h = (st.coteHistory[k] ??= []);
+    h.push([day, coteOf(k)]);
+    if (h.length > 14) h.shift();
+  }
+  save();
+}
+function coteTrend(key) {
+  const h = load().coteHistory[key];
+  if (!h?.length) return null;
+  const ref = h.length >= 7 ? h[h.length - 7][1] : h[0][1];
+  return ref ? Math.round((coteOf(key) / ref - 1) * 100) : null;
+}
+const trendText = (v) => (v === null ? "pas encore de tendance" : v === 0 ? "stable" : `${v > 0 ? "📈 +" : "📉 "}${v} % sur 7 jours`);
 const euro = (n) => canvasText(formatEuro(Math.round(n)));
 function ago(ms) {
   const min = Math.floor((Date.now() - ms) / 60000);
@@ -4754,7 +4809,9 @@ async function drawMarket(view, viewerId) {
     const diff = Math.round((ratio - 1) * 100);
     ctx.font = "13px CardBold";
     ctx.fillStyle = diff <= -10 ? "#4ade80" : diff >= 10 ? "#f87171" : "#cbb9a9";
-    ctx.fillText(`cote ${euro(cote)} · ${diff > 0 ? "+" : ""}${diff} %`, x + tw / 2, y + 350);
+    const coteLine = `cote ${euro(cote)} · ${diff > 0 ? "+" : ""}${diff} % · ${circulation(l.key)} en jeu`;
+    ctx.font = `${fitText(ctx, coteLine, tw - 24, 13, "CardBold")}px CardBold`;
+    ctx.fillText(coteLine, x + tw / 2, y + 350);
     ctx.font = "12px CardText";
     ctx.fillStyle = "#a08a7a";
     ctx.fillText(`par ${String(l.sellerName ?? "?").slice(0, 18)} · ${ago(l.at)}`, x + tw / 2, y + 369);
@@ -4801,7 +4858,7 @@ async function marketPayload(user) {
     .setTitle("🏪 Marché de la Maison")
     .setDescription("Filtrez, triez, puis choisissez une annonce par son **numéro** pour l'acheter. Pour vendre, utilisez **Vendre une carte** (ou le bouton 💰 sur une carte de votre album).")
     .setImage("attachment://marche.jpg")
-    .setFooter({ text: `Commission de ${Math.round(MARKET_FEE * 100)} % sur chaque vente · annonces valables ${MARKET_DAYS} jours · ${MARKET_MAX} annonces maximum par membre` });
+    .setFooter({ text: `La cote suit la circulation : moins une carte est répandue, plus elle vaut cher · commission de ${Math.round(MARKET_FEE * 100)} % · annonces valables ${MARKET_DAYS} jours` });
   const rows = [
     new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_mk_series").setPlaceholder("Série").addOptions(seriesOptions(view.series))),
     new ActionRowBuilder().addComponents(
@@ -5535,7 +5592,8 @@ async function handleCartesInteraction(interaction, client) {
           .setTitle(`🛒 Acheter ${keyLabel(l.key)} ?`)
           .setDescription(
             `**Prix : ${formatEuro(l.price)}**\n` +
-              `Cote : ${formatEuro(cote)} (${diff > 0 ? "+" : ""}${diff} %${diff <= -20 ? " · bonne affaire !" : ""})\n` +
+              `Cote : ${formatEuro(cote)} (${diff > 0 ? "+" : ""}${diff} %${diff <= -20 ? " · bonne affaire !" : ""}) · ${trendText(coteTrend(l.key))}\n` +
+              `En circulation : **${circulation(l.key)}** exemplaire${circulation(l.key) > 1 ? "s" : ""} (moyenne des cartes ${RARITIES[card.rarity].name.toLowerCase()}s : ${avgCirculation(card.rarity, isHoloKey(l.key)).toFixed(1).replace(".", ",")})\n` +
               `Rareté : ${RARITIES[card.rarity].emoji} ${RARITIES[card.rarity].name}${isHoloKey(l.key) ? " ✦ holo" : ""}\n` +
               `Vendeur : ${l.sellerName} · mise en vente ${ago(l.at)}\n\n` +
               `Votre solde : **${formatEuro(readBalance(userId))}**${ownedIds(userId).has(card.id) ? "\n*Vous avez déjà cette carte : ce sera un doublon.*" : ""}`
@@ -6242,6 +6300,7 @@ async function setupCartes(client) {
         nextWildAt = Date.now() + (60 + Math.random() * 120) * MINUTE; // toutes les 1 à 3 heures
         await spawnWild(client);
       }
+      snapshotCotes();
       for (const [tid, tr] of Object.entries(load().trades)) {
         if (tr.status === "pending" && Date.now() > tr.at + TRADE_HOURS * 3600000) await closeTrade(tid, "expired");
         else if (tr.status !== "pending" && Date.now() - tr.at > 7 * 86400000) {
