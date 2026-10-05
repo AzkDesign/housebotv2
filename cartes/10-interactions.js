@@ -461,7 +461,7 @@ async function handleCartesInteraction(interaction, client) {
       .catch(() => null);
     if (ORDER.indexOf(card.rarity) >= ORDER.indexOf("legendaire") || l.price >= 20000) {
       const msg = await channelRef?.send({ content: `🏪 **Grosse vente au marché !** ${RARITIES[card.rarity].emoji} **${keyLabel(l.key)}** vient de partir pour **${formatEuro(l.price)}**.`, allowedMentions: { parse: [] } }).catch(() => null);
-      deleteLater(msg, 360 * MINUTE);
+      deleteLater(msg, MINUTE);
     }
     await checkSeriesRewards(client, userId);
     panelDirty = true;
@@ -817,6 +817,7 @@ async function handleCartesInteraction(interaction, client) {
     await interaction.deferReply({ ephemeral: true });
     const payload = await inventoryPayload(interaction.user, false);
     const sent = await channelRef?.send({ content: `📣 ${interaction.user} montre son inventaire :`, ...payload, allowedMentions: { parse: [] } }).catch(() => null);
+    deleteLater(sent, MINUTE);
     await interaction.editReply({ content: sent ? `✅ Votre inventaire est affiché dans ${channelRef}.` : "❌ Impossible de publier l'inventaire pour le moment." });
     return true;
   }
@@ -927,7 +928,7 @@ async function handleCartesInteraction(interaction, client) {
     const msg = await channelRef
       ?.send({ content: `📣 ${interaction.user} montre sa carte :`, files: [await cardFile(card, holo)], allowedMentions: { parse: [] } })
       .catch(() => null);
-    deleteLater(msg, 30 * MINUTE);
+    deleteLater(msg, MINUTE);
     await interaction.update({ components: [] });
     return true;
   }
@@ -1053,7 +1054,7 @@ async function handleCartesInteraction(interaction, client) {
       embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setTitle("⚡ Carte attrapée !").setDescription(`${interaction.user} attrape **${card?.name}** !`)],
       components: [],
     });
-    deleteLater(interaction.message, 10 * MINUTE);
+    deleteLater(interaction.message, MINUTE);
     await checkSeriesRewards(client, userId);
     panelDirty = true;
     return true;

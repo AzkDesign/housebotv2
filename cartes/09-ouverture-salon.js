@@ -100,7 +100,7 @@ async function announcePull(client, user, p) {
       allowedMentions: { parse: [] },
     })
     .catch(() => null);
-  if (ORDER.indexOf(p.card.rarity) < ORDER.indexOf("legendaire")) deleteLater(msg, 60 * MINUTE);
+  deleteLater(msg, MINUTE);
 }
 
 // --- Album et récompenses ---
@@ -137,6 +137,7 @@ async function checkSeriesRewards(client, userId) {
     }
     await channelRef
       ?.send({ content: `🏆 <@${userId}> a complété la série **${series.emoji} ${series.name}** ! Récompense : **${formatEuro(series.reward)}**, **500 ✨** et le rôle Collectionneur ${series.name}.`, allowedMentions: { users: [userId] } })
+      .then((m) => deleteLater(m, MINUTE))
       .catch(() => null);
   }
 }
@@ -199,7 +200,7 @@ async function spawnWild(client) {
     load().wild = null;
     save();
     await msg.edit({ embeds: [EmbedBuilder.from(msg.embeds[0]).setTitle("💨 La carte s'est envolée…").setDescription("Personne ne l'a attrapée à temps.")], components: [] }).catch(() => null);
-    deleteLater(msg, 5 * MINUTE);
+    deleteLater(msg, MINUTE);
   }, 15 * MINUTE);
 }
 
