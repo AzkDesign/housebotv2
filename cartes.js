@@ -21,7 +21,8 @@ const { lawActive, lawParam } = require("./politique");
 const { findOrCreateChannel, findOrCreateRole } = require("./salons");
 const { deleteLater, MINUTE } = require("./nettoyage");
 
-const ANNOUNCE_CHANNEL_ID = "1509983723892903966"; // le salon des cartes est rangé à côté des annonces
+const ANNOUNCE_CHANNEL_ID = "1509983723892903966";
+const MEMBER_CARD_ROLE_ID = "1509983439968010401"; // tous les membres avec ce rôle ont automatiquement leur carte // le salon des cartes est rangé à côté des annonces
 const STATE_FILE = require("./data").dataFile("cartes-state.json");
 const PANEL_TITLE = "🃏 Les Cartes de la Maison";
 
@@ -137,7 +138,7 @@ function load() {
   state.inv ??= {}; // userId -> { cléCarte: nombre }  (clé « id* » = version holo)
   state.dust ??= {};
   state.daily ??= {};
-  state.optIn ??= {};
+  state.memberArchive ??= {}; // dernières infos connues des cartes de membres (pour les exemplaires déjà obtenus)
   state.rewards ??= {};
   state.wild ??= null;
   state.market ??= []; // annonces du marché (cartes retirées de l'inventaire pendant la vente)
@@ -167,12 +168,10 @@ function companyCards() {
 }
 
 let memberCache = new Map(); // userId -> { name, avatar, stars, role, joinedAt, messages, balance }
-function memberCards() {
-  const s = load();
-  return Object.keys(s.optIn)
-    .filter((id) => memberCache.has(id))
-    .map((id) => {
-      const m = memberCache.get(id);
+function memberCards(activeOnly = false) {
+  const entries = activeOnly ? [...memberCache.entries()] : Object.entries({ ...load().memberArchive, ...Object.fromEntries(memberCache) });
+  return entries
+    .map(([id, m]) => {
       const { rating, rarity, stats } = memberProfile(id, m);
       const text = m.role ? `${m.role.name} de la Maison${m.stars ? ` · Membre Star ${m.stars} fois` : ""}.` : "Membre de la Maison.";
       return { ...C(`mb_${id}`, m.name, "👤", rarity, text), avatar: m.avatar, memberId: id, role: m.role, rating, stars: m.stars, memberStats: stats, joinedAt: m.joinedAt };
@@ -183,7 +182,7 @@ function allCards() {
   return [...SERIES.paris.cards, ...SERIES.maison.cards, ...companyCards(), ...memberCards(), ...Object.values(EVENTS)];
 }
 function boosterPool() {
-  return [...SERIES.paris.cards, ...SERIES.maison.cards, ...companyCards(), ...memberCards()];
+  return [...SERIES.paris.cards, ...SERIES.maison.cards, ...companyCards(), ...memberCards(true)];
 }
 function findCard(id) {
   return allCards().find((c) => c.id === id) ?? null;
@@ -6185,22 +6184,18 @@ async function handleCartesInteraction(interaction, client) {
   }
 
   if (id === "carte_member") {
-    const s = load();
-    const on = !s.optIn[userId];
-    if (on) s.optIn[userId] = true;
-    else delete s.optIn[userId];
-    save();
-    if (on) {
-      await cacheMember(interaction.member);
-      const card = memberCards().find((c) => c.memberId === userId);
-      await interaction.reply({
-        content: `👤 Votre carte de membre est créée ! Note **${card?.rating ?? "?"}** — ${card ? MEMBER_TIERS[card.rarity]?.name.toLowerCase() : ""}, selon votre rôle le plus haut${card?.role ? ` (**${card.role.name}**)` : ""}. Plus votre rôle est haut, plus votre carte est forte. Elle peut maintenant sortir dans les boosters. (Re-cliquez pour la retirer.)`,
-        ephemeral: true,
-        files: card ? [await cardFile(card, false)] : [],
-      });
-    } else {
-      await interaction.reply({ content: "👤 Votre carte de membre est retirée des boosters (les exemplaires déjà obtenus restent).", ephemeral: true });
+    if (!interaction.member?.roles.cache.has(MEMBER_CARD_ROLE_ID)) {
+      await interaction.reply({ content: `👤 Les cartes de membres sont créées automatiquement pour les membres qui ont le rôle <@&${MEMBER_CARD_ROLE_ID}>.`, ephemeral: true, allowedMentions: { parse: [] } });
+      return true;
     }
+    await interaction.deferReply({ ephemeral: true });
+    await cacheMember(interaction.member);
+    save();
+    const card = memberCards(true).find((c) => c.memberId === userId);
+    await interaction.editReply({
+      content: `👤 Votre carte de membre : note **${card?.rating ?? "?"}** — ${card ? MEMBER_TIERS[card.rarity]?.name.toLowerCase() : ""}, selon votre rôle le plus haut${card?.role ? ` (**${card.role.name}**)` : ""}. Plus votre rôle est haut, plus votre carte est forte. Elle peut sortir dans les boosters de tout le monde.`,
+      files: card ? [await cardFile(card, false)] : [],
+    });
     return true;
   }
 
@@ -6247,7 +6242,7 @@ async function cacheMember(member) {
   } catch {
     // niveaux indisponibles
   }
-  memberCache.set(member.id, {
+  const info = {
     name: member.displayName,
     avatar: member.user.displayAvatarURL({ extension: "png", size: 512 }),
     stars,
@@ -6255,7 +6250,24 @@ async function cacheMember(member) {
     joinedAt: member.joinedTimestamp,
     messages,
     balance: readBalance(member.id) ?? 0,
-  });
+  };
+  memberCache.set(member.id, info);
+  load().memberArchive[member.id] = info;
+}
+
+// Toutes les personnes avec le rôle des membres ont leur carte ; les autres sortent des boosters
+async function syncMemberCards(guild) {
+  const members = await guild.members.fetch().catch(() => null);
+  if (!members) return;
+  const keep = new Set();
+  for (const member of members.values()) {
+    if (member.user.bot || !member.roles.cache.has(MEMBER_CARD_ROLE_ID)) continue;
+    keep.add(member.id);
+    await cacheMember(member).catch(() => null);
+  }
+  for (const id of [...memberCache.keys()]) if (!keep.has(id)) memberCache.delete(id);
+  save();
+  console.log(`Cartes de membres : ${keep.size} membre(s) avec le rôle`);
 }
 
 // Pour /profil
@@ -6280,10 +6292,16 @@ async function setupCartes(client) {
   });
   state.channelId = channelRef.id;
   save();
-  for (const id of Object.keys(state.optIn)) await cacheMember(await guild.members.fetch(id).catch(() => null));
+  await syncMemberCards(guild);
   client.on("guildMemberUpdate", (_, member) => {
-    if (load().optIn[member.id]) cacheMember(member).catch(() => null);
+    if (member.guild.id !== guild.id || member.user.bot) return;
+    if (member.roles.cache.has(MEMBER_CARD_ROLE_ID)) cacheMember(member).then(save).catch(() => null);
+    else memberCache.delete(member.id);
   });
+  client.on("guildMemberRemove", (member) => {
+    if (member.guild.id === guild.id) memberCache.delete(member.id);
+  });
+  setInterval(() => syncMemberCards(guild).catch((err) => console.error("Cartes de membres:", err.message)), 24 * 60 * MINUTE);
   await refreshPanel(client);
   // prépare les animations des boosters en arrière-plan : le premier acheteur n'attend pas
   setTimeout(async () => {
