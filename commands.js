@@ -66,6 +66,10 @@ async function registerSlashCommands(client, token) {
       .addBooleanOption((o) => o.setName("prive").setDescription("Afficher la carte seulement pour vous (avec vos infos privées)"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("codex")
+      .setDescription("Le codex des cartes : toutes celles qui vous manquent et comment les obtenir")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("quetes")
       .setDescription("Vos trois quêtes du jour des Cartes de la Maison")
       .toJSON(),

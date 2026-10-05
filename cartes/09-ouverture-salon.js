@@ -256,7 +256,8 @@ async function panelMessage() {
         new ButtonBuilder().setCustomId("carte_inv").setLabel("Inventaire").setEmoji("🎒").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("carte_album").setLabel("Mon album").setEmoji("📒").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("carte_dust").setLabel("Poussière d'étoile").setEmoji("✨").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("carte_member").setLabel("Ma carte de membre").setEmoji("👤").setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId("carte_member").setLabel("Ma carte de membre").setEmoji("👤").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("carte_cx").setLabel("Codex").setEmoji("📖").setStyle(ButtonStyle.Success)
       ),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("carte_mk").setLabel("Marché").setEmoji("🏪").setStyle(ButtonStyle.Primary),

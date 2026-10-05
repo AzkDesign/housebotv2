@@ -1,5 +1,10 @@
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "codex") {
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await codexPayload(interaction.user));
+    return true;
+  }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "quetes") {
     await interaction.reply(questsPayload(interaction.user.id));
     return true;
@@ -119,6 +124,25 @@ async function handleCartesInteraction(interaction, client) {
   if (typeof id !== "string" || !id.startsWith("carte_")) return false;
   const userId = interaction.user.id;
   load();
+
+  // --- Codex ---
+  if (id === "carte_cx") {
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await codexPayload(interaction.user));
+    return true;
+  }
+  if (["carte_cx_f", "carte_cx_s", "carte_cx_r", "carte_cx_prev", "carte_cx_next"].includes(id)) {
+    const view = codexView(userId);
+    if (id === "carte_cx_f") view.filter = interaction.values[0];
+    if (id === "carte_cx_s") view.series = interaction.values[0];
+    if (id === "carte_cx_r") view.rarity = interaction.values[0];
+    if (id === "carte_cx_prev") view.page--;
+    else if (id === "carte_cx_next") view.page++;
+    else view.page = 0;
+    await interaction.deferUpdate();
+    await interaction.editReply(await codexPayload(interaction.user));
+    return true;
+  }
 
   // --- Quêtes et guide ---
   if (id === "carte_qt") {
@@ -979,7 +1003,7 @@ async function handleCartesInteraction(interaction, client) {
           new StringSelectMenuBuilder()
             .setCustomId("carte_craftseries")
             .setPlaceholder("Choisir une série")
-            .addOptions(["paris", "maison", "entreprises", "membres"].map((k) => ({ label: SERIES_LABELS[k].replace(/^\S+ /, ""), value: k, emoji: SERIES_LABELS[k].split(" ")[0] })))
+            .addOptions(craftableGroups().map((k) => ({ label: SERIES_LABELS[k].replace(/^\S+ /, ""), value: k, emoji: SERIES_LABELS[k].split(" ")[0] })))
         ),
       ],
     });
