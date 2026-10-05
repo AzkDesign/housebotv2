@@ -106,6 +106,7 @@ const FICHES = {
   ev_jackpot: ["a winged lucky cat with golden coin wings", "exploding out of a slot machine in a shower of banknotes and coins", "chance"],
   ev_champion: ["a champion dragon with a golden trophy-shaped crest", "roaring victoriously in a grand arena under fireworks and pillars of light", "feu"],
   ev_podium: ["a pegasus with a glowing medal on its chest", "rearing up on a podium under spotlights and confetti", "lumiere"],
+  sh_trefle: ["a radiant emerald four-leaf-clover fairy creature with shimmering green crystal wings", "bursting out of a glowing meadow in a whirlwind of green sparkles and clover leaves, everything bathed in emerald light", "nature"],
   // --- Entreprises (une créature par secteur, partagée par les entreprises du secteur) ---
   sector_transport: ["a swift cheetah creature with taxi-yellow fur and checkered stripes", "speeding through rainy night streets with headlight light trails", "air"],
   sector_restauration: ["a fire salamander with a chef-hat crest", "tossing flaming dishes in a busy restaurant kitchen", "feu"],

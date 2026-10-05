@@ -13,6 +13,7 @@ function genPool(gen) {
 }
 
 function drawOne(minRarity = null, weights = null, gen = CURRENT_GEN) {
+  if (!minRarity && !weights && Math.random() < SHINY_CHANCE) return { card: SHINIES.sh_trefle, holo: false };
   const w = weights ?? Object.fromEntries(ORDER.map((k) => [k, RARITIES[k].weight]));
   const pool = genPool(gen);
   let rarity = pickRarity(w, minRarity);

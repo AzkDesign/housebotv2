@@ -13,7 +13,7 @@ const FLUENT = {
   "✈️": "Airplane", "🗺️": "World map", "🎒": "Backpack", "📷": "Camera", "🧭": "Compass", "🎫": "Ticket", "🏖️": "Beach with umbrella",
   "🚄": "High-speed train", "🛳️": "Passenger ship", "🗽": "Statue of liberty", "🎡": "Ferris wheel", "🏝️": "Desert island", "🗻": "Mount fuji",
   "🏯": "Japanese castle", "🕌": "Mosque", "🌋": "Volcano", "🚀": "Rocket", "🏜️": "Desert", "🌌": "Milky way", "🗿": "Moai",
-  "🌍": "Globe showing europe-africa", "🏆": "Trophy", "🏅": "Sports medal",
+  "🌍": "Globe showing europe-africa", "🏆": "Trophy", "🏅": "Sports medal", "🍀": "Four leaf clover",
 };
 const FLUENT_SKIN = new Set(["Woman dancing", "Person getting massage"]);
 function fluentUrl(name) {
@@ -167,6 +167,7 @@ const THEMES = {
   ev_jackpot: { scene: "casino", fx: "billets", anim: "popout" },
   ev_champion: { scene: "feux", fx: "or", anim: "popout" },
   ev_podium: { scene: "feux", fx: "confettis" },
+  sh_trefle: { scene: "jardin", fx: "eclats" },
   v_avion: { scene: "jour", fx: "traits" },
   v_carte: { scene: "parchemin", fx: "or" },
   v_sac: { scene: "aube", fx: "poussiere" },

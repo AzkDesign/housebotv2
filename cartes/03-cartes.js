@@ -16,6 +16,7 @@ const KINDS = {
 };
 const SECTOR_NAMES = { transport: "Transport", restauration: "Restauration", garage: "Garage", beaute: "Beauté", evenementiel: "Événementiel", securite: "Sécurité", media: "Média", immobilier: "Immobilier", commerce: "Commerce" };
 function kindOf(card) {
+  if (card.shiny) return "Shiny · Porte-bonheur";
   const series = seriesOf(card);
   if (series === "entreprises") return `Entreprise · ${SECTOR_NAMES[card.sector] ?? "La Maison"}`;
   if (series === "membres") return "Membre de la Maison";

@@ -79,7 +79,7 @@ async function openBooster(interaction, client, pulls, title, pack = null) {
   await interaction.editReply({ embeds, files, components: [row] }).catch(() => null);
   // Grosses cartes : annonce publique
   for (const p of results) {
-    if (ORDER.indexOf(p.card.rarity) >= ORDER.indexOf("epique")) await announcePull(client, interaction.user, p);
+    if (p.card.shiny || ORDER.indexOf(p.card.rarity) >= ORDER.indexOf("epique")) await announcePull(client, interaction.user, p);
   }
   await checkSeriesRewards(client, userId);
 }

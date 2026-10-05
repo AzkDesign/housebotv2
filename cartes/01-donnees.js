@@ -157,6 +157,12 @@ const EVENTS = {
   ev_podium: C("ev_podium", "Podium de l'Arène", "🏅", "legendaire", "Sur le podium de la saison."),
 };
 
+// Cartes shiny : illustration pleine page toute verte, et une chance sur 250 de remplacer une carte tirée d'un booster
+const SHINIES = {
+  sh_trefle: { ...C("sh_trefle", "Trèfle d'Émeraude", "🍀", "rare", "Une chance sur mille de croiser son éclat vert."), shiny: true },
+};
+const SHINY_CHANCE = 1 / 250;
+
 const SECTOR_EMOJI = { transport: "🚕", restauration: "🍽️", garage: "🔧", beaute: "💆", evenementiel: "🎉", securite: "🛡️", media: "📸", immobilier: "🏢", commerce: "🛍️" };
 
 // --- Données ---
@@ -222,7 +228,7 @@ function memberCards(activeOnly = false) {
 // séries fixes déjà lancées (une série d'une génération future reste cachée)
 const launchedSeries = () => Object.values(SERIES).filter((sr) => (sr.gen ?? 1) <= CURRENT_GEN);
 function allCards() {
-  return [...launchedSeries().flatMap((sr) => sr.cards), ...companyCards(), ...memberCards(), ...Object.values(EVENTS)];
+  return [...launchedSeries().flatMap((sr) => sr.cards), ...companyCards(), ...memberCards(), ...Object.values(EVENTS), ...Object.values(SHINIES)];
 }
 function boosterPool() {
   return [...launchedSeries().flatMap((sr) => sr.cards), ...companyCards(), ...memberCards(true)];

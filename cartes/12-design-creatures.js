@@ -182,7 +182,7 @@ function printTexture() {
 async function drawCreatureArt(ctx, card, box, t, el, elKey) {
   const img = await creatureArt(card);
   // pour les pleines pages, le sujet se place au-dessus du panneau des attaques
-  const focus = card.rarity === "mythique" ? { x: box.x, y: box.y + 40, w: box.w, h: 440 } : box;
+  const focus = card.rarity === "mythique" || card.shiny ? { x: box.x, y: box.y + 40, w: box.w, h: 440 } : box;
   if (img) {
     const s = Math.max(box.w / img.width, box.h / img.height) * (1.03 + 0.015 * Math.sin(TAU * t));
     const w = img.width * s, h = img.height * s;
@@ -293,24 +293,60 @@ function artFoil(ctx, card, holo, box, t) {
   ctx.restore();
 }
 
+// Feuille holographique verte des cartes shiny : reflets émeraude, paillettes et lignes de diffraction
+const EMERALD = ["#a7f3d0", "#10b981", "#ecfdf5", "#064e3b", "#34d399"];
+function shinyFoil(ctx, card, box, t) {
+  ctx.save();
+  ctx.globalCompositeOperation = "color";
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = "#10b981";
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "overlay";
+  const sx = box.x - box.w + t * 2 * box.w;
+  const g = ctx.createLinearGradient(sx, box.y, sx + box.w * 2, box.y + box.h);
+  ["#022c22", "#34d399", "#ecfdf5", "#10b981", "#064e3b", "#6ee7b7", "#022c22"].forEach((c, i) => g.addColorStop(i / 6, c));
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = g;
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.globalCompositeOperation = "soft-light";
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = "#ecfdf5";
+  ctx.lineWidth = 1;
+  for (let k = box.x - box.h; k < box.x + box.w; k += 5) {
+    ctx.beginPath();
+    ctx.moveTo(k, box.y);
+    ctx.lineTo(k + box.h * 0.6, box.y + box.h);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = "screen";
+  const R = seeded(hashOf(card.id) + 13);
+  for (let i = 0; i < 80; i++) {
+    const tw = Math.max(0, Math.sin(TAU * (t * 2 + R())));
+    ctx.globalAlpha = 0.2 + 0.8 * tw;
+    sparkle(ctx, box.x + R() * box.w, box.y + R() * box.h, 0.8 + tw * 3, R() < 0.5 ? "#a7f3d0" : "#ffffff");
+  }
+  ctx.restore();
+}
+
 async function drawCreatureCard(card, holo = false, t = 0.37) {
   const W = 600, H = 840, rank = ORDER.indexOf(card.rarity), m = METAL[card.rarity];
   const elKey = elementOf(card), el = ELEMENTS[elKey] ?? ELEMENTS.lumiere;
   const cp = combatProfile(card, holo), series = seriesOf(card);
-  const full = card.rarity === "mythique", gold = card.rarity === "legendaire";
+  const shiny = Boolean(card.shiny), full = card.rarity === "mythique" || shiny, gold = card.rarity === "legendaire";
   const c = createCanvas(W, H);
   const ctx = c.getContext("2d");
   ctx.imageSmoothingQuality = "high";
-  const trim = metalGradient(ctx, W, H, gold ? METAL.legendaire : m, Math.sin(TAU * t) * 0.25);
+  const trim = metalGradient(ctx, W, H, gold ? METAL.legendaire : shiny ? EMERALD : m, Math.sin(TAU * t) * 0.25);
 
   // 1. Bordure : graphite pour toutes, dorée pour les légendaires, prismatique pour les mythiques
   roundRect(ctx, 0, 0, W, H, 28);
   if (gold) ctx.fillStyle = metalGradient(ctx, W, H, METAL.legendaire, Math.sin(TAU * t) * 0.25);
   else {
     const g = ctx.createLinearGradient(0, 0, W, H);
-    g.addColorStop(0, full ? "#2a1846" : "#45454f");
-    g.addColorStop(0.5, full ? "#140a24" : "#24242b");
-    g.addColorStop(1, full ? "#0b0614" : "#121216");
+    g.addColorStop(0, shiny ? "#34d399" : full ? "#2a1846" : "#45454f");
+    g.addColorStop(0.5, shiny ? "#065f46" : full ? "#140a24" : "#24242b");
+    g.addColorStop(1, shiny ? "#022c22" : full ? "#0b0614" : "#121216");
     ctx.fillStyle = g;
   }
   ctx.fill();
@@ -319,7 +355,7 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
     roundRect(ctx, 0, 0, W, H, 28);
     ctx.clip();
     ctx.globalCompositeOperation = "overlay";
-    rainbow(ctx, W, H, t, 0.55);
+    rainbow(ctx, W, H, t, shiny ? 0.3 : 0.55);
     ctx.restore();
   }
   ctx.lineWidth = 2;
@@ -353,7 +389,8 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
   roundRect(ctx, art.x, art.y, art.w, art.h, artR);
   ctx.clip();
   await drawCreatureArt(ctx, card, art, t, el, elKey);
-  artFoil(ctx, card, holo, art, t);
+  if (shiny) shinyFoil(ctx, card, art, t);
+  else artFoil(ctx, card, holo, art, t);
   ctx.restore();
   if (!full) {
     if (rank >= ORDER.indexOf("rare")) {
@@ -400,7 +437,7 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
   ctx.fillText(card.name, 36, 64);
   ctx.textAlign = "right";
   ctx.font = "34px CardTitle";
-  ctx.fillStyle = full ? "#fecaca" : "#b91c1c";
+  ctx.fillStyle = shiny ? "#bbf7d0" : full ? "#fecaca" : "#b91c1c";
   ctx.fillText(String(cp.hp), 520, 66);
   const hpW = ctx.measureText(String(cp.hp)).width;
   ctx.font = "14px CardBold";
@@ -416,9 +453,10 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
     roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 18);
     ctx.clip();
     const gp = ctx.createLinearGradient(0, ry - 40, 0, H);
-    gp.addColorStop(0, "rgba(8,5,18,0)");
-    gp.addColorStop(0.12, "rgba(8,5,18,0.72)");
-    gp.addColorStop(1, "rgba(8,5,18,0.88)");
+    const tint = shiny ? "2,44,34" : "8,5,18";
+    gp.addColorStop(0, `rgba(${tint},0)`);
+    gp.addColorStop(0.12, `rgba(${tint},0.72)`);
+    gp.addColorStop(1, `rgba(${tint},0.88)`);
     ctx.fillStyle = gp;
     ctx.fillRect(16, ry - 40, W - 32, H - ry + 40);
     ctx.restore();
@@ -521,6 +559,12 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
   ctx.font = "11px CardEngrave";
   ctx.fillText(RARITIES[card.rarity].name.toUpperCase(), W / 2 - 34, footY);
   if (holo) sparkle(ctx, W / 2 + 64, footY - 4, 4, `hsl(${Math.round(t * 360)},95%,65%)`);
+  if (shiny) {
+    ctx.font = "11px CardBold";
+    ctx.textAlign = "center";
+    pill(ctx, W / 2 + 74, footY - 4, "SHINY", "#10b981", "#ffffff");
+    ctx.textAlign = "left";
+  }
   ctx.textAlign = "right";
   ctx.font = "11px CardText";
   ctx.fillText(`Illus. La Maison · ${GENERATIONS[card.gen ?? 1]?.code ?? "G1"}`, W - 44, footY);

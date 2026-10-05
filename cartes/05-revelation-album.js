@@ -36,7 +36,7 @@ function pill(ctx, x, y, text, bg, fg) {
 }
 async function revealGif(p, index, total) {
   const { card, holo, isNew } = p;
-  const r = ORDER.indexOf(card.rarity), m = METAL[card.rarity], rc = m[4];
+  const r = card.shiny ? ORDER.indexOf("legendaire") : ORDER.indexOf(card.rarity), m = METAL[card.rarity], rc = card.shiny ? "#34d399" : m[4];
   const RW = 480, RH = 720, FW = 330, FH = 462, cx = RW / 2, cy = 318;
   const N = REVEAL.frames[r], pre = REVEAL.pre[r], flipLen = 6, fr0 = pre + 3;
   const back = drawBack("legendaire");
