@@ -1,5 +1,5 @@
-// « La Maison en direct » : le fil de tout ce qui se passe réellement dans la Maison,
-// plus un message chaque matin (météo de Paris) et un résumé chaque soir.
+// La Maison au quotidien : un message chaque matin (météo de Paris, programme du jour)
+// et un résumé chaque soir. Les événements de la journée sont seulement comptés pour ce résumé.
 const fs = require("fs");
 const cron = require("node-cron");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
@@ -7,11 +7,9 @@ const { findOrCreateChannel } = require("./salons");
 
 const ANNOUNCE_CHANNEL_ID = "1509983723892903966"; // le fil est rangé à côté des annonces
 const STATE_FILE = require("./data").dataFile("feed-state.json");
-const FLUSH_MS = 15 * 60 * 1000; // au plus un message regroupé par quart d'heure
-const MAX_LINES = 12;
+const CHANNEL_NAME = "🌅・la-maison-au-quotidien";
 
 let channelRef = null;
-let queue = [];
 
 function load() {
   try {
@@ -43,23 +41,8 @@ function bump(stat, amount = 1) {
 }
 
 // Ajoute un événement au fil. stat/amount : compteur du résumé du soir (facultatif).
-function post(text, { stat, amount } = {}) {
-  if (text) queue.push(text);
-  if (queue.length > 50) queue.shift();
+function post(_text, { stat, amount } = {}) {
   if (stat) bump(stat, amount ?? 1);
-}
-
-async function flush() {
-  if (!channelRef || !queue.length) return;
-  const hour = parisHour();
-  if (hour < 7) return; // la nuit, on garde les nouvelles pour le matin
-  const lines = queue.splice(0, MAX_LINES);
-  await channelRef
-    .send({
-      embeds: [new EmbedBuilder().setColor(0x8b0000).setAuthor({ name: "📡 La Maison en direct" }).setDescription(lines.map((l) => `• ${l}`).join("\n")).setTimestamp()],
-      allowedMentions: { parse: [] },
-    })
-    .catch(() => null);
 }
 
 // --- Matin : bonjour + météo réelle de Paris ---
@@ -142,19 +125,20 @@ async function setupFeed(client) {
   const state = load();
   channelRef = await findOrCreateChannel(guild, {
     id: state.channelId,
-    name: "📡・la-maison-en-direct",
+    name: CHANNEL_NAME,
     parent: annonces?.parentId ?? undefined,
     permissionOverwrites: [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.SendMessages] },
       { id: client.user.id, allow: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks] },
     ],
   });
+  // Ancien nom (« la Maison en direct ») : on renomme le même salon
+  if (channelRef.name !== CHANNEL_NAME) await channelRef.setName(CHANNEL_NAME).catch(() => null);
   save({ ...load(), channelId: channelRef.id });
 
-  setInterval(() => flush().catch((err) => console.error("Fil en direct:", err.message)), FLUSH_MS);
   cron.schedule("0 8 * * *", () => morning().catch(() => null), { timezone: "Europe/Paris" });
   cron.schedule("30 22 * * *", () => evening().catch(() => null), { timezone: "Europe/Paris" });
-  console.log("Fil « La Maison en direct » prêt");
+  console.log("La Maison au quotidien prête (bonjour 8h, bonne nuit 22h30)");
 }
 
 module.exports = { setupFeed, post };
