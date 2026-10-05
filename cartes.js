@@ -11,7 +11,7 @@ const {
   AttachmentBuilder,
   PermissionFlagsBits,
 } = require("discord.js");
-const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
+const { createCanvas, loadImage, GlobalFonts, Path2D } = require("@napi-rs/canvas");
 const { changeBalance, readBalance, formatEuro, refreshRichestLeaderboard } = require("./economie");
 const { lawActive, lawParam } = require("./politique");
 const { findOrCreateChannel, findOrCreateRole } = require("./salons");
@@ -29,6 +29,8 @@ for (const [file, family] of [
   ["playfair-display-700.ttf", "CardSerif"],
   ["inter-800.ttf", "CardBold"],
   ["inter-500.ttf", "CardText"],
+  ["cinzel-700.ttf", "CardEngrave"],
+  ["playfair-display-700-italic.ttf", "CardItalic"],
 ]) {
   try {
     GlobalFonts.registerFromPath(path.join(FONT_DIR, file), family);
@@ -554,7 +556,7 @@ const SCENES = {
     glow(ctx, b.x + b.w * 0.82, b.y + 95, 150, "#fef9c3", 0.9);
     disc(ctx, b.x + b.w * 0.82, b.y + 95, 32, "#fffbeb");
     for (let i = 0; i < 4; i++) cloud(ctx, b.x + R() * b.w * 0.9 + Math.sin(TAU * (t + i / 4)) * 10, b.y + 70 + R() * 150, 0.6 + R() * 0.6);
-    rooftops(ctx, b, R, ground, "#cbd5e1", null, 0, "#475569");
+    rooftops(ctx, b, R, ground, "#e7dcc8", "rgba(71,85,105,0.55)", 0.5, "#64748b");
   },
   crepuscule(ctx, b, t, R, ground) {
     sky(ctx, b, ["#1e1b4b", "#9d174d", "#fb923c"]);
@@ -1296,26 +1298,88 @@ function drawParticles(ctx, b, t, card, theme, layer, anchor) {
 }
 
 // --- Cadre, ornements et feuilles ---
+// Nature de chaque carte, affichée sous son nom
+const KINDS = {
+  p_belleville: "Quartier", p_seine: "Fleuve", p_metro: "Transport", p_croissant: "Gourmandise", p_baguette: "Gourmandise",
+  p_cafe: "Tradition", p_pigeon: "Habitant", p_marais: "Quartier", p_montmartre: "Quartier", p_champs: "Avenue",
+  p_bateau: "Transport", p_luxembourg: "Jardin", p_haussmann: "Architecture", p_notredame: "Monument", p_opera: "Monument",
+  p_moulin: "Cabaret", p_eiffel: "Monument", p_louvre: "Musée", p_catacombes: "Souterrain", p_versailles: "Château", p_ame: "Légende",
+  m_double: "Chambre", m_repas: "Service", m_valise: "Objet", m_contrat: "Document", m_croupier: "Personnage", m_urne: "Institution",
+  m_airbnb: "Logement", m_facture: "Document", m_suite: "Chambre", m_casino: "Lieu", m_mairie: "Institution", m_irf: "Institution",
+  m_cle: "Objet rare", m_penthouse: "Chambre", m_code: "Document", m_star: "Titre", m_jackpot: "Fortune", m_maire: "Titre",
+  m_papillon: "Emblème", m_dictateur: "Personnage", m_fondation: "Légende",
+};
+const SECTOR_NAMES = { transport: "Transport", restauration: "Restauration", garage: "Garage", beaute: "Beauté", evenementiel: "Événementiel", securite: "Sécurité", media: "Média", immobilier: "Immobilier", commerce: "Commerce" };
+function kindOf(card) {
+  const series = seriesOf(card);
+  if (series === "entreprises") return `Entreprise · ${SECTOR_NAMES[card.sector] ?? "La Maison"}`;
+  if (series === "membres") return "Membre de la Maison";
+  if (series === "evenements") return "Événement exceptionnel";
+  return `${KINDS[card.id] ?? "Carte"} · ${series === "paris" ? "Paris" : "La Maison"}`;
+}
+
+function rrPath(p, x, y, w, h, r) {
+  p.moveTo(x + r, y);
+  p.arcTo(x + w, y, x + w, y + h, r);
+  p.arcTo(x + w, y + h, x, y + h, r);
+  p.arcTo(x, y + h, x, y, r);
+  p.arcTo(x, y, x + w, y, r);
+  p.closePath();
+}
 function metalGradient(ctx, W, H, m, shift = 0) {
   const g = ctx.createLinearGradient(W * shift, 0, W * (1 + shift), H);
   g.addColorStop(0, m[0]);
-  g.addColorStop(0.3, m[1]);
-  g.addColorStop(0.5, m[2]);
-  g.addColorStop(0.75, m[1]);
+  g.addColorStop(0.22, m[1]);
+  g.addColorStop(0.42, m[2]);
+  g.addColorStop(0.5, m[0]);
+  g.addColorStop(0.72, m[1]);
   g.addColorStop(1, m[3]);
   return g;
 }
-// gravure fine sur le cadre métallique
+// gravure fine du cadre métallique
 function engrave(ctx, W, H) {
   ctx.save();
   roundRect(ctx, 0, 0, W, H, 34);
   ctx.clip();
-  ctx.strokeStyle = "rgba(0,0,0,0.13)";
+  ctx.strokeStyle = "rgba(0,0,0,0.12)";
   ctx.lineWidth = 1;
-  for (let k = -H; k < W; k += 7) {
+  for (let k = -H; k < W; k += 6) {
     ctx.beginPath();
     ctx.moveTo(k, 0);
     ctx.lineTo(k + H, H);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+// relief du cadre : arête extérieure sombre, reflet, puis ombre portée vers l'intérieur
+function bevel(ctx, W, H) {
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(0,0,0,0.55)";
+  roundRect(ctx, 1, 1, W - 2, H - 2, 33);
+  ctx.stroke();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  roundRect(ctx, 4, 4, W - 8, H - 8, 30);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  roundRect(ctx, 12, 12, W - 24, H - 24, 26);
+  ctx.stroke();
+}
+// motif guilloché (comme un billet de banque) sur le corps de la carte
+function guilloche(ctx, x, y, w, h, color) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.strokeStyle = rgba(color, 0.07);
+  ctx.lineWidth = 1;
+  for (let k = 0; k < 26; k++) {
+    ctx.beginPath();
+    for (let px = x; px <= x + w; px += 6) {
+      const py = y + (k * h) / 22 + Math.sin(px / 34 + k * 0.55) * 9 + Math.sin(px / 13 + k) * 2;
+      if (px === x) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
     ctx.stroke();
   }
   ctx.restore();
@@ -1325,6 +1389,9 @@ function gem(ctx, x, y, r, color, metal) {
   ctx.beginPath();
   ctx.arc(x, y, r + 5, 0, TAU);
   ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.45)";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
   const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 1, x, y, r);
   g.addColorStop(0, "#ffffff");
   g.addColorStop(0.35, color);
@@ -1334,29 +1401,44 @@ function gem(ctx, x, y, r, color, metal) {
   for (let i = 0; i < 8; i++) ctx.lineTo(x + Math.cos((i * TAU) / 8 + 0.39) * r, y + Math.sin((i * TAU) / 8 + 0.39) * r);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) ctx.lineTo(x + Math.cos((i * TAU) / 8 + 0.39) * r * 0.55, y + Math.sin((i * TAU) / 8 + 0.39) * r * 0.55);
+  ctx.closePath();
+  ctx.stroke();
 }
 // ornements dans les coins de l'illustration (épique et plus)
 function corners(ctx, b, color) {
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = 3;
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 4;
   for (const [x, y, dx, dy] of [[b.x, b.y, 1, 1], [b.x + b.w, b.y, -1, 1], [b.x, b.y + b.h, 1, -1], [b.x + b.w, b.y + b.h, -1, -1]]) {
     ctx.beginPath();
-    ctx.moveTo(x + dx * 10, y + dy * 52);
+    ctx.moveTo(x + dx * 10, y + dy * 58);
     ctx.lineTo(x + dx * 10, y + dy * 10);
-    ctx.lineTo(x + dx * 52, y + dy * 10);
+    ctx.lineTo(x + dx * 58, y + dy * 10);
+    ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + dx * 16, y + dy * 46);
+    ctx.quadraticCurveTo(x + dx * 16, y + dy * 16, x + dx * 46, y + dy * 16);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x + dx * 26, y + dy * 26, 8, 0, TAU);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(x + dx * 24, y + dy * 24, 9, 0, TAU);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + dx * 24, y + dy * 17);
-    ctx.lineTo(x + dx * 31, y + dy * 24);
-    ctx.lineTo(x + dx * 24, y + dy * 31);
-    ctx.lineTo(x + dx * 17, y + dy * 24);
+    ctx.moveTo(x + dx * 26, y + dy * 20);
+    ctx.lineTo(x + dx * 32, y + dy * 26);
+    ctx.lineTo(x + dx * 26, y + dy * 32);
+    ctx.lineTo(x + dx * 20, y + dy * 26);
     ctx.closePath();
     ctx.fill();
   }
+  ctx.shadowBlur = 0;
 }
 function statIcon(ctx, kind, x, y, color) {
   if (kind === 0) return star5(ctx, x, y, 8, color);
@@ -1376,6 +1458,72 @@ function statIcon(ctx, kind, x, y, color) {
   for (const [dx, dy] of [[0, -4], [-4, 2], [4, 2]]) disc(ctx, x + dx, y + dy, 4, color);
   ctx.fillRect(x - 1, y + 3, 2, 7);
 }
+// symbole de série (comme le symbole d'extension des vraies cartes)
+function seriesIcon(ctx, series, x, y, s, color) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  if (series === "paris") {
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s * 0.55, y + s);
+    ctx.lineTo(x + s * 0.25, y + s);
+    ctx.quadraticCurveTo(x, y + s * 0.45, x - s * 0.25, y + s);
+    ctx.lineTo(x - s * 0.55, y + s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(x - s * 0.35, y + s * 0.05, s * 0.7, s * 0.14);
+  } else if (series === "maison") {
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s, y - s * 0.1);
+    ctx.lineTo(x + s * 0.72, y - s * 0.1);
+    ctx.lineTo(x + s * 0.72, y + s * 0.85);
+    ctx.lineTo(x - s * 0.72, y + s * 0.85);
+    ctx.lineTo(x - s * 0.72, y - s * 0.1);
+    ctx.lineTo(x - s, y - s * 0.1);
+    ctx.closePath();
+    ctx.fill();
+  } else if (series === "entreprises") {
+    ctx.fillRect(x - s * 0.6, y - s, s * 0.75, s * 1.85);
+    ctx.fillRect(x + s * 0.2, y - s * 0.3, s * 0.5, s * 1.15);
+  } else if (series === "membres") {
+    ctx.arc(x, y - s * 0.4, s * 0.42, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x, y + s * 0.75, s * 0.75, s * 0.55, 0, Math.PI, TAU);
+    ctx.fill();
+  } else {
+    ctx.moveTo(x + s * 0.2, y - s);
+    ctx.lineTo(x - s * 0.55, y + s * 0.15);
+    ctx.lineTo(x - s * 0.02, y + s * 0.15);
+    ctx.lineTo(x - s * 0.2, y + s);
+    ctx.lineTo(x + s * 0.55, y - s * 0.15);
+    ctx.lineTo(x + s * 0.02, y - s * 0.15);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+// texte espacé lettre par lettre (gravure des plaques)
+function spaced(ctx, text, x, y, spacing) {
+  const chars = Array.from(text);
+  const total = chars.reduce((w, ch) => w + ctx.measureText(ch).width, 0) + spacing * (chars.length - 1);
+  let cx = x - total / 2;
+  const align = ctx.textAlign;
+  ctx.textAlign = "left";
+  for (const ch of chars) {
+    ctx.fillText(ch, cx, y);
+    cx += ctx.measureText(ch).width + spacing;
+  }
+  ctx.textAlign = align;
+  return total;
+}
+function diamond(ctx, x, y, s) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - s);
+  ctx.lineTo(x + s, y);
+  ctx.lineTo(x, y + s);
+  ctx.lineTo(x - s, y);
+  ctx.closePath();
+}
 function rainbow(ctx, W, H, t, alpha) {
   // dégradé arc-en-ciel répété : il avance d'exactement un cycle par boucle
   const sx = -3 * W + t * W, sy = -H + (t * H) / 3;
@@ -1387,31 +1535,53 @@ function rainbow(ctx, W, H, t, alpha) {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
-function drawFoil(ctx, W, H, card, holo, t) {
+// zone holographique : l'illustration et le cadre, pas le texte (comme une vraie carte holo)
+function foilMask(W, H, box) {
+  const p = new Path2D();
+  rrPath(p, 0, 0, W, H, 34);
+  rrPath(p, 14, 14, W - 28, H - 28, 24);
+  rrPath(p, box.x, box.y, box.w, box.h, 18);
+  return p;
+}
+function drawFoil(ctx, W, H, card, holo, t, box) {
   const rank = ORDER.indexOf(card.rarity);
   ctx.save();
   roundRect(ctx, 0, 0, W, H, 34);
   ctx.clip();
   if (holo) {
+    ctx.save();
+    ctx.clip(foilMask(W, H, box), "evenodd");
     const kind = holoKind(card);
     ctx.globalCompositeOperation = "overlay";
-    if (kind === "arcenciel") rainbow(ctx, W, H, t, 0.34);
-    else if (kind === "givre") {
+    if (kind === "arcenciel") {
+      rainbow(ctx, W, H, t, 0.42);
+      // fines lignes de diffraction
+      ctx.globalCompositeOperation = "soft-light";
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      for (let k = -H; k < W; k += 5) {
+        ctx.beginPath();
+        ctx.moveTo(k, 0);
+        ctx.lineTo(k + H * 0.6, H);
+        ctx.stroke();
+      }
+    } else if (kind === "givre") {
       // glace craquelée : éclats aux reflets changeants
-      const R = seeded(hashOf(card.id) + 5), cols = 6, rows = 8, pts = [];
+      const R = seeded(hashOf(card.id) + 5), cols = 7, rows = 10, pts = [];
       for (let r = 0; r <= rows; r++) {
         pts.push([]);
         for (let c = 0; c <= cols; c++) {
           const edge = r === 0 || c === 0 || r === rows || c === cols;
-          pts[r].push([(c / cols) * W + (edge ? 0 : (R() - 0.5) * 70), (r / rows) * H + (edge ? 0 : (R() - 0.5) * 70)]);
+          pts[r].push([(c / cols) * W + (edge ? 0 : (R() - 0.5) * 60), (r / rows) * H + (edge ? 0 : (R() - 0.5) * 60)]);
         }
       }
-      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.strokeStyle = "rgba(255,255,255,0.28)";
       ctx.lineWidth = 1;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           for (const tri of [[pts[r][c], pts[r][c + 1], pts[r + 1][c]], [pts[r][c + 1], pts[r + 1][c + 1], pts[r + 1][c]]]) {
-            ctx.fillStyle = `hsla(${(R() * 360 + t * 360) % 360},95%,62%,0.32)`;
+            ctx.fillStyle = `hsla(${(R() * 360 + t * 360) % 360},95%,62%,0.4)`;
             ctx.beginPath();
             tri.forEach(([x, y]) => ctx.lineTo(x, y));
             ctx.closePath();
@@ -1421,16 +1591,16 @@ function drawFoil(ctx, W, H, card, holo, t) {
         }
       }
     } else {
-      rainbow(ctx, W, H, t, 0.2);
+      rainbow(ctx, W, H, t, 0.26);
       ctx.globalCompositeOperation = "screen";
-      ctx.globalAlpha = 0.9;
+      ctx.globalAlpha = 0.95;
       const R = seeded(hashOf(card.id) + 9);
-      for (let i = 0; i < 140; i++) {
-        const x = R() * W, y = R() * H, hue = (R() * 360 + t * 360) % 360, s = 0.8 + 2.4 * Math.max(0, Math.sin(TAU * (t * 2 + R())));
+      for (let i = 0; i < 170; i++) {
+        const x = R() * W, y = R() * H, hue = (R() * 360 + t * 360) % 360, s = 0.8 + 2.6 * Math.max(0, Math.sin(TAU * (t * 2 + R())));
         sparkle(ctx, x, y, s, `hsl(${hue},95%,72%)`);
       }
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
   if (holo || rank >= ORDER.indexOf("rare")) {
     // reflet lumineux qui balaie la carte
@@ -1439,10 +1609,13 @@ function drawFoil(ctx, W, H, card, holo, t) {
     const sx = -W + t * 3 * W;
     const shine = ctx.createLinearGradient(sx, 0, sx + W * 0.6, H * 0.4);
     shine.addColorStop(0, "rgba(255,255,255,0)");
-    shine.addColorStop(0.5, "rgba(255,255,255,0.9)");
+    shine.addColorStop(0.45, "rgba(255,255,255,0.6)");
+    shine.addColorStop(0.5, "rgba(255,255,255,0.95)");
+    shine.addColorStop(0.55, "rgba(255,255,255,0.6)");
     shine.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = shine;
     ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
   }
   if (rank >= ORDER.indexOf("legendaire")) {
     const R = seeded(hashOf(card.id) + 3);
@@ -1456,7 +1629,7 @@ function drawFoil(ctx, W, H, card, holo, t) {
   }
   if (card.rarity === "mythique") {
     ctx.globalCompositeOperation = "soft-light";
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.45;
     const gx = ctx.createRadialGradient(W * (0.5 + 0.2 * Math.sin(TAU * t)), H * 0.35, 20, W / 2, H / 2, W);
     gx.addColorStop(0, "#c026d3");
     gx.addColorStop(0.5, "#1e3a8a");
@@ -1467,32 +1640,81 @@ function drawFoil(ctx, W, H, card, holo, t) {
   ctx.restore();
 }
 
-// Sujet de la carte : illustration 3D ou médaillon du membre
-async function drawSubject(ctx, card, a, metal) {
+// Sujet de la carte : illustration 3D éclairée (préparée une fois puis mise en cache), ou médaillon du membre
+const subjectCache = new Map();
+async function subjectCanvas(card, size) {
+  const key = `${card.id}:${size}`;
+  if (subjectCache.has(key)) return subjectCache.get(key);
+  const img = await artImage(card);
+  if (!img) return null;
+  const off = createCanvas(size, size);
+  const o = off.getContext("2d");
+  o.imageSmoothingQuality = "high";
+  o.drawImage(img, 0, 0, size, size);
+  o.globalCompositeOperation = "source-atop";
+  // lumière venant d'en haut à gauche, ombre en bas à droite
+  const light = o.createLinearGradient(0, 0, size * 0.55, size);
+  light.addColorStop(0, "rgba(255,255,255,0.24)");
+  light.addColorStop(0.5, "rgba(255,255,255,0)");
+  light.addColorStop(1, "rgba(0,0,0,0.22)");
+  o.fillStyle = light;
+  o.fillRect(0, 0, size, size);
+  // teinte de l'ambiance de la rareté pour fondre le sujet dans le décor
+  o.fillStyle = rgba(METAL[card.rarity][4], 0.08);
+  o.fillRect(0, 0, size, size);
+  subjectCache.set(key, off);
+  if (subjectCache.size > 120) subjectCache.delete(subjectCache.keys().next().value);
+  return off;
+}
+async function drawSubject(ctx, card, a, metal, m) {
   if (card.avatar) {
     const img = await fetchImage(`avatar:${card.avatar}`, card.avatar);
     const r = a.size / 2;
     ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.6)";
-    ctx.shadowBlur = 35;
-    ctx.shadowOffsetY = 18;
-    disc(ctx, a.cx, a.cy, r + 12, metal);
+    ctx.shadowColor = "rgba(0,0,0,0.65)";
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 20;
+    disc(ctx, a.cx, a.cy, r + 18, metal);
     ctx.restore();
+    ctx.strokeStyle = "rgba(0,0,0,0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(a.cx, a.cy, r + 18, 0, TAU);
+    ctx.stroke();
+    // perles autour du médaillon
+    for (let i = 0; i < 36; i++) {
+      const ang = (i / 36) * TAU;
+      disc(ctx, a.cx + Math.cos(ang) * (r + 10), a.cy + Math.sin(ang) * (r + 10), 2.6, i % 2 ? m[2] : m[3]);
+    }
+    disc(ctx, a.cx, a.cy, r + 3, m[3]);
     ctx.save();
     ctx.beginPath();
     ctx.arc(a.cx, a.cy, r, 0, TAU);
     ctx.clip();
     if (img) ctx.drawImage(img, a.cx - r, a.cy - r, r * 2, r * 2);
+    const gl = ctx.createLinearGradient(a.cx - r, a.cy - r, a.cx + r, a.cy + r);
+    gl.addColorStop(0, "rgba(255,255,255,0.25)");
+    gl.addColorStop(0.45, "rgba(255,255,255,0)");
+    ctx.fillStyle = gl;
+    ctx.fillRect(a.cx - r, a.cy - r, r * 2, r * 2);
     ctx.restore();
     return;
   }
-  const img = await artImage(card);
-  if (!img) return;
+  const off = await subjectCanvas(card, a.size);
+  if (!off) return;
+  // ombre de contact au sol
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.6)";
-  ctx.shadowBlur = 40;
-  ctx.shadowOffsetY = 25;
-  ctx.drawImage(img, a.cx - a.size / 2, a.top, a.size, a.size);
+  ctx.filter = "blur(9px)";
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.beginPath();
+  ctx.ellipse(a.cx, a.top + a.size * 0.93, a.size * 0.3, a.size * 0.045, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = 36;
+  ctx.shadowOffsetY = 22;
+  ctx.drawImage(off, a.cx - a.size / 2, a.top, a.size, a.size);
   ctx.restore();
 }
 // anneau d'énergie des mythiques (moitié arrière, puis moitié avant)
@@ -1508,10 +1730,36 @@ function energyRing(ctx, a, t, color, front) {
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, front ? 0 : Math.PI, front ? Math.PI : TAU);
   ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx * 0.92, ry * 0.92, 0, front ? 0 : Math.PI, front ? Math.PI : TAU);
+  ctx.stroke();
   for (let k = 0; k < 4; k++) {
     const ang = TAU * (t + k / 4);
     if ((Math.sin(ang) > 0) !== front) continue;
-    glow(ctx, Math.cos(ang) * rx, Math.sin(ang) * ry, 20, "#ffffff", 0.9);
+    glow(ctx, Math.cos(ang) * rx, Math.sin(ang) * ry, 22, "#ffffff", 0.95);
+  }
+  ctx.restore();
+}
+// reflet d'objectif (légendaire et mythique)
+function lensFlare(ctx, b, t, color) {
+  const lx = b.x + b.w * (0.2 + 0.6 * (0.5 + 0.5 * Math.sin(TAU * t))), ly = b.y + 70;
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  glow(ctx, lx, ly, 90, "#ffffff", 0.35);
+  ctx.globalAlpha = 0.8;
+  sparkle(ctx, lx, ly, 9, "#ffffff");
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.fillRect(lx - 120, ly - 1, 240, 2);
+  for (const [k, r, a] of [[0.45, 16, 0.16], [0.75, 7, 0.25], [1.25, 32, 0.1], [1.6, 12, 0.18]]) {
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = rgba(color, a);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) ctx.lineTo(lx + (cx - lx) * k + Math.cos((i * TAU) / 6) * r, ly + (cy - ly) * k + Math.sin((i * TAU) / 6) * r);
+    ctx.closePath();
+    ctx.fill();
   }
   ctx.restore();
 }
@@ -1524,26 +1772,29 @@ async function drawCard(card, holo = false, t = 0.37, mode = animMode(card, holo
   const series = seriesOf(card);
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
 
-  // Cadre en métal gravé
+  // Cadre en métal gravé, avec relief
   const metal = metalGradient(ctx, W, H, m, Math.sin(TAU * t) * 0.2);
   roundRect(ctx, 0, 0, W, H, 34);
   ctx.fillStyle = metal;
   ctx.fill();
   engrave(ctx, W, H);
+  bevel(ctx, W, H);
   roundRect(ctx, 14, 14, W - 28, H - 28, 24);
   const inner = ctx.createLinearGradient(0, 0, 0, H);
-  inner.addColorStop(0, "#1c0a0d");
+  inner.addColorStop(0, "#1f0b0e");
   inner.addColorStop(1, "#0a0405");
   ctx.fillStyle = inner;
   ctx.fill();
+  guilloche(ctx, 14, 560, W - 28, H - 574, m[0]);
 
   // Illustration
   const box = { x: 26, y: 26, w: W - 52, h: 520 };
   const pop = mode === "popout" || mode === "ascension";
-  const size = card.avatar ? 300 : mode === "ascension" ? 450 : pop ? 440 : 380;
+  const size = card.avatar ? 290 : mode === "ascension" ? 450 : pop ? 440 : 370;
   const bob = Math.sin(TAU * t) * (mode === "float" ? 9 : 6);
-  const top = card.avatar ? box.y + box.h * 0.52 - size / 2 + bob : pop ? box.y + box.h + 28 - size + bob : box.y + box.h - size - 22 + bob;
+  const top = card.avatar ? box.y + box.h * 0.55 - size / 2 + bob : pop ? box.y + box.h + 28 - size + bob : box.y + box.h - size - 26 + bob;
   const anchor = { cx: W / 2, top, size, cy: top + size / 2 };
 
   ctx.save();
@@ -1551,28 +1802,43 @@ async function drawCard(card, holo = false, t = 0.37, mode = animMode(card, holo
   ctx.clip();
   drawScene(ctx, box, theme, card, t);
   if (rank >= ORDER.indexOf("rare")) glow(ctx, anchor.cx, anchor.cy, size * 0.62, m[4], mode === "ascension" ? 0.4 + 0.25 * Math.sin(TAU * t * 2) : 0.32);
-  drawParticles(ctx, box, t, card, theme, 0, anchor);
+  // particules d'arrière-plan légèrement floues (profondeur de champ)
+  const far = createCanvas(W, H);
+  drawParticles(far.getContext("2d"), box, t, card, theme, 0, anchor);
+  ctx.filter = "blur(1.5px)";
+  ctx.drawImage(far, 0, 0);
+  ctx.filter = "none";
   if (!pop) {
-    await drawSubject(ctx, card, anchor, metal);
+    await drawSubject(ctx, card, anchor, metal, m);
     drawParticles(ctx, box, t, card, theme, 1, anchor);
   }
-  const band = ctx.createLinearGradient(0, box.y, 0, box.y + 110);
-  band.addColorStop(0, "rgba(0,0,0,0.75)");
+  if (rank >= ORDER.indexOf("legendaire")) lensFlare(ctx, box, t, m[4]);
+  const band = ctx.createLinearGradient(0, box.y, 0, box.y + 140);
+  band.addColorStop(0, "rgba(0,0,0,0.8)");
+  band.addColorStop(0.6, "rgba(0,0,0,0.35)");
   band.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = band;
-  ctx.fillRect(box.x, box.y, box.w, 110);
+  ctx.fillRect(box.x, box.y, box.w, 140);
   ctx.restore();
 
+  // Bordure de l'illustration : filet sombre, métal, filet clair
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  roundRect(ctx, box.x, box.y, box.w, box.h, 18);
+  ctx.stroke();
   ctx.lineWidth = 5;
   ctx.strokeStyle = metal;
-  roundRect(ctx, box.x, box.y, box.w, box.h, 18);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.45)";
+  roundRect(ctx, box.x + 3.5, box.y + 3.5, box.w - 7, box.h - 7, 15);
   ctx.stroke();
   if (rank >= ORDER.indexOf("epique")) corners(ctx, box, m[2]);
 
   // Sortie du cadre : le sujet déborde de l'illustration
   if (pop) {
     if (mode === "ascension") energyRing(ctx, anchor, t, m[4], false);
-    await drawSubject(ctx, card, anchor, metal);
+    await drawSubject(ctx, card, anchor, metal, m);
     if (mode === "ascension") energyRing(ctx, anchor, t, m[4], true);
     ctx.save();
     roundRect(ctx, box.x, box.y, box.w, box.h, 18);
@@ -1581,101 +1847,179 @@ async function drawCard(card, holo = false, t = 0.37, mode = animMode(card, holo
     ctx.restore();
   }
 
-  // Nom et numéro
-  ctx.fillStyle = "#ffffff";
-  ctx.shadowColor = "rgba(0,0,0,0.8)";
-  ctx.shadowBlur = 10;
-  const nameSize = fitText(ctx, card.name, W - 200, 48, "CardTitle");
+  // Nom (doré à partir de légendaire) et nature de la carte
+  const nx = rank >= ORDER.indexOf("epique") ? 62 : 48;
+  const nameSize = fitText(ctx, card.name, W - 150 - nx, 48, "CardTitle");
   ctx.font = `${nameSize}px CardTitle`;
-  ctx.fillText(card.name, 50, 86);
-  ctx.font = "20px CardBold";
-  ctx.fillStyle = m[0];
-  ctx.textAlign = "right";
-  ctx.fillText(numberOf(card), W - 50, 82);
-  ctx.textAlign = "left";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.strokeText(card.name, nx, 84);
+  if (rank >= ORDER.indexOf("legendaire")) {
+    const gold = ctx.createLinearGradient(0, 84 - nameSize, 0, 88);
+    gold.addColorStop(0, "#fffbeb");
+    gold.addColorStop(0.5, "#fcd34d");
+    gold.addColorStop(1, "#b45309");
+    ctx.fillStyle = gold;
+  } else ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 8;
+  ctx.fillText(card.name, nx, 84);
+  ctx.font = "19px CardItalic";
+  ctx.fillStyle = "rgba(255,255,255,0.82)";
+  ctx.fillText(kindOf(card), nx + 2, 114);
   ctx.shadowBlur = 0;
 
-  // Plaque de rareté
-  roundRect(ctx, W / 2 - 140, box.y + box.h - 22, 280, 44, 22);
+  // Médaillon de série en haut à droite
+  const ex = W - 66, ey = 66;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 10;
+  disc(ctx, ex, ey, 25, metal);
+  ctx.restore();
+  disc(ctx, ex, ey, 20, "#1a0a0d");
+  ctx.strokeStyle = rgba(m[0], 0.6);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(ex, ey, 17, 0, TAU);
+  ctx.stroke();
+  seriesIcon(ctx, series, ex, ey, 10, m[0]);
+
+  // Plaque de rareté gravée
+  const py = box.y + box.h;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 4;
+  roundRect(ctx, W / 2 - 150, py - 23, 300, 46, 23);
   ctx.fillStyle = metal;
   ctx.fill();
+  ctx.restore();
   ctx.lineWidth = 2;
   ctx.strokeStyle = m[3];
+  roundRect(ctx, W / 2 - 150, py - 23, 300, 46, 23);
   ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  roundRect(ctx, W / 2 - 145, py - 18, 290, 36, 18);
+  ctx.stroke();
+  ctx.font = "21px CardEngrave";
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  spaced(ctx, RARITIES[card.rarity].name.toUpperCase(), W / 2, py + 9, 3);
   ctx.fillStyle = "#1a0a0d";
-  ctx.font = "22px CardBold";
-  ctx.textAlign = "center";
-  ctx.fillText(RARITIES[card.rarity].name.toUpperCase(), W / 2, box.y + box.h + 8);
-  ctx.textAlign = "left";
+  const pw = spaced(ctx, RARITIES[card.rarity].name.toUpperCase(), W / 2, py + 8, 3);
+  for (const side of [-1, 1]) {
+    diamond(ctx, W / 2 + side * (pw / 2 + 18), py, 5);
+    ctx.fill();
+  }
 
-  // Statistiques avec icônes
+  // Statistiques : icône, valeur et jauge
   const st = statsOf(card);
   [["PRESTIGE", st.prestige], ["INFLUENCE", st.influence], ["CHANCE", st.chance]].forEach(([label, value], i) => {
     const bx = 44 + i * 176, by = 584;
-    roundRect(ctx, bx, by, 160, 86, 14);
-    const sg = ctx.createLinearGradient(0, by, 0, by + 86);
-    sg.addColorStop(0, "#2a1312");
-    sg.addColorStop(1, "#170a0a");
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
+    roundRect(ctx, bx, by, 160, 92, 14);
+    const sg = ctx.createLinearGradient(0, by, 0, by + 92);
+    sg.addColorStop(0, "#2d1513");
+    sg.addColorStop(1, "#140808");
     ctx.fillStyle = sg;
     ctx.fill();
+    ctx.restore();
     ctx.lineWidth = 2;
     ctx.strokeStyle = m[1];
+    roundRect(ctx, bx, by, 160, 92, 14);
     ctx.stroke();
-    statIcon(ctx, i, bx + 34, by + 23, m[0]);
-    ctx.fillStyle = "#c9b8a8";
-    ctx.font = "15px CardBold";
-    ctx.textAlign = "center";
-    ctx.fillText(label, bx + 88, by + 28);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "38px CardTitle";
-    ctx.fillText(String(value), bx + 80, by + 72);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    roundRect(ctx, bx + 4, by + 4, 152, 84, 11);
+    ctx.stroke();
+    statIcon(ctx, i, bx + 22, by + 21, m[0]);
+    ctx.fillStyle = "#cbb9a9";
+    ctx.font = "13px CardEngrave";
     ctx.textAlign = "left";
+    ctx.fillText(label, bx + 36, by + 26);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "36px CardTitle";
+    ctx.textAlign = "center";
+    ctx.fillText(String(value), bx + 80, by + 64);
+    ctx.textAlign = "left";
+    roundRect(ctx, bx + 18, by + 74, 124, 6, 3);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fill();
+    roundRect(ctx, bx + 18, by + 74, Math.max(6, (124 * value) / 99), 6, 3);
+    const gauge = ctx.createLinearGradient(bx + 18, 0, bx + 142, 0);
+    gauge.addColorStop(0, m[3]);
+    gauge.addColorStop(1, m[0]);
+    ctx.fillStyle = gauge;
+    ctx.fill();
   });
 
   // Échelle de rareté : un losange plein par niveau
   for (let i = 0; i < ORDER.length; i++) {
-    const x = W / 2 + (i - (ORDER.length - 1) / 2) * 20, y = 692;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 6);
-    ctx.lineTo(x + 6, y);
-    ctx.lineTo(x, y + 6);
-    ctx.lineTo(x - 6, y);
-    ctx.closePath();
+    const x = W / 2 + (i - (ORDER.length - 1) / 2) * 20;
+    diamond(ctx, x, 696, 6);
     if (i <= rank) {
       ctx.fillStyle = m[1];
       ctx.fill();
+      ctx.strokeStyle = m[0];
+      ctx.lineWidth = 1;
+      ctx.stroke();
     } else {
       ctx.strokeStyle = "#4b3b36";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
   }
+  // filets décoratifs de part et d'autre
+  ctx.strokeStyle = rgba(m[1], 0.5);
+  ctx.lineWidth = 1;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + side * 70, 696);
+    ctx.lineTo(W / 2 + side * 220, 696);
+    ctx.stroke();
+  }
 
-  // Texte d'ambiance et mention de série
-  ctx.fillStyle = "#e9c46a";
+  // Texte d'ambiance en italique
+  ctx.fillStyle = "#ecc979";
   ctx.textAlign = "center";
-  const textSize = fitText(ctx, card.text, W - 90, 22, "CardSerif");
-  ctx.font = `${textSize}px CardSerif`;
-  ctx.fillText(card.text, W / 2, holo ? 728 : 738);
-  ctx.fillStyle = "#6b5a52";
-  ctx.font = "15px CardText";
-  ctx.fillText(`LES CARTES DE LA MAISON  ·  ${SERIES_LABELS[series].replace(/^\S+ /, "").toUpperCase()}`, W / 2, 792);
-  ctx.textAlign = "left";
+  const textSize = fitText(ctx, card.text, W - 100, 23, "CardItalic");
+  ctx.font = `${textSize}px CardItalic`;
+  ctx.fillText(card.text, W / 2, holo ? 734 : 742);
 
   // Badge holo
   if (holo) {
-    const label = HOLO_KINDS[holoKind(card)], bw = 210, bx = W / 2 - bw / 2, by = 744;
+    const label = HOLO_KINDS[holoKind(card)], bw = 210, bx = W / 2 - bw / 2, by = 748;
     roundRect(ctx, bx, by, bw, 24, 12);
     const badge = ctx.createLinearGradient(bx, by, bx + bw, by);
-    ["#ff0080", "#ffe600", "#00e676", "#00b0ff"].forEach((c, i) => badge.addColorStop(i / 3, c));
+    ["#ff0080", "#ffe600", "#00e676", "#00b0ff", "#d500f9"].forEach((c, i) => badge.addColorStop(i / 4, c));
     ctx.fillStyle = badge;
     ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.stroke();
     ctx.fillStyle = "#0d0507";
-    ctx.font = "14px CardBold";
-    ctx.textAlign = "center";
+    ctx.font = "13px CardBold";
     ctx.fillText(label, W / 2, by + 17);
-    ctx.textAlign = "left";
   }
+
+  // Pied de carte : symbole et numéro, mention, série
+  ctx.font = "13px CardBold";
+  ctx.textAlign = "left";
+  seriesIcon(ctx, series, 86, 797, 7, m[0]);
+  ctx.fillStyle = m[0];
+  ctx.fillText(numberOf(card).replace("#", ""), 100, 802);
+  ctx.fillStyle = "#7a6a60";
+  ctx.font = "12px CardText";
+  ctx.textAlign = "center";
+  ctx.fillText("© LA MAISON  ·  2026", W / 2, 802);
+  ctx.font = "12px CardEngrave";
+  ctx.textAlign = "right";
+  ctx.fillText(SERIES_LABELS[series].replace(/^\S+ /, "").toUpperCase(), W - 78, 802);
+  ctx.textAlign = "left";
 
   // Pierres serties (légendaire et mythique)
   if (rank >= ORDER.indexOf("legendaire")) {
@@ -1685,7 +2029,7 @@ async function drawCard(card, holo = false, t = 0.37, mode = animMode(card, holo
     gem(ctx, W - 46, H - 46, 9, color, metal);
   }
 
-  drawFoil(ctx, W, H, card, holo, t);
+  drawFoil(ctx, W, H, card, holo, t, box);
   return canvas;
 }
 
@@ -1701,15 +2045,16 @@ function drawBack(rarity) {
   ctx.fillStyle = metal;
   ctx.fill();
   engrave(ctx, W, H);
+  bevel(ctx, W, H);
   roundRect(ctx, 18, 18, W - 36, H - 36, 24);
   const bg = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, H * 0.6);
-  bg.addColorStop(0, "#7f1d1d");
+  bg.addColorStop(0, "#8b1e24");
   bg.addColorStop(1, "#2a0508");
   ctx.fillStyle = bg;
   ctx.fill();
   ctx.save();
   ctx.clip();
-  ctx.strokeStyle = "rgba(251,191,36,0.22)";
+  ctx.strokeStyle = "rgba(251,191,36,0.2)";
   ctx.lineWidth = 2;
   for (let k = -H; k < W + H; k += 40) {
     ctx.beginPath();
@@ -1719,30 +2064,45 @@ function drawBack(rarity) {
     ctx.lineTo(k + H, H);
     ctx.stroke();
   }
+  for (let ring = 0; ring < 14; ring++) {
+    ctx.strokeStyle = `rgba(251,191,36,${0.05 + (ring % 2) * 0.04})`;
+    ctx.beginPath();
+    for (let i = 0; i <= 120; i++) {
+      const a = (i / 120) * TAU, r = 190 + ring * 9 + Math.sin(a * 12 + ring) * 6;
+      ctx.lineTo(W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r);
+    }
+    ctx.stroke();
+  }
   ctx.restore();
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 20;
   disc(ctx, W / 2, H / 2, 170, metal);
+  ctx.restore();
   disc(ctx, W / 2, H / 2, 156, "#3b0a0f");
-  sparkle(ctx, W / 2, H / 2 - 40, 26, "#fbbf24");
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * TAU;
+    disc(ctx, W / 2 + Math.cos(a) * 163, H / 2 + Math.sin(a) * 163, 2.4, i % 2 ? m[2] : m[3]);
+  }
+  sparkle(ctx, W / 2, H / 2 - 44, 26, "#fbbf24");
   ctx.fillStyle = "#fde68a";
-  ctx.font = "44px CardTitle";
+  ctx.font = "46px CardTitle";
   ctx.textAlign = "center";
-  ctx.fillText("La Maison", W / 2, H / 2 + 50);
-  ctx.font = "15px CardBold";
+  ctx.fillText("La Maison", W / 2, H / 2 + 48);
+  ctx.font = "14px CardEngrave";
   ctx.fillStyle = "#e9c46a";
-  ctx.fillText("LES CARTES DE LA MAISON", W / 2, H / 2 + 84);
+  spaced(ctx, "LES CARTES DE LA MAISON", W / 2, H / 2 + 82, 2);
   ctx.textAlign = "left";
   corners(ctx, { x: 40, y: 40, w: W - 80, h: H - 80 }, m[2]);
   backCache.set(rarity, canvas);
   return canvas;
 }
 
-// Une image du GIF : la carte en perspective selon le style d'animation
-function composeFrame(src, back, mode, t) {
-  const FW = 420, FH = 588, PAD = 30;
-  const c = createCanvas(FW + PAD * 2, FH + PAD * 2);
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = "#313338";
-  ctx.fillRect(0, 0, c.width, c.height);
+// Une image du GIF : la carte en perspective, ombrée selon l'angle, avec son épaisseur et son ombre au sol
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+function composeFrame(src, back, mode, t, edgeColor = "#1a1a1a") {
+  const FW = 420, FH = 588, PAD = 32;
+  const CW = FW + PAD * 2, CH = FH + PAD * 2;
   let angle = 0, axis = "h", lift = 0;
   if (mode === "float") lift = Math.sin(TAU * t) * 5;
   else if (mode === "tilt-h") angle = Math.sin(TAU * t) * 0.32;
@@ -1762,26 +2122,76 @@ function composeFrame(src, back, mode, t) {
   const cosA = Math.cos(angle), sinA = Math.sin(angle);
   const img = cosA < 0 ? back : src;
   const scale = Math.max(0.02, Math.abs(cosA));
-  const cx = c.width / 2, cy = c.height / 2 - 6 + lift;
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  ctx.beginPath();
-  ctx.ellipse(c.width / 2 + (axis === "h" ? sinA * 30 : 0), c.height - 14, FW * 0.42 * (axis === "h" ? scale : 1) * (1 - lift / 60), 8, 0, 0, TAU);
-  ctx.fill();
-  const strips = 60;
+  const cx = CW / 2, cy = CH / 2 - 8 + lift;
+
+  // la carte projetée, sur fond transparent
+  const face = createCanvas(CW, CH);
+  const f = face.getContext("2d");
+  f.imageSmoothingQuality = "high";
+  const strips = 70;
   if (axis === "h") {
     const sw = img.width / strips;
     for (let i = 0; i < strips; i++) {
       const u = i / strips - 0.5, depth = 1 + u * sinA * 0.35, dh = FH * depth;
-      ctx.drawImage(img, i * sw, 0, sw + 1, img.height, cx + u * FW * scale, cy - dh / 2, (FW / strips) * scale + 1, dh);
+      f.drawImage(img, i * sw, 0, sw + 1, img.height, cx + u * FW * scale, cy - dh / 2, (FW / strips) * scale + 1, dh);
     }
   } else {
     const sh = img.height / strips;
     for (let j = 0; j < strips; j++) {
       const v = j / strips - 0.5, depth = 1 + v * sinA * 0.3, dw = FW * depth;
-      ctx.drawImage(img, 0, j * sh, img.width, sh + 1, cx - dw / 2, cy + v * FH * scale, dw, (FH / strips) * scale + 1);
+      f.drawImage(img, 0, j * sh, img.width, sh + 1, cx - dw / 2, cy + v * FH * scale, dw, (FH / strips) * scale + 1);
     }
   }
-  return ctx.getImageData(0, 0, c.width, c.height);
+  // ombrage : le côté qui s'éloigne s'assombrit, celui qui avance s'éclaire
+  const k = Math.min(1, Math.abs(sinA) * 2.2);
+  if (k > 0.01) {
+    f.globalCompositeOperation = "source-atop";
+    const near = sinA > 0 ? 1 : 0;
+    const g = axis === "h" ? f.createLinearGradient(cx - FW / 2, 0, cx + FW / 2, 0) : f.createLinearGradient(0, cy - FH / 2, 0, cy + FH / 2);
+    g.addColorStop(near ? 0 : 1, `rgba(0,0,0,${0.32 * k})`);
+    g.addColorStop(0.5, "rgba(0,0,0,0)");
+    g.addColorStop(near ? 1 : 0, `rgba(255,255,255,${0.12 * k})`);
+    f.fillStyle = g;
+    f.fillRect(0, 0, CW, CH);
+    f.globalCompositeOperation = "source-over";
+  }
+
+  const c = createCanvas(CW, CH);
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#313338";
+  ctx.fillRect(0, 0, CW, CH);
+  // ombre au sol, floue
+  ctx.save();
+  ctx.filter = "blur(7px)";
+  ctx.fillStyle = `rgba(0,0,0,${0.45 - lift / 40})`;
+  ctx.beginPath();
+  ctx.ellipse(CW / 2 + (axis === "h" ? sinA * 30 : 0), CH - 18, FW * 0.42 * (axis === "h" ? scale : 1) * (1 - lift / 60), 9, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  // épaisseur de la carte (tranche visible quand elle pivote)
+  const edge = Math.round((axis === "h" ? sinA : -sinA) * 7);
+  if (Math.abs(edge) >= 1) {
+    const sil = createCanvas(CW, CH);
+    const s = sil.getContext("2d");
+    s.drawImage(face, 0, 0);
+    s.globalCompositeOperation = "source-in";
+    s.fillStyle = edgeColor;
+    s.fillRect(0, 0, CW, CH);
+    for (let d = 1; d <= Math.abs(edge); d++) ctx.drawImage(sil, axis === "h" ? Math.sign(edge) * d : 0, axis === "v" ? Math.sign(edge) * d : 0);
+  }
+  ctx.drawImage(face, 0, 0);
+  const data = ctx.getImageData(0, 0, CW, CH);
+  // tramage ordonné léger : évite les bandes de couleur dans les dégradés du GIF
+  const px = data.data;
+  for (let y = 0; y < CH; y++) {
+    for (let x = 0; x < CW; x++) {
+      const i = (y * CW + x) * 4, d = (BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.47) * 7;
+      px[i] = Math.max(0, Math.min(255, px[i] + d));
+      px[i + 1] = Math.max(0, Math.min(255, px[i + 1] + d * 0.5));
+      px[i + 2] = Math.max(0, Math.min(255, px[i + 2] + d));
+    }
+  }
+  return data;
 }
 
 const gifCache = new Map();
@@ -1789,20 +2199,20 @@ async function animatedCard(card, holo) {
   const key = `${card.id}${holo ? "*" : ""}`;
   if (gifCache.has(key)) return gifCache.get(key);
   const mode = animMode(card, holo);
-  const frames = mode === "flip" ? 30 : 24;
+  const frames = mode === "flip" ? 40 : 32;
   const back = mode === "flip" ? drawBack(card.rarity) : null;
   const enc = GIFEncoder();
   for (let f = 0; f < frames; f++) {
     const t = f / frames;
     const src = await drawCard(card, holo, t, mode);
-    const { data, width, height } = composeFrame(src, back, mode, t);
+    const { data, width, height } = composeFrame(src, back, mode, t, METAL[card.rarity][3]);
     const palette = quantize(data, 256);
-    enc.writeFrame(applyPalette(data, palette), width, height, { palette, delay: mode === "flip" ? 60 : 70 });
+    enc.writeFrame(applyPalette(data, palette), width, height, { palette, delay: mode === "flip" ? 50 : 55 });
   }
   enc.finish();
   const buffer = Buffer.from(enc.bytes());
   gifCache.set(key, buffer);
-  if (gifCache.size > 30) gifCache.delete(gifCache.keys().next().value);
+  if (gifCache.size > 20) gifCache.delete(gifCache.keys().next().value);
   return buffer;
 }
 
