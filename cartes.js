@@ -168,7 +168,7 @@ function memberCards() {
       const m = memberCache.get(id);
       const { rating, rarity, stats } = memberProfile(id, m);
       const text = m.role ? `${m.role.name} de la Maison${m.stars ? ` · Membre Star ${m.stars} fois` : ""}.` : "Membre de la Maison.";
-      return { ...C(`mb_${id}`, m.name, "👤", rarity, text), avatar: m.avatar, memberId: id, role: m.role, rating, stars: m.stars, memberStats: stats };
+      return { ...C(`mb_${id}`, m.name, "👤", rarity, text), avatar: m.avatar, memberId: id, role: m.role, rating, stars: m.stars, memberStats: stats, joinedAt: m.joinedAt };
     });
 }
 
@@ -1767,13 +1767,13 @@ function lensFlare(ctx, b, t, color) {
   ctx.restore();
 }
 
-// --- Carte de membre : écusson de résident (design propre aux membres) ---
-// La note et la matière dépendent du rôle le plus haut : plus le rôle est haut, plus la carte est forte.
+// --- Carte de membre : format « créature » avec attaques (design propre aux membres) ---
+// La note et le rang dépendent du rôle le plus haut : plus le rôle est haut, plus la carte est forte.
 const MEMBER_TIERS = {
-  rare: { name: "RÉSIDENT ARGENT", bg: ["#ffffff", "#d7dde5", "#8f9bab"], facet: "#ffffff", ink: "#16202e", sub: "#475569", metal: "commune", accent: "#64748b" },
-  epique: { name: "RÉSIDENT AMÉTHYSTE", bg: ["#4c1d95", "#1e0b3a", "#07020f"], facet: "#a855f7", ink: "#faf5ff", sub: "#d8b4fe", metal: "epique", accent: "#c084fc" },
-  legendaire: { name: "RÉSIDENT OR", bg: ["#292524", "#0c0a09", "#000000"], facet: "#fbbf24", ink: "#fde68a", sub: "#f59e0b", metal: "legendaire", accent: "#fbbf24" },
-  mythique: { name: "ICÔNE DE LA MAISON", bg: ["#fffdf5", "#f3e3c0", "#cfae78"], facet: "#ffffff", ink: "#3b2a12", sub: "#8a6420", metal: "legendaire", accent: "#d4a017" },
+  rare: { name: "RÉSIDENT ARGENT", stage: "NIVEAU 1", panel: ["#f8fafc", "#e2e8f0", "#c3ccd8"], ink: "#111827", sub: "#475569", metal: "commune", accent: "#64748b", retreat: 1 },
+  epique: { name: "RÉSIDENT AMÉTHYSTE", stage: "NIVEAU 2", panel: ["#f5f3ff", "#ddd6fe", "#b9a6f5"], ink: "#2e1065", sub: "#6d28d9", metal: "epique", accent: "#8b5cf6", retreat: 2 },
+  legendaire: { name: "RÉSIDENT OR", stage: "NIVEAU 3", panel: ["#fffbeb", "#fde68a", "#f2b53a"], ink: "#3b2005", sub: "#92400e", metal: "legendaire", accent: "#d97706", retreat: 2 },
+  mythique: { name: "ICÔNE DE LA MAISON", stage: "ICÔNE", panel: ["#ffffff", "#fdf2f8", "#dbeafe"], ink: "#1e1b4b", sub: "#7c3aed", metal: "legendaire", accent: "#a855f7", retreat: 3 },
 };
 const MEMBER_STATS = [["PRE", "Prestige"], ["ACT", "Activité"], ["ANC", "Ancienneté"], ["FOR", "Fortune"], ["STA", "Star"], ["CHA", "Chance"]];
 const clampStat = (v) => Math.max(30, Math.min(99, Math.round(v)));
@@ -1792,292 +1792,358 @@ function memberProfile(id, m) {
   };
   return { rating, rarity, stats };
 }
-// Écusson : épaules hautes, pointe arrondie en bas
-function crestPath(W, H, inset = 0) {
-  const sx = 1 - (2 * inset) / W, sy = 1 - (2 * inset) / H;
-  const P = (x, y) => [W / 2 + (x - W / 2) * sx, H / 2 + (y - H / 2) * sy];
-  const p = new Path2D();
-  p.moveTo(...P(W / 2, 10));
-  p.quadraticCurveTo(...P(W * 0.76, 50), ...P(W - 46, 62));
-  p.lineTo(...P(W - 28, 96));
-  p.lineTo(...P(W - 28, H - 200));
-  p.quadraticCurveTo(...P(W - 28, H - 64), ...P(W / 2, H - 10));
-  p.quadraticCurveTo(...P(28, H - 64), ...P(28, H - 200));
-  p.lineTo(...P(28, 96));
-  p.lineTo(...P(46, 62));
-  p.quadraticCurveTo(...P(W * 0.24, 50), ...P(W / 2, 10));
-  p.closePath();
-  return p;
+const round10 = (v) => Math.max(10, Math.round(v / 10) * 10);
+// Attaques : la première vient du point fort du membre, la seconde de son rang
+const SIGNATURE_MOVES = {
+  ACT: ["Bavardage", "Lance la discussion dans le salon : l'adversaire ne peut pas répliquer ce tour-ci."],
+  ANC: ["Vétéran de la Maison", "Connaît toutes les règles par cœur. Ignore le prochain impôt."],
+  FOR: ["Pluie d'euros", "Lancez 2 pièces. Ajoutez 30 dégâts pour chaque face."],
+  STA: ["Étoile filante", "Élu(e) Membre Star : soignez 20 PV à ce membre."],
+  CHA: ["Coup de chance", "Lancez une pièce. Si c'est face, les dégâts sont doublés."],
+};
+const RANK_MOVES = {
+  rare: ["Coup de main", "Aide un autre résident : il récupère 10 PV.", 2],
+  epique: ["Ambition", "Si ce membre possède plus de 50 000 €, ajoutez 30 dégâts.", 2],
+  legendaire: ["Charisme doré", "Toute la Maison écoute : l'adversaire passe son prochain tour.", 3],
+  mythique: ["Volonté de la Fondation", "Rien ne résiste à la Fondation : cette attaque ne peut pas être bloquée.", 3],
+};
+function memberMoves(card) {
+  const st = card.memberStats ?? {};
+  const best = ["ACT", "ANC", "FOR", "STA", "CHA"].sort((a, b) => (st[b] ?? 0) - (st[a] ?? 0))[0];
+  const [n1, d1] = SIGNATURE_MOVES[best];
+  const [n2, d2, cost2] = RANK_MOVES[card.rarity] ?? RANK_MOVES.rare;
+  return [
+    { name: n1, text: d1, cost: 1, damage: round10((st[best] ?? 50) * 0.6) },
+    { name: n2, text: d2, cost: cost2, damage: round10((st.PRE ?? 60) * 1.3) },
+  ];
 }
-const portraitCache = new Map();
-async function memberPortrait(card, size) {
-  const key = `${card.avatar}:${size}`;
-  if (portraitCache.has(key)) return portraitCache.get(key);
-  const img = await fetchImage(`avatar:${card.avatar}`, card.avatar);
-  const c = createCanvas(size, size);
-  const x = c.getContext("2d");
-  x.imageSmoothingQuality = "high";
-  if (img) x.drawImage(img, 0, 0, size, size);
-  else disc(x, size / 2, size / 2, size / 2, "#3f3f46");
-  // fondu doux sur les bords : le portrait se fond dans la carte
-  x.globalCompositeOperation = "destination-in";
-  const g = x.createRadialGradient(size / 2, size / 2, size * 0.2, size / 2, size / 2, size * 0.5);
-  g.addColorStop(0, "rgba(0,0,0,1)");
-  g.addColorStop(0.55, "rgba(0,0,0,0.85)");
-  g.addColorStop(1, "rgba(0,0,0,0)");
-  x.fillStyle = g;
-  x.fillRect(0, 0, size, size);
-  portraitCache.set(key, c);
-  if (portraitCache.size > 60) portraitCache.delete(portraitCache.keys().next().value);
-  return c;
+function wrapText(ctx, text, x, y, maxW, lineH, maxLines = 3) {
+  const words = String(text).split(/\s+/);
+  let line = "", n = 0;
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, y + n * lineH);
+      line = w;
+      if (++n >= maxLines) return;
+    } else line = test;
+  }
+  if (line) ctx.fillText(line, x, y + n * lineH);
 }
-function roleAbbr(name) {
-  const word = (name ?? "MEMBRE").replace(/[^\p{L}\p{N}\s'-]/gu, "").trim().split(/\s+/)[0] || "MEMBRE";
-  return word.toUpperCase().slice(0, 12);
+// symbole d'énergie : orbe aux couleurs du rôle avec l'emblème de la Maison (ou étoile neutre)
+function energy(ctx, x, y, r, color, neutral = false) {
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 1, x, y, r);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.35, neutral ? "#d4d4d8" : color);
+  g.addColorStop(1, neutral ? "#52525b" : "#111111");
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  disc(ctx, x, y, r, g);
+  ctx.restore();
+  ctx.strokeStyle = "rgba(255,255,255,0.8)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(x, y, r - 0.6, 0, TAU);
+  ctx.stroke();
+  if (neutral) star5(ctx, x, y + 0.5, r * 0.55, "#ffffff");
+  else seriesIcon(ctx, "maison", x, y, r * 0.48, "#ffffff");
 }
 
 async function drawMemberCard(card, holo = false, t = 0.3) {
   const W = 600, H = 840;
   const T = MEMBER_TIERS[card.rarity] ?? MEMBER_TIERS.rare, metalCols = METAL[T.metal];
   const roleColor = card.role?.color && card.role.color !== "#000000" ? card.role.color : T.accent;
-  const R = seeded(hashOf(card.id) + 21);
   const c = createCanvas(W, H);
   const ctx = c.getContext("2d");
   ctx.imageSmoothingQuality = "high";
-  const outer = crestPath(W, H, 0);
-  ctx.save();
-  ctx.clip(outer);
+  const metal = metalGradient(ctx, W, H, metalCols, Math.sin(TAU * t) * 0.2);
 
-  // Matière de fond
-  const bg = ctx.createLinearGradient(0, 0, W * 0.7, H);
-  bg.addColorStop(0, T.bg[0]);
-  bg.addColorStop(0.45, T.bg[1]);
-  bg.addColorStop(1, T.bg[2]);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-  // facettes taillées, comme une pierre précieuse
-  const cols = 6, rows = 9, pts = [];
-  for (let r = 0; r <= rows; r++) {
-    pts.push([]);
-    for (let q = 0; q <= cols; q++) {
-      const edge = r === 0 || q === 0 || r === rows || q === cols;
-      pts[r].push([(q / cols) * W + (edge ? 0 : (R() - 0.5) * 70), (r / rows) * H + (edge ? 0 : (R() - 0.5) * 70)]);
-    }
+  // Bordure métallique épaisse, puis panneau clair
+  roundRect(ctx, 0, 0, W, H, 30);
+  ctx.fillStyle = metal;
+  ctx.fill();
+  engrave(ctx, W, H);
+  bevel(ctx, W, H);
+  if (card.rarity === "mythique") {
+    // bordure irisée qui change de couleur
+    ctx.save();
+    roundRect(ctx, 0, 0, W, H, 30);
+    ctx.clip();
+    ctx.globalCompositeOperation = "overlay";
+    rainbow(ctx, W, H, t, 0.55);
+    ctx.restore();
   }
-  for (let r = 0; r < rows; r++) {
-    for (let q = 0; q < cols; q++) {
-      for (const tri of [[pts[r][q], pts[r][q + 1], pts[r + 1][q]], [pts[r][q + 1], pts[r + 1][q + 1], pts[r + 1][q]]]) {
-        const light = R();
-        ctx.fillStyle = light < 0.5 ? rgba(T.facet, 0.03 + light * 0.1) : `rgba(0,0,0,${(light - 0.5) * 0.16})`;
-        ctx.beginPath();
-        tri.forEach(([x, y]) => ctx.lineTo(x, y));
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = rgba(T.facet, card.rarity === "rare" || card.rarity === "mythique" ? 0.25 : 0.1);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    }
-  }
-  // éventail de lumière aux couleurs du rôle derrière le portrait
-  const px = W * 0.6, py = 300;
   ctx.save();
-  ctx.translate(px, py);
-  ctx.rotate((t * TAU) / 20);
-  for (let i = 0; i < 20; i++) {
-    ctx.rotate(TAU / 20);
-    ctx.fillStyle = rgba(roleColor, i % 2 ? 0.05 : 0.13);
+  roundRect(ctx, 22, 22, W - 44, H - 44, 16);
+  ctx.clip();
+  const panel = ctx.createLinearGradient(0, 22, W * 0.4, H);
+  panel.addColorStop(0, T.panel[0]);
+  panel.addColorStop(0.55, T.panel[1]);
+  panel.addColorStop(1, T.panel[2]);
+  ctx.fillStyle = panel;
+  ctx.fillRect(0, 0, W, H);
+  // fine trame en losanges du panneau
+  ctx.strokeStyle = rgba(T.sub, 0.07);
+  ctx.lineWidth = 1;
+  for (let k = -H; k < W + H; k += 18) {
+    ctx.beginPath();
+    ctx.moveTo(k, 0);
+    ctx.lineTo(k + H, H);
+    ctx.moveTo(k, 0);
+    ctx.lineTo(k - H, H);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, 22, 22, W - 44, H - 44, 16);
+  ctx.stroke();
+
+  // En-tête : niveau, nom, PV, énergie
+  ctx.font = "12px CardEngrave";
+  const stageW = ctx.measureText(T.stage).width + 26;
+  roundRect(ctx, 36, 32, stageW, 22, 11);
+  const sg = ctx.createLinearGradient(36, 0, 36 + stageW, 0);
+  sg.addColorStop(0, metalCols[2]);
+  sg.addColorStop(1, metalCols[1]);
+  ctx.fillStyle = sg;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillText(T.stage, 49, 48);
+  const hp = round10((card.rating ?? 70) * 1.6);
+  ctx.textAlign = "right";
+  ctx.font = "40px CardTitle";
+  ctx.fillStyle = "#b91c1c";
+  ctx.fillText(String(hp), 522, 86);
+  const hpW = ctx.measureText(String(hp)).width;
+  ctx.font = "15px CardBold";
+  ctx.fillText("PV", 522 - hpW - 6, 84);
+  ctx.textAlign = "left";
+  energy(ctx, 551, 72, 19, roleColor);
+  const special = card.rarity === "legendaire" || card.rarity === "mythique";
+  const nameSize = fitText(ctx, card.name, 330, 40, "CardTitle");
+  ctx.font = `${nameSize}px CardTitle`;
+  ctx.fillStyle = T.ink;
+  ctx.fillText(card.name, 38, 88);
+  if (special) {
+    const nw = ctx.measureText(card.name).width;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.3)";
+    ctx.shadowBlur = 3;
+    star5(ctx, 38 + nw + 20, 74, 13, card.rarity === "mythique" ? `hsl(${Math.round(t * 360)},85%,60%)` : "#f59e0b");
+    ctx.restore();
+  }
+
+  // Illustration : portrait du membre sur fond flou, lumière aux couleurs du rôle
+  const art = { x: 44, y: 100, w: 512, h: 356 };
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = metal;
+  ctx.fillRect(art.x - 7, art.y - 7, art.w + 14, art.h + 14);
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(art.x, art.y, art.w, art.h);
+  ctx.clip();
+  const avatar = await fetchImage(`avatar:${card.avatar}`, card.avatar);
+  if (avatar) {
+    ctx.filter = "blur(18px) saturate(1.3)";
+    ctx.drawImage(avatar, art.x - 60, art.y - 140, art.w + 120, art.w + 120);
+    ctx.filter = "none";
+  } else {
+    ctx.fillStyle = "#27272a";
+    ctx.fillRect(art.x, art.y, art.w, art.h);
+  }
+  const shade = ctx.createLinearGradient(0, art.y, 0, art.y + art.h);
+  shade.addColorStop(0, rgba(roleColor, 0.25));
+  shade.addColorStop(1, "rgba(0,0,0,0.45)");
+  ctx.fillStyle = shade;
+  ctx.fillRect(art.x, art.y, art.w, art.h);
+  const acx = art.x + art.w / 2, acy = art.y + art.h / 2;
+  ctx.save();
+  ctx.translate(acx, acy);
+  ctx.rotate((t * TAU) / 16);
+  for (let i = 0; i < 16; i++) {
+    ctx.rotate(TAU / 16);
+    ctx.fillStyle = rgba("#ffffff", i % 2 ? 0.04 : 0.1);
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(-34, -700);
-    ctx.lineTo(34, -700);
+    ctx.lineTo(-30, -500);
+    ctx.lineTo(30, -500);
     ctx.closePath();
     ctx.fill();
   }
   ctx.restore();
-  glow(ctx, px, py, 260, roleColor, 0.55);
-  glow(ctx, px, py, 120, "#ffffff", card.rarity === "rare" || card.rarity === "mythique" ? 0.5 : 0.22);
-
-  // Portrait du membre
-  const portrait = await memberPortrait(card, 360);
-  ctx.drawImage(portrait, px - 180, py - 175 + Math.sin(TAU * t) * 4, 360, 360);
-  // signature manuscrite sur le portrait
+  glow(ctx, acx, acy, 220, roleColor, 0.55);
+  const RS = seeded(hashOf(card.id) + 8);
+  for (let i = 0; i < 26; i++) {
+    const tw = Math.max(0, Math.sin(TAU * (t * 2 + RS())));
+    ctx.globalAlpha = 0.25 + 0.75 * tw;
+    sparkle(ctx, art.x + RS() * art.w, art.y + RS() * art.h, 1 + tw * 3, "#ffffff");
+  }
+  ctx.globalAlpha = 1;
+  // portrait net, encadré de blanc, qui flotte légèrement
+  const ps = 262, ppx = acx - ps / 2, ppy = acy - ps / 2 + Math.sin(TAU * t) * 4;
   ctx.save();
-  ctx.translate(px + 20, py + 150);
-  ctx.rotate(-0.12);
-  ctx.font = "44px CardItalic";
-  ctx.textAlign = "center";
-  ctx.globalAlpha = 0.45;
-  ctx.fillStyle = card.rarity === "rare" || card.rarity === "mythique" ? "#3b2a12" : "#fde68a";
-  ctx.fillText(card.name.slice(0, 18), 0, 0);
-  ctx.restore();
-
-  // traits de lumière qui traversent la carte
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  for (let k = 0; k < 3; k++) {
-    const x = -W + ((t + k / 3) % 1) * 3 * W;
-    const g = ctx.createLinearGradient(x, 0, x + 120, 60);
-    g.addColorStop(0, "rgba(255,255,255,0)");
-    g.addColorStop(0.5, `rgba(255,255,255,${0.18 + (k === 0 ? 0.12 : 0)})`);
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
-    ctx.save();
-    ctx.translate(x, 0);
-    ctx.rotate(0.35);
-    ctx.fillRect(0, -200, 26 + k * 10, H + 400);
-    ctx.restore();
-  }
-  ctx.restore();
-
-  // Colonne de gauche : note, rôle, emblèmes
-  ctx.textAlign = "center";
-  ctx.font = "104px CardTitle";
-  ctx.fillStyle = T.ink;
-  ctx.shadowColor = rgba(roleColor, 0.6);
-  ctx.shadowBlur = 18;
-  ctx.fillText(String(card.rating ?? 70), 122, 200);
-  ctx.shadowBlur = 0;
-  const abbr = roleAbbr(card.role?.name);
-  const as = fitText(ctx, abbr, 172, 28, "CardEngrave");
-  ctx.font = `${as}px CardEngrave`;
-  ctx.fillStyle = T.sub;
-  ctx.fillText(abbr, 122, 240);
-  ctx.strokeStyle = rgba(T.sub, 0.6);
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(78, 260);
-  ctx.lineTo(166, 260);
-  ctx.stroke();
-  // emblème de la Maison et pastille de couleur du rôle
-  disc(ctx, 122, 296, 24, metalGradient(ctx, W, H, metalCols));
-  disc(ctx, 122, 296, 19, "#1a0a0d");
-  seriesIcon(ctx, "maison", 122, 296, 10, metalCols[0]);
-  disc(ctx, 122, 352, 17, metalGradient(ctx, W, H, metalCols));
-  disc(ctx, 122, 352, 12, roleColor);
-  ctx.strokeStyle = "rgba(255,255,255,0.6)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(122, 352, 12, 0, TAU);
-  ctx.stroke();
-  if (card.stars) {
-    star5(ctx, 122, 404, 17, "#fbbf24");
-    ctx.font = "13px CardBold";
-    ctx.fillStyle = "#1a0a0d";
-    ctx.fillText(String(card.stars), 122, 409);
-  }
-
-  // Nom
-  const nameSize = fitText(ctx, card.name.toUpperCase(), W - 120, 46, "CardEngrave");
-  ctx.font = `${nameSize}px CardEngrave`;
-  ctx.fillStyle = T.ink;
-  ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = 6;
-  spaced(ctx, card.name.toUpperCase(), W / 2, 532, 2);
-  ctx.shadowBlur = 0;
-  for (const y of [492, 552]) {
-    ctx.strokeStyle = rgba(T.sub, 0.55);
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(90, y);
-    ctx.lineTo(W / 2 - 14, y);
-    ctx.moveTo(W / 2 + 14, y);
-    ctx.lineTo(W - 90, y);
-    ctx.stroke();
-    ctx.fillStyle = T.sub;
-    diamond(ctx, W / 2, y, 5);
-    ctx.fill();
-  }
-
-  // Statistiques en deux colonnes
-  const st = card.memberStats ?? {};
-  MEMBER_STATS.forEach(([k], i) => {
-    const colX = i < 3 ? 160 : 372, y = 600 + (i % 3) * 44;
-    ctx.textAlign = "right";
-    ctx.font = "36px CardTitle";
-    ctx.fillStyle = T.ink;
-    ctx.fillText(String(st[k] ?? 50), colX, y);
-    ctx.textAlign = "left";
-    ctx.font = "20px CardEngrave";
-    ctx.fillStyle = T.sub;
-    ctx.fillText(k, colX + 12, y - 2);
-    progressBar(ctx, colX + 72, y - 12, 54, 5, (st[k] ?? 50) / 99, [T.sub, roleColor]);
-  });
-  ctx.strokeStyle = rgba(T.sub, 0.4);
-  ctx.beginPath();
-  ctx.moveTo(W / 2 - 6, 572);
-  ctx.lineTo(W / 2 - 6, 690);
-  ctx.stroke();
-
-  // Rôle et matière
-  ctx.textAlign = "center";
-  ctx.font = "16px CardBold";
-  const roleLabel = card.role?.name ?? "Membre";
-  const rw = ctx.measureText(roleLabel).width + 46;
-  roundRect(ctx, W / 2 - rw / 2, 712, rw, 30, 15);
-  ctx.fillStyle = rgba(roleColor, 0.22);
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = 26;
+  ctx.shadowOffsetY = 12;
+  roundRect(ctx, ppx - 6, ppy - 6, ps + 12, ps + 12, 26);
+  ctx.fillStyle = "#ffffff";
   ctx.fill();
-  ctx.strokeStyle = rgba(roleColor, 0.9);
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  disc(ctx, W / 2 - rw / 2 + 16, 727, 6, roleColor);
-  ctx.fillStyle = T.ink;
-  ctx.fillText(roleLabel, W / 2 + 8, 733);
-  ctx.font = "14px CardEngrave";
-  ctx.fillStyle = T.sub;
-  spaced(ctx, T.name, W / 2, 770, 3);
-  ctx.font = "11px CardBold";
-  ctx.fillText(numberOf(card).replace("#", ""), W / 2, 796);
-  ctx.textAlign = "left";
-
-  // Reflets : holo, nacre irisée (icône), paillettes (or)
+  ctx.restore();
+  ctx.save();
+  roundRect(ctx, ppx, ppy, ps, ps, 22);
+  ctx.clip();
+  if (avatar) ctx.drawImage(avatar, ppx, ppy, ps, ps);
+  const gl = ctx.createLinearGradient(ppx, ppy, ppx + ps, ppy + ps);
+  gl.addColorStop(0, "rgba(255,255,255,0.28)");
+  gl.addColorStop(0.4, "rgba(255,255,255,0)");
+  ctx.fillStyle = gl;
+  ctx.fillRect(ppx, ppy, ps, ps);
+  ctx.restore();
+  // ruban du rang dans le coin
+  ctx.save();
+  ctx.translate(art.x + art.w, art.y);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = metal;
+  ctx.shadowColor = "rgba(0,0,0,0.4)";
+  ctx.shadowBlur = 6;
+  ctx.fillRect(-90, 34, 180, 26);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#1a1a1a";
+  ctx.font = "12px CardEngrave";
+  ctx.textAlign = "center";
+  ctx.fillText(T.name.replace("RÉSIDENT ", "").replace(" DE LA MAISON", ""), 0, 52);
+  ctx.restore();
   if (holo) {
     ctx.globalCompositeOperation = "overlay";
-    rainbow(ctx, W, H, t, 0.4);
+    rainbow(ctx, W, H, t, 0.45);
     ctx.globalCompositeOperation = "source-over";
-  }
-  if (card.rarity === "mythique") {
-    ctx.globalCompositeOperation = "soft-light";
-    const ir = ctx.createLinearGradient(-W + t * W, 0, t * W + W, H);
-    for (let i = 0; i <= 6; i++) ir.addColorStop(i / 6, `hsl(${(i * 60 + t * 360) % 360},85%,70%)`);
-    ctx.globalAlpha = 0.55;
-    ctx.fillStyle = ir;
-    ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
-  }
-  if (card.rarity === "legendaire" || card.rarity === "mythique" || card.rarity === "epique") {
-    const RS = seeded(hashOf(card.id) + 4);
-    ctx.globalCompositeOperation = "screen";
-    for (let i = 0; i < 46; i++) {
-      const tw = Math.max(0, Math.sin(TAU * (t * 2 + RS())));
-      ctx.globalAlpha = 0.2 + 0.8 * tw;
-      sparkle(ctx, RS() * W, RS() * H, 0.8 + tw * 2.6, card.rarity === "epique" ? "#e9d5ff" : "#fde68a");
-    }
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
   }
   ctx.restore();
 
-  // Cadre en métal : bord épais, filet intérieur, gravure
-  ctx.lineWidth = 14;
-  ctx.strokeStyle = metalGradient(ctx, W, H, metalCols, Math.sin(TAU * t) * 0.2);
-  ctx.stroke(crestPath(W, H, 7));
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(0,0,0,0.45)";
-  ctx.stroke(crestPath(W, H, 0.5));
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = rgba(metalCols[2], 0.8);
-  ctx.stroke(crestPath(W, H, 18));
-  ctx.lineWidth = 1;
+  // Bandeau d'informations
+  const days = card.joinedAt ? Math.max(0, Math.floor((Date.now() - card.joinedAt) / 86400000)) : null;
+  const info = `${numberOf(card).replace("#", "N° ")}   Membre · ${card.role?.name ?? "Résident"}${days !== null ? `   ·   ${days} jour${days > 1 ? "s" : ""} dans la Maison` : ""}`;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(70, 466);
+  ctx.lineTo(W - 70, 466);
+  ctx.lineTo(W - 84, 492);
+  ctx.lineTo(84, 492);
+  ctx.closePath();
+  ctx.fillStyle = metal;
+  ctx.shadowColor = "rgba(0,0,0,0.3)";
+  ctx.shadowBlur = 5;
+  ctx.fill();
+  ctx.restore();
+  ctx.textAlign = "center";
+  ctx.font = `${fitText(ctx, info, 420, 14, "CardItalic")}px CardItalic`;
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillText(info, W / 2, 484);
+  ctx.textAlign = "left";
+
+  // Attaques
+  const moves = memberMoves(card);
+  moves.forEach((mv, i) => {
+    const y = 528 + i * 90;
+    for (let k = 0; k < mv.cost; k++) energy(ctx, 54 + k * 30, y, 12, roleColor, k > 0 && i === 1 && k === mv.cost - 1);
+    ctx.font = "27px CardTitle";
+    ctx.fillStyle = T.ink;
+    ctx.fillText(mv.name, 54 + mv.cost * 30 + 6, y + 9);
+    ctx.textAlign = "right";
+    ctx.font = "34px CardTitle";
+    ctx.fillText(String(mv.damage), W - 48, y + 11);
+    ctx.textAlign = "left";
+    ctx.font = "14px CardText";
+    ctx.fillStyle = rgba(T.ink, 0.85);
+    wrapText(ctx, mv.text, 54, y + 34, W - 108, 18, 2);
+    if (i === 0) {
+      ctx.strokeStyle = rgba(T.sub, 0.35);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(50, y + 66);
+      ctx.lineTo(W - 50, y + 66);
+      ctx.stroke();
+    }
+  });
+
+  // Faiblesse, résistance, retraite
+  const by = 708;
   ctx.strokeStyle = rgba(T.sub, 0.5);
-  ctx.stroke(crestPath(W, H, 26));
-  // pierre au sommet et aux épaules (or et icône)
-  if (card.rarity === "legendaire" || card.rarity === "mythique") {
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(44, by - 16);
+  ctx.lineTo(W - 44, by - 16);
+  ctx.stroke();
+  const cols = [
+    ["faiblesse", "Impôts ×2"],
+    ["résistance", "IRF −20"],
+    ["retraite", null],
+  ];
+  cols.forEach(([label, value], i) => {
+    const x = 64 + i * 176;
+    ctx.font = "12px CardText";
+    ctx.fillStyle = rgba(T.ink, 0.7);
+    ctx.fillText(label, x, by);
+    ctx.font = "15px CardBold";
+    ctx.fillStyle = T.ink;
+    if (value) ctx.fillText(value, x, by + 22);
+    else for (let k = 0; k < T.retreat; k++) energy(ctx, x + 9 + k * 22, by + 16, 9, roleColor, true);
+  });
+
+  // Texte d'ambiance et mentions
+  roundRect(ctx, 44, 746, W - 88, 52, 8);
+  ctx.fillStyle = rgba("#ffffff", 0.35);
+  ctx.fill();
+  ctx.strokeStyle = rgba(T.sub, 0.45);
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.font = "15px CardItalic";
+  ctx.fillStyle = T.ink;
+  wrapText(ctx, card.text, 58, 767, W - 116, 18, 2);
+  ctx.font = "11px CardBold";
+  ctx.fillStyle = rgba(T.ink, 0.65);
+  seriesIcon(ctx, "membres", 48, 808, 5, T.ink);
+  ctx.fillText(`${numberOf(card).replace("#", "")}`, 58, 812);
+  for (let k = 0; k <= ORDER.indexOf(card.rarity) - 2; k++) {
+    diamond(ctx, 130 + k * 13, 808, 4);
+    ctx.fillStyle = T.sub;
+    ctx.fill();
+  }
+  ctx.textAlign = "right";
+  ctx.fillStyle = rgba(T.ink, 0.65);
+  ctx.fillText("Illus. La Maison  ·  © 2026", W - 46, 812);
+  ctx.textAlign = "left";
+
+  // reflet qui balaie la carte, pierres pour les plus hauts rangs
+  ctx.save();
+  roundRect(ctx, 0, 0, W, H, 30);
+  ctx.clip();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = special ? 0.35 : 0.22;
+  const sx = -W + t * 3 * W;
+  const shine = ctx.createLinearGradient(sx, 0, sx + W * 0.6, H * 0.4);
+  shine.addColorStop(0, "rgba(255,255,255,0)");
+  shine.addColorStop(0.5, "rgba(255,255,255,0.9)");
+  shine.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = shine;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  if (special) {
     const gemColor = card.rarity === "mythique" ? `hsl(${Math.round(t * 360)},90%,62%)` : roleColor;
-    gem(ctx, W / 2, 26, 10, gemColor, metalGradient(ctx, W, H, metalCols));
-    gem(ctx, 52, 74, 7, gemColor, metalGradient(ctx, W, H, metalCols));
-    gem(ctx, W - 52, 74, 7, gemColor, metalGradient(ctx, W, H, metalCols));
+    gem(ctx, W / 2, 11, 8, gemColor, metal);
+    gem(ctx, 11 + 8, H / 2, 6, gemColor, metal);
+    gem(ctx, W - 19, H / 2, 6, gemColor, metal);
   }
   return c;
 }
