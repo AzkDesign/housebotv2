@@ -82,6 +82,7 @@ const { setupLogs } = require("./logs");
 const { handleRelayMessage, handleRelayInteraction } = require("./relais");
 const { startInactivityWatcher } = require("./tickets");
 const { setupMembreStar, handleStarInteraction } = require("./membrestar");
+const { setupFeed } = require("./feed");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -526,6 +527,7 @@ client.once(Events.ClientReady, async () => {
   // Les commandes slash en premier, pour qu'elles soient toujours disponibles.
   await step("commandes slash", () => registerSlashCommands(client, TOKEN));
   await step("logs", () => setupLogs(client));
+  await step("fil en direct", () => setupFeed(client));
   await step("tickets inactifs", () => startInactivityWatcher(client));
   await step("règlement", () => setupRulesMessage(client));
   await step("tickets", () => setupTicketPanel(client));

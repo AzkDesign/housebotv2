@@ -293,6 +293,7 @@ async function announceMove(client, userId, fromRoom, toRoom) {
     text = `${arrow} <@${userId}> quitte **${from.emoji} ${from.name}** (${roomLabel(fromRoom)}) pour **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
   }
   const message = await channel.send({ content: text, allowedMentions: { users: [] } }).catch(() => null);
+  require("./feed").post(text, { stat: "demenagements" });
   deleteLater(message, MINUTE);
 }
 

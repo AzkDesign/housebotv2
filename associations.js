@@ -303,6 +303,7 @@ async function createAssociation(interaction, client) {
     `${asso.description}\n\nPrésidence confiée à ${president}. Rejoignez-la dans <#${asso.panelChannelId}>.\n\n${mairie().sign(interaction.user.id)}`,
     0x1abc9c
   );
+  require("./feed").post(`🤝 Nouvelle association : **${asso.name}**, présidée par ${president}`);
   await interaction.editReply(`🤝 **${asso.name}** est créée : <#${asso.panelChannelId}> (${names.length} salons, rôle ${role}).`);
 }
 

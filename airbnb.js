@@ -31,7 +31,11 @@ const PANEL_TITLE = "🏡 Airbnb de la Maison";
 const MAX_LISTINGS_PER_HOST = 5;
 const MIN_GAP_MS = 3 * 60 * 60 * 1000; // au moins 3 h entre deux demandes
 const EXTRA_GAP_MS = 3 * 60 * 60 * 1000; // + jusqu'à 3 h de hasard
-const REQUEST_TIMEOUT_MS = 2 * 60 * 60 * 1000; // sans réponse, le voyageur réserve ailleurs
+const REQUEST_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+// Acceptation automatique : l'hôte n'a pas besoin d'être là, mais touche 70 % de sa part
+const AUTO_MS = 24 * 60 * 60 * 1000;
+const AUTO_SHARE = 0.7;
+const feed = () => require("./feed"); // sans réponse, le voyageur réserve ailleurs
 const OPEN_HOUR = 7;
 const CLOSE_HOUR = 21;
 const CHECKOUT_HOUR = 11;
@@ -342,6 +346,7 @@ function buildPanelMessage() {
       "Mettez vos biens en location et accueillez des voyageurs du monde entier.\n\n" +
         "🏠 **Proposer un bien** — soumis à la validation d'un responsable\n" +
         "🟢 **Activer / Désactiver** — quand c'est activé, des voyageurs vous envoient des demandes (entre 7h et 21h)\n" +
+        "🤖 **Acceptation auto** — le bot accepte les réservations pour vous pendant 24 h (vous touchez 70 % de votre part)\n" +
         "📂 **Mes biens** — gérer vos logements\n" +
         "🛠️ **Gestion** — réservé aux responsables Airbnb\n\n" +
         `💶 Chaque séjour : **${Math.round(hostShare() * 100)} %** pour l'hôte, **${Math.round((1 - hostShare()) * 100)} %** pour la Maison. Ménage compris.\n\n` +
@@ -356,6 +361,7 @@ function buildPanelMessage() {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("airbnb_add").setLabel("Proposer un bien").setEmoji("🏠").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("airbnb_toggle").setLabel("Activer / Désactiver").setEmoji("🟢").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("airbnb_auto").setLabel("Acceptation auto").setEmoji("🤖").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("airbnb_mine").setLabel("Mes biens").setEmoji("📂").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("airbnb_admin").setLabel("Gestion").setEmoji("🛠️").setStyle(ButtonStyle.Danger)
       ),
@@ -444,6 +450,7 @@ async function createRequest(client, state, hostId) {
     guest,
     total: round2(listing.price * guest.nights),
     createdAt: Date.now(),
+    autoWait: randBetween(1, 5) * MINUTE,
   };
 
   const message = await sendToChannel(client, {
@@ -466,6 +473,18 @@ async function tick(client) {
   const state = loadState();
   const now = Date.now();
   let changed = false;
+
+  // Acceptation automatique pour les hôtes qui l'ont activée
+  for (const request of Object.values(state.requests)) {
+    const host = state.hosts[request.hostId];
+    if (!host?.autoUntil || host.autoUntil < now || now - request.createdAt < (request.autoWait ?? 2 * MINUTE)) continue;
+    const listing = state.listings[request.listingId];
+    if (!listing || listing.occupiedUntil || listing.status !== "active" || isFrozen(request.hostId)) continue;
+    delete state.requests[request.id];
+    const embed = confirmBooking(state, request, listing, true);
+    await editRequestMessage(client, request, { content: `<@${request.hostId}>`, embeds: [embed], components: [] }, 2 * MINUTE);
+    changed = true;
+  }
 
   // Demandes restées sans réponse
   for (const request of Object.values(state.requests)) {
@@ -491,6 +510,7 @@ async function tick(client) {
     listing.ratingSum = (listing.ratingSum ?? 0) + review.stars;
     changed = true;
     panelDirty = true;
+    feed().post(`🧳 ${guestName} quitte **${listing.name}** et laisse ${"⭐".repeat(review.stars)}`);
     const departure = await sendToChannel(client, {
       content: `<@${listing.hostId}>`,
       allowedMentions: { users: [listing.hostId] },
@@ -672,6 +692,24 @@ async function validateListing(interaction, accepted, id) {
     .setFooter({ text: `${accepted ? "Validé" : "Refusé"} par ${interaction.user.tag}` });
   await interaction.update({ content: `<@${listing.hostId}>`, embeds: [embed], components: [] });
   deleteInteractionMessageLater(interaction, MINUTE);
+}
+
+async function toggleAuto(interaction) {
+  const state = loadState();
+  const host = (state.hosts[interaction.user.id] ??= { on: false, nextAt: 0 });
+  if (!host.on) {
+    await interaction.reply({ content: "🔴 Activez d'abord votre Airbnb avec le bouton « Activer / Désactiver ».", ephemeral: true });
+    return;
+  }
+  const active = host.autoUntil && host.autoUntil > Date.now();
+  host.autoUntil = active ? 0 : Date.now() + AUTO_MS;
+  saveState(state);
+  await interaction.reply({
+    content: active
+      ? "✋ **Acceptation automatique désactivée.** Vous acceptez à nouveau les demandes vous-même."
+      : `🤖 **Acceptation automatique activée pour 24 h.** Les réservations sont acceptées pour vous en 1 à 5 minutes ; vous touchez **${Math.round(AUTO_SHARE * 100)} %** de votre part habituelle. Revenez la relancer ensuite !`,
+    ephemeral: true,
+  });
 }
 
 async function toggleHost(interaction) {
@@ -881,6 +919,40 @@ async function setSuspended(interaction, id, suspended) {
 
 // --- Réponse de l'hôte à une demande ---
 
+function confirmBooking(state, request, listing, auto = false) {
+  const g = request.guest;
+  const fullHostPart = round2(request.total * hostShare());
+  const hostPart = auto ? round2(fullHostPart * AUTO_SHARE) : fullHostPart;
+  const maisonPart = round2(request.total - hostPart);
+  const checkout = checkoutTime(Date.now(), g.nights);
+
+  listing.occupiedUntil = checkout;
+  listing.currentGuest = g.name;
+  listing.revenue = round2((listing.revenue ?? 0) + request.total);
+  listing.earned = round2((listing.earned ?? 0) + hostPart);
+  saveState(state);
+  panelDirty = true;
+
+  changeBalance(request.hostId, hostPart, `Airbnb${auto ? " (auto)" : ""} — ${g.name} à ${listing.name} (${g.nights} nuit${g.nights > 1 ? "s" : ""})`);
+  addToTreasury("airbnb", maisonPart);
+  feed().post(`🏡 ${g.name} ${g.flag} s'installe à **${listing.name}** pour ${g.nights} nuit${g.nights > 1 ? "s" : ""}`, { stat: "sejours" });
+
+  return new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setTitle("✅ Réservation confirmée")
+    .setDescription(
+      `${g.who} ${g.flag} séjourne à **${listing.name}** pour **${g.nights} nuit${g.nights > 1 ? "s" : ""}**.\n` +
+        `Départ prévu ${ts(checkout, "F")}.`
+    )
+    .addFields(
+      { name: "Total du séjour", value: formatEuro(request.total), inline: true },
+      { name: auto ? "Pour l'hôte (auto, 70 % de sa part)" : `Pour l'hôte (${Math.round(hostShare() * 100)} %)`, value: `**${formatEuro(hostPart)}**`, inline: true },
+      { name: "Pour la Maison", value: formatEuro(maisonPart), inline: true }
+    )
+    .setFooter(auto ? { text: "🤖 Acceptée automatiquement" } : null)
+    .setTimestamp();
+}
+
 async function answerRequest(interaction, accepted, id, client) {
   const state = loadState();
   const request = state.requests[id];
@@ -913,34 +985,8 @@ async function answerRequest(interaction, accepted, id, client) {
     return;
   }
 
-  const hostPart = round2(request.total * hostShare());
-  const maisonPart = round2(request.total - hostPart);
-  const checkout = checkoutTime(Date.now(), g.nights);
-
-  listing.occupiedUntil = checkout;
-  listing.currentGuest = g.name;
-  listing.revenue = round2((listing.revenue ?? 0) + request.total);
-  listing.earned = round2((listing.earned ?? 0) + hostPart);
-  saveState(state);
-  panelDirty = true;
-
-  changeBalance(request.hostId, hostPart, `Airbnb — ${g.name} à ${listing.name} (${g.nights} nuit${g.nights > 1 ? "s" : ""})`);
-  addToTreasury("airbnb", maisonPart);
+  const embed = confirmBooking(state, request, listing, false);
   await refreshRichestLeaderboard(client).catch(() => null);
-
-  const embed = new EmbedBuilder()
-    .setColor(0x2ecc71)
-    .setTitle("✅ Réservation confirmée")
-    .setDescription(
-      `${g.who} ${g.flag} séjourne à **${listing.name}** pour **${g.nights} nuit${g.nights > 1 ? "s" : ""}**.\n` +
-        `Départ prévu ${ts(checkout, "F")}.`
-    )
-    .addFields(
-      { name: "Total du séjour", value: formatEuro(request.total), inline: true },
-      { name: `Pour l'hôte (${Math.round(hostShare() * 100)} %)`, value: `**${formatEuro(hostPart)}**`, inline: true },
-      { name: `Pour la Maison (${Math.round((1 - hostShare()) * 100)} %)`, value: formatEuro(maisonPart), inline: true }
-    )
-    .setTimestamp();
   await interaction.update({ content: `<@${request.hostId}>`, embeds: [embed], components: [] });
   deleteInteractionMessageLater(interaction, 2 * MINUTE);
 }
@@ -954,6 +1000,7 @@ async function handleAirbnbInteraction(interaction, client) {
   if (interaction.isButton()) {
     if (id === "airbnb_add") await interaction.showModal(listingModal("airbnb_modal_add", "🏠 Proposer un bien"));
     else if (id === "airbnb_toggle") await toggleHost(interaction);
+    else if (id === "airbnb_auto") await toggleAuto(interaction);
     else if (id === "airbnb_mine") await showMine(interaction);
     else if (id === "airbnb_admin") await showAdmin(interaction);
     else if (id.startsWith("airbnb_validate_")) {

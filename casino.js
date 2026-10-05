@@ -170,6 +170,7 @@ function pay(userId, amount, game) {
     changeBalance(userId, paid, `Casino — ${game} (gain)`, { force: true });
     addToTreasury("casinoGains", paid);
     markBalancesDirty();
+    if (paid >= 2000) require("./feed").post(`🎰 <@${userId}> remporte **${formatEuro(paid)}** au ${game} !`, { stat: "casino" });
   }
   return paid;
 }
@@ -913,6 +914,7 @@ async function playSlots(interaction, spins, bet, client) {
 
   if (jackpotWon) {
     const channel = await client.channels.fetch(CASINO_CHANNEL_ID).catch(() => null);
+    require("./feed").post(`💰 **JACKPOT !** ${interaction.user} décroche le jackpot de la machine à sous !`, { stat: "casino" });
     const announce = await channel
       ?.send(`💰🎰 **JACKPOT !** ${interaction.user} vient de remporter le **JACKPOT** à la machine à sous !`)
       .catch(() => null);

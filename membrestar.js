@@ -152,6 +152,7 @@ async function electStar(interaction, client) {
   }
 
   const promotion = GRADES.some((g) => g.min === count && g.min > 1);
+  require("./feed").post(`⭐ ${target} est élu(e) **Membre Star** de la semaine (${count < 10 ? `semaine ${count}` : grade.name}) !`);
   await channelRef
     ?.send({
       content: `${target}`,

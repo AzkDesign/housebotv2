@@ -37,6 +37,10 @@ const UNPAID_WEEKS_BEFORE_BANKRUPTCY = 2;
 const CLIENT_TIMEOUT_MS = 20 * 60 * 1000;
 const SHIFT_MAX_MS = 6 * 60 * 60 * 1000; // service terminé automatiquement après 6 h
 const TRANSACTIONS_KEPT = 50;
+// Mode automatique : le bot répond aux clients à la place de l'employé
+const AUTO_SHIFT_MS = 8 * 60 * 60 * 1000; // à relancer toutes les 8 h
+const AUTO_SHARE = 0.7; // un client servi en automatique rapporte 70 % du prix
+const feed = () => require("./feed");
 
 const REGISTRY_TITLE = "📜 Registre du commerce";
 const POSTES = { patron: "👑 Patron", manager: "🧭 Manager", employe: "👷 Employé" };
@@ -142,6 +146,24 @@ const SECTORS = {
     ],
   },
 };
+
+// Message de confirmation réaliste envoyé en mode automatique, selon le secteur
+function autoConfirmation(sector) {
+  const h = randBetween(9, 19);
+  const m = pick(["00", "15", "30", "45"]);
+  const lines = {
+    transport: [`🚕 Course confirmée : le chauffeur arrive dans ${randBetween(3, 12)} minutes.`, "🚕 Réservation enregistrée, véhicule en route."],
+    restauration: [`🍽️ Table réservée ce soir à ${randBetween(19, 22)}h${m}.`, "🍽️ Commande confirmée, préparation en cuisine."],
+    garage: [`🔧 Rendez-vous atelier confirmé demain à ${h}h${m}.`, "🔧 Véhicule pris en charge, devis accepté."],
+    beaute: [`💆 Rendez-vous confirmé demain à ${h}h${m}.`, "💆 Réservation confirmée, la cabine est prête."],
+    evenementiel: ["🎉 Devis accepté : l'organisation commence !", "🎉 Contrat signé, la date est bloquée."],
+    securite: ["🛡️ Mission confirmée, l'équipe est assignée.", "🛡️ Contrat de surveillance signé."],
+    media: [`📸 Séance confirmée samedi à ${h}h${m}.`, "📸 Projet accepté, le tournage est planifié."],
+    immobilier: ["🏢 Mandat signé, première visite planifiée.", `🏢 Rendez-vous d'estimation confirmé jeudi à ${h}h.`],
+    commerce: ["🛍️ Commande payée et préparée.", "🛍️ Achat validé, paquet prêt à emporter."],
+  };
+  return pick(lines[sector] ?? ["✅ Demande confirmée."]);
+}
 
 function describePerson() {
   const p = randomPerson();
@@ -549,6 +571,7 @@ async function validateCreation(interaction, accepted, id, client) {
   company.validatedBy = interaction.user.id;
   move(company, START_CAPITAL, "Capital de départ");
   if (fee > 0) addToTreasury("immatriculations", fee);
+  feed().post(`🏢 Nouvelle entreprise : **${company.name}** (${SECTORS[company.sector].label}) ouvre ses portes !`, { stat: "entreprises" });
   save();
   registryDirty = true;
 
@@ -585,7 +608,7 @@ function companyEmbed(company) {
   const onDuty = Object.keys(company.onDuty);
   const staff = Object.entries(company.members)
     .sort((a, b) => ["patron", "manager", "employe"].indexOf(a[1].role) - ["patron", "manager", "employe"].indexOf(b[1].role))
-    .map(([id, m]) => `${POSTES[m.role]} <@${id}>${m.role !== "patron" ? ` — ${formatEuro(m.salary)}/sem.` : ""}${company.onDuty[id] ? " 🟢" : ""}`)
+    .map(([id, m]) => `${POSTES[m.role]} <@${id}>${m.role !== "patron" ? ` — ${formatEuro(m.salary)}/sem.` : ""}${company.onDuty[id] ? (company.autoDuty?.[id] ? " 🤖" : " 🟢") : ""}`)
     .join("\n");
   return new EmbedBuilder()
     .setColor(company.status === "frozen" ? 0x95a5a6 : 0x8b0000)
@@ -610,6 +633,7 @@ function companyPanel(company) {
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`ent_duty_on_${company.id}`).setLabel("Prendre mon service").setEmoji("🟢").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`ent_duty_auto_${company.id}`).setLabel("Service auto").setEmoji("🤖").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`ent_duty_off_${company.id}`).setLabel("Finir mon service").setEmoji("🔴").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`ent_invoice_${company.id}`).setLabel("Facturer").setEmoji("🧾").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`ent_report_${company.id}`).setLabel("Bilan").setEmoji("📊").setStyle(ButtonStyle.Secondary)
@@ -646,7 +670,7 @@ async function updateChannelAccess(client, company) {
 
 // --- Service et clients ---
 
-async function setDuty(interaction, company, on) {
+async function setDuty(interaction, company, on, auto = false) {
   const userId = interaction.user.id;
   if (!company.members[userId]) {
     await interaction.reply({ content: "❌ Vous ne faites pas partie de cette entreprise.", ephemeral: true });
@@ -656,12 +680,15 @@ async function setDuty(interaction, company, on) {
     await interaction.reply({ content: "🔒 L'entreprise est gelée par l'IRF.", ephemeral: true });
     return;
   }
+  company.autoDuty ??= {};
   if (on) {
-    if (company.onDuty[userId]) {
-      await interaction.reply({ content: "🟢 Vous êtes déjà en service.", ephemeral: true });
+    if (company.onDuty[userId] && Boolean(company.autoDuty[userId]) === auto) {
+      await interaction.reply({ content: auto ? "🤖 Votre service automatique est déjà en cours." : "🟢 Vous êtes déjà en service.", ephemeral: true });
       return;
     }
     company.onDuty[userId] = Date.now();
+    if (auto) company.autoDuty[userId] = Date.now() + AUTO_SHIFT_MS;
+    else delete company.autoDuty[userId];
     if (!company.nextClientAt || company.nextClientAt < Date.now()) {
       company.nextClientAt = Date.now() + randBetween(5, 20) * 60 * 1000;
     }
@@ -671,10 +698,20 @@ async function setDuty(interaction, company, on) {
       return;
     }
     delete company.onDuty[userId];
+    delete company.autoDuty[userId];
   }
   save();
   dirtyPanels.add(company.id);
   const [open, close] = SECTORS[company.sector].hours;
+  if (on && auto) {
+    await interaction.reply({
+      content:
+        `🤖 **Service automatique activé pour 8 h.** Le bot répond aux clients à votre place (entre ${open}h et ${close}h) : ` +
+        `chaque client servi automatiquement rapporte **${Math.round(AUTO_SHARE * 100)} %** du prix. Revenez le relancer ensuite !`,
+      ephemeral: true,
+    });
+    return;
+  }
   await interaction.reply({
     content: on
       ? `🟢 **En service !** Les clients arrivent entre ${open}h et ${close}h. Fin automatique au bout de 6 h.`
@@ -710,7 +747,47 @@ async function sendClientRequest(client, company) {
     ],
   });
   if (!msg) return;
-  company.request = { id, ...req, at: Date.now(), messageId: msg.id };
+  company.request = { id, ...req, at: Date.now(), messageId: msg.id, autoWait: randBetween(30, 120) * 1000 };
+}
+
+async function autoServe(client, company, userId) {
+  const request = company.request;
+  company.request = null;
+  const earned = round2(request.price * AUTO_SHARE);
+  move(company, earned, `Client (auto) : ${request.text.replace(/\*\*/g, "")}`.slice(0, 120));
+  company.weekRevenue = round2(company.weekRevenue + earned);
+  company.totalRevenue = round2(company.totalRevenue + earned);
+  company.weekStats[userId] = (company.weekStats[userId] ?? 0) + 1;
+  save();
+  dirtyPanels.add(company.id);
+  registryDirty = true;
+  const member = client.users.cache.get(userId);
+  const channel = await fetchChannel(client, company.channelId);
+  const msg = await channel?.messages.fetch(request.messageId).catch(() => null);
+  if (msg) {
+    await msg
+      .edit({
+        content: "",
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x2ecc71)
+            .setTitle("✅ Réservation confirmée")
+            .setDescription(`${request.text}.\n\n${autoConfirmation(company.sector)}`)
+            .setFooter({ text: `🤖 Géré automatiquement pour ${member?.username ?? "l'équipe"} — ${formatEuro(earned)} encaissés (${Math.round(AUTO_SHARE * 100)} %)` }),
+        ],
+        components: [],
+      })
+      .catch(() => null);
+    deleteLater(msg, 2 * MINUTE);
+  }
+  feed().post(`${SECTORS[company.sector].label.split(" ")[0]} **${company.name}** : ${shortClient(request.text)} (+${formatEuro(earned)})`, { stat: "clients" });
+  feed().post("", { stat: "ca", amount: earned });
+}
+
+// « Chloé Meier, 53 ans, de Genève 🇨🇭 a besoin d'une course… » → version courte pour le fil
+function shortClient(text) {
+  // on retire « , 56 ans, de New York, États-Unis » et on garde le drapeau
+  return text.replace(/\*\*/g, "").replace(/, \d+ ans, de .*?(\p{RI}\p{RI})/u, " $1").slice(0, 140);
 }
 
 async function answerClient(interaction, company, requestId, accepted) {
@@ -749,6 +826,8 @@ async function answerClient(interaction, company, requestId, accepted) {
     embeds: [embed.setColor(0x2ecc71).setTitle("✅ Client servi").setFooter({ text: `Pris en charge par ${interaction.user.tag} — ${formatEuro(request.price)} encaissés` })],
     components: [],
   });
+  feed().post(`${SECTORS[company.sector].label.split(" ")[0]} **${company.name}** : ${shortClient(request.text)} (+${formatEuro(request.price)})`, { stat: "clients" });
+  feed().post("", { stat: "ca", amount: request.price });
   deleteInteractionMessageLater(interaction, 2 * MINUTE);
 }
 
@@ -758,12 +837,24 @@ async function tick(client) {
     if (company.status !== "active" && company.status !== "frozen") continue;
 
     // Fin de service automatique
+    company.autoDuty ??= {};
     for (const [userId, since] of Object.entries(company.onDuty)) {
-      if (now - since > SHIFT_MAX_MS || !company.members[userId]) {
+      const autoUntil = company.autoDuty[userId];
+      const expired = autoUntil ? now > autoUntil : now - since > SHIFT_MAX_MS;
+      if (expired || !company.members[userId]) {
         delete company.onDuty[userId];
+        delete company.autoDuty[userId];
         dirtyPanels.add(company.id);
         save();
       }
+    }
+
+    // Mode automatique : le bot sert le client à la place d'un employé en service auto
+    const autoMembers = Object.keys(company.onDuty).filter((u) => company.autoDuty[u]);
+    if (company.request && autoMembers.length && company.status === "active") {
+      const humans = Object.keys(company.onDuty).some((u) => !company.autoDuty[u]);
+      const wait = humans ? 5 * MINUTE : company.request.autoWait ?? MINUTE;
+      if (now - company.request.at >= wait) await autoServe(client, company, pick(autoMembers));
     }
 
     // Client sans réponse
@@ -1494,7 +1585,7 @@ async function handleEntreprisesInteraction(interaction, client) {
 
   switch (parts[1]) {
     case "duty":
-      await setDuty(interaction, company, parts[2] === "on");
+      await setDuty(interaction, company, parts[2] !== "off", parts[2] === "auto");
       break;
     case "client":
       await answerClient(interaction, company, parts[4], parts[2] === "ok");
