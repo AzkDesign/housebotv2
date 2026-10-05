@@ -66,6 +66,11 @@ async function registerSlashCommands(client, token) {
       .addBooleanOption((o) => o.setName("prive").setDescription("Afficher la carte seulement pour vous (avec vos infos privées)"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("album")
+      .setDescription("Feuilleter votre album de cartes (ou celui d'un autre membre)")
+      .addUserOption((o) => o.setName("membre").setDescription("Voir l'album d'un autre membre"))
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("inventaire")
       .setDescription("Vos boosters de cartes, votre collection et vos statistiques")
       .addUserOption((o) => o.setName("membre").setDescription("Voir l'inventaire d'un autre membre"))
@@ -82,7 +87,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil et /inventaire enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire et /album enregistrées");
 }
 
 module.exports = { registerSlashCommands };
