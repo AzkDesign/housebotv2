@@ -84,6 +84,7 @@ const { startInactivityWatcher } = require("./tickets");
 const { setupMembreStar, handleStarInteraction } = require("./membrestar");
 const { setupFeed } = require("./feed");
 const { setupLois, handleLoisInteraction } = require("./lois");
+const { setupCartes, handleCartesInteraction } = require("./cartes");
 const { handleLevelMessage, handleLevelCommand } = require("./levels");
 const { setupRichestLeaderboard, handleEconomieInteraction } = require("./economie");
 const { setupShopPanel, handleShopInteraction } = require("./boutique");
@@ -563,6 +564,7 @@ client.once(Events.ClientReady, async () => {
   await step("Lois", () => setupLois(client));
   await step("Espaces Jeunes / Entrepreneurs", () => setupEspaces(client));
   await step("Membre Star", () => setupMembreStar(client));
+  await step("Cartes de la Maison", () => setupCartes(client));
   await step("annonce V3", () => publishV3Announcement(client));
   await step("vidéo V3", () => publishV3Video(client));
   await step("annonce recrutement", () => publishRecruitmentAnnouncement(client));
@@ -597,6 +599,7 @@ async function onInteraction(interaction) {
   if (await handleRelayInteraction(interaction, client)) return;
   if (await handleStarInteraction(interaction, client)) return;
   if (await handleLoisInteraction(interaction, client)) return;
+  if (await handleCartesInteraction(interaction, client)) return;
   if (await handleClearCommand(interaction)) return;
   if (await handleProfilCommand(interaction)) return;
   if (await handleEspacesInteraction(interaction)) return;

@@ -643,6 +643,7 @@ async function publishResults(client) {
     `\n\n👑 <@${winner}> est élu(e) maire${adjointId ? `, avec <@${adjointId}> comme adjoint` : ""} !`;
   await ch?.send({ content: `<@${winner}>`, embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(`🏆 Résultats — ${election.key}`).setDescription(text)] }).catch(() => null);
   await journal(client, "👑 Nouveau maire", text);
+  await require("./cartes").grantEventCard(client, winner, "ev_maire").catch(() => null);
   require("./feed").post(`👑 <@${winner}> est élu(e) maire de la Maison !`);
   await refreshPanels(client);
   await refreshRichestLeaderboard(client).catch(() => null);

@@ -6,6 +6,7 @@ const { getResidence } = require("./chambres");
 const { getJobOf } = require("./entreprises");
 const { getLevelSummary } = require("./levels");
 const { getStarTitle } = require("./membrestar");
+const { getCollectionSummary } = require("./cartes");
 
 // Chargés à la demande : la mairie et les associations s'utilisent mutuellement.
 const mairie = () => require("./mairie");
@@ -80,6 +81,8 @@ function buildCard(member, { showPrivate }) {
     { name: "⭐ Activité", value: `**${level.label}** · ${level.messages} message(s)`, inline: true }
   );
   if (casino.length) embed.addFields({ name: "🎟️ Accès", value: casino.join(" · "), inline: true });
+  const collection = getCollectionSummary(userId);
+  if (collection) embed.addFields({ name: "🃏 Collection", value: collection, inline: true });
   embed.addFields({ name: "📅 Ancienneté", value: seniority(member.joinedTimestamp) });
 
   // Informations privées : seulement pour soi (en privé), l'IRF et les gérants

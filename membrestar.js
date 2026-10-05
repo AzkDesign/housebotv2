@@ -174,6 +174,7 @@ async function electStar(interaction, client) {
     .catch(() => null);
   await refreshPanel(client);
   await refreshRichestLeaderboard(client).catch(() => null);
+  await require("./cartes").grantEventCard(client, target.id, "ev_star").catch(() => null);
   return interaction.update({ content: `⭐ ${target} est le membre star de la semaine.`, components: [] });
 }
 

@@ -935,6 +935,7 @@ async function playSlots(interaction, spins, bet, client) {
       ?.send(`💰🎰 **JACKPOT !** ${interaction.user} vient de remporter le **JACKPOT** à la machine à sous !`)
       .catch(() => null);
     deleteLater(announce, HOUR);
+    await require("./cartes").grantEventCard(client, interaction.user.id, "ev_jackpot").catch(() => null);
   }
 }
 
