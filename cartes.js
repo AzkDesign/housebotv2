@@ -145,6 +145,8 @@ function load() {
   state.sales ??= []; // historique des ventes (cote)
   state.trades ??= {}; // propositions d'échange
   state.coteHistory ??= {}; // relevés quotidiens des cotes (tendance)
+  state.arena ??= {}; // userId -> { elo, w, l, d, streak }
+  state.arenaEscrow ??= {}; // argent bloqué pendant les combats (remboursé si le bot redémarre)
   state.packs ??= {}; // userId -> { « g1_standard »: nombre de boosters fermés }
   return state;
 }
@@ -204,6 +206,22 @@ function statsOf(card) {
   const base = { commune: 20, peucommune: 32, rare: 45, epique: 60, legendaire: 75, mythique: 88 }[card.rarity];
   const roll = (k) => Math.min(99, base + ((h >> (k * 5)) % 12));
   return { prestige: roll(0), influence: roll(1), chance: roll(2) };
+}
+
+// Chiffres de combat d'une carte (affichés sur la carte et utilisés dans l'Arène) — la version holo est un peu plus forte
+function combatProfile(card, holo = false) {
+  const st = statsOf(card);
+  const hp = Math.round((70 + st.prestige * 1.3) * (holo ? 1.1 : 1));
+  const atk = Math.round(st.influence * (holo ? 1.05 : 1));
+  return {
+    hp,
+    atk,
+    luck: st.chance,
+    attack: Math.round(10 + atk * 0.55),
+    special: Math.round(18 + atk * 1.1),
+    attackName: card.memberStats ? memberMoves(card)[0].name : "Attaque",
+    specialName: specialName(card),
+  };
 }
 
 function numberOf(card) {
@@ -1449,6 +1467,29 @@ function corners(ctx, b, color) {
   }
   ctx.shadowBlur = 0;
 }
+function combatIcon(ctx, kind, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  if (kind === 0) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + 7);
+    ctx.bezierCurveTo(x - 11, y - 1, x - 7, y - 10, x, y - 4);
+    ctx.bezierCurveTo(x + 7, y - 10, x + 11, y - 1, x, y + 7);
+    ctx.fill();
+    return;
+  }
+  if (kind === 1) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillRect(-1.6, -10, 3.2, 14);
+    ctx.fillRect(-5, 3, 10, 2.4);
+    ctx.fillRect(-1.2, 5, 2.4, 5);
+    ctx.restore();
+    return;
+  }
+  sparkle(ctx, x, y, 4.5, color);
+}
 function statIcon(ctx, kind, x, y, color) {
   if (kind === 0) return star5(ctx, x, y, 8, color);
   ctx.fillStyle = color;
@@ -1801,17 +1842,17 @@ function memberProfile(id, m) {
 const round10 = (v) => Math.max(10, Math.round(v / 10) * 10);
 // Attaques : la première vient du point fort du membre, la seconde de son rang
 const SIGNATURE_MOVES = {
-  ACT: ["Bavardage", "Lance la discussion dans le salon : l'adversaire ne peut pas répliquer ce tour-ci."],
-  ANC: ["Vétéran de la Maison", "Connaît toutes les règles par cœur. Ignore le prochain impôt."],
-  FOR: ["Pluie d'euros", "Lancez 2 pièces. Ajoutez 30 dégâts pour chaque face."],
-  STA: ["Étoile filante", "Élu(e) Membre Star : soignez 20 PV à ce membre."],
-  CHA: ["Coup de chance", "Lancez une pièce. Si c'est face, les dégâts sont doublés."],
+  ACT: ["Bavardage", "Lance la discussion dans le salon. Attaque de base : aucune énergie requise."],
+  ANC: ["Vétéran de la Maison", "Connaît toutes les règles par cœur. Attaque de base : aucune énergie requise."],
+  FOR: ["Pluie d'euros", "Fait pleuvoir les billets. Attaque de base : aucune énergie requise."],
+  STA: ["Étoile filante", "L'éclat d'un Membre Star. Attaque de base : aucune énergie requise."],
+  CHA: ["Coup de chance", "Tout repose sur la chance. Attaque de base : aucune énergie requise."],
 };
 const RANK_MOVES = {
-  rare: ["Coup de main", "Aide un autre résident : il récupère 10 PV.", 2],
-  epique: ["Ambition", "Si ce membre possède plus de 50 000 €, ajoutez 30 dégâts.", 2],
-  legendaire: ["Charisme doré", "Toute la Maison écoute : l'adversaire passe son prochain tour.", 3],
-  mythique: ["Volonté de la Fondation", "Rien ne résiste à la Fondation : cette attaque ne peut pas être bloquée.", 3],
+  rare: ["Coup de main", "Toute la Maison donne un coup de main. Coup spécial : coûte 3 énergies, impossible à esquiver.", 3],
+  epique: ["Ambition", "Rien n'arrête un résident ambitieux. Coup spécial : coûte 3 énergies, impossible à esquiver.", 3],
+  legendaire: ["Charisme doré", "Toute la Maison écoute. Coup spécial : coûte 3 énergies, impossible à esquiver.", 3],
+  mythique: ["Volonté de la Fondation", "Rien ne résiste à la Fondation. Coup spécial : coûte 3 énergies, impossible à esquiver.", 3],
 };
 function memberMoves(card) {
   const st = card.memberStats ?? {};
@@ -1921,7 +1962,8 @@ async function drawMemberCard(card, holo = false, t = 0.3) {
   ctx.stroke();
   ctx.fillStyle = "#1a1a1a";
   ctx.fillText(T.stage, 49, 48);
-  const hp = round10((card.rating ?? 70) * 1.6);
+  const cpm = combatProfile(card, holo);
+  const hp = cpm.hp;
   ctx.textAlign = "right";
   ctx.font = "40px CardTitle";
   ctx.fillStyle = "#b91c1c";
@@ -2060,6 +2102,10 @@ async function drawMemberCard(card, holo = false, t = 0.3) {
 
   // Attaques
   const moves = memberMoves(card);
+  moves[0].damage = cpm.attack;
+  moves[0].cost = 0;
+  moves[1].damage = cpm.special;
+  moves[1].cost = SPECIAL_COST;
   moves.forEach((mv, i) => {
     const y = 528 + i * 90;
     for (let k = 0; k < mv.cost; k++) energy(ctx, 54 + k * 30, y, 12, roleColor, k > 0 && i === 1 && k === mv.cost - 1);
@@ -2304,9 +2350,9 @@ async function drawCard(card, holo = false, t = 0.37, mode = animMode(card, holo
     ctx.fill();
   }
 
-  // Statistiques : icône, valeur et jauge
-  const st = statsOf(card);
-  [["PRESTIGE", st.prestige], ["INFLUENCE", st.influence], ["CHANCE", st.chance]].forEach(([label, value], i) => {
+  // Chiffres de combat : PV, dégâts d'attaque et dégâts du spécial
+  const cp = combatProfile(card, holo);
+  [["PV", cp.hp, 250], ["ATTAQUE", cp.attack, 75], ["SPÉCIAL", cp.special, 130]].forEach(([label, value, max], i) => {
     const bx = 44 + i * 176, by = 584;
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.6)";
@@ -2327,20 +2373,28 @@ async function drawCard(card, holo = false, t = 0.37, mode = animMode(card, holo
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     roundRect(ctx, bx + 4, by + 4, 152, 84, 11);
     ctx.stroke();
-    statIcon(ctx, i, bx + 22, by + 21, m[0]);
+    combatIcon(ctx, i, bx + 22, by + 21, i === 0 ? "#f87171" : m[0]);
     ctx.fillStyle = "#cbb9a9";
     ctx.font = "13px CardEngrave";
     ctx.textAlign = "left";
     ctx.fillText(label, bx + 36, by + 26);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = i === 0 ? "#fecaca" : "#ffffff";
     ctx.font = "36px CardTitle";
     ctx.textAlign = "center";
-    ctx.fillText(String(value), bx + 80, by + 64);
+    ctx.fillText(String(value), bx + 80, by + 62);
+    if (i === 2) {
+      // nom du coup spécial sous les dégâts
+      ctx.font = `${fitText(ctx, cp.specialName, 138, 12, "CardItalic")}px CardItalic`;
+      ctx.fillStyle = "#ecc979";
+      ctx.fillText(cp.specialName, bx + 80, by + 81);
+      ctx.textAlign = "left";
+      return;
+    }
     ctx.textAlign = "left";
     roundRect(ctx, bx + 18, by + 74, 124, 6, 3);
     ctx.fillStyle = "rgba(255,255,255,0.08)";
     ctx.fill();
-    roundRect(ctx, bx + 18, by + 74, Math.max(6, (124 * value) / 99), 6, 3);
+    roundRect(ctx, bx + 18, by + 74, Math.max(6, Math.min(124, (124 * value) / max)), 6, 3);
     const gauge = ctx.createLinearGradient(bx + 18, 0, bx + 142, 0);
     gauge.addColorStop(0, m[3]);
     gauge.addColorStop(1, m[0]);
@@ -2364,15 +2418,13 @@ async function drawCard(card, holo = false, t = 0.37, mode = animMode(card, holo
       ctx.stroke();
     }
   }
-  // filets décoratifs de part et d'autre
-  ctx.strokeStyle = rgba(m[1], 0.5);
-  ctx.lineWidth = 1;
-  for (const side of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(W / 2 + side * 70, 696);
-    ctx.lineTo(W / 2 + side * 220, 696);
-    ctx.stroke();
-  }
+  // de part et d'autre : chance (critiques et esquives) et type (avantage en combat)
+  ctx.font = "12px CardEngrave";
+  ctx.fillStyle = "#a08a7a";
+  ctx.textAlign = "right";
+  ctx.fillText(`CHANCE ${cp.luck}`, W / 2 - 74, 700);
+  ctx.textAlign = "left";
+  ctx.fillText(`TYPE ${SERIES_LABELS[series].replace(/^\S+ /, "").toUpperCase()}`, W / 2 + 74, 700);
 
   // Texte d'ambiance en italique
   ctx.fillStyle = "#ecc979";
@@ -5228,6 +5280,966 @@ async function closeTrade(id, status, client) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// --- Arène : combats de cartes en direct ---
+// Chaque manche, les deux joueurs choisissent en secret et en même temps : Attaque, Garde, Spécial ou Changer.
+// Les choix sont révélés ensemble, la manche est animée, puis l'arène se met à jour.
+const ROUND_SECONDS = 45, TEAM_SECONDS = 180, CHALLENGE_MINUTES = 10, SPECIAL_COST = 3, MAX_ENERGY = 5, BET_ROUNDS = 2, ARENA_FEE = 0.05;
+const TYPE_BEATS = { paris: "entreprises", entreprises: "maison", maison: "paris" };
+const ACTIONS = {
+  attack: { label: "Attaque", emoji: "⚔️", color: "#ef4444" },
+  guard: { label: "Garde", emoji: "🛡️", color: "#3b82f6" },
+  special: { label: "Spécial", emoji: "💥", color: "#f59e0b" },
+  switch: { label: "Changement", emoji: "🔄", color: "#22c55e" },
+};
+const SPECIAL_NAMES = { paris: "Lumière de Paris", maison: "Pouvoir de la Maison", entreprises: "OPA hostile", evenements: "Moment historique", membres: "Coup de maître" };
+const ARENA_TIERS = [
+  [1550, "Légende", "#f472b6"],
+  [1400, "Diamant", "#67e8f9"],
+  [1250, "Or", "#fbbf24"],
+  [1100, "Argent", "#cbd5e1"],
+  [0, "Bronze", "#d97706"],
+];
+const battles = new Map(); // id -> combat en cours
+const userBattle = new Map(); // userId -> id du combat
+const challenges = new Map(); // id -> défi en attente
+
+function arenaStats(userId) {
+  return (load().arena[userId] ??= { elo: 1000, w: 0, l: 0, d: 0, streak: 0 });
+}
+const tierOf = (elo) => ARENA_TIERS.find(([min]) => elo >= min);
+function typeMult(a, d) {
+  if (TYPE_BEATS[a] === d) return 1.25;
+  if (TYPE_BEATS[d] === a) return 0.85;
+  return 1;
+}
+function specialName(card) {
+  if (card.memberStats) return memberMoves(card)[1].name;
+  return SPECIAL_NAMES[seriesOf(card)] ?? "Coup spécial";
+}
+function fighter(key) {
+  const card = cardOfKey(key), cp = combatProfile(card, isHoloKey(key));
+  return { key, card, name: card.name, series: seriesOf(card), maxHp: cp.hp, hp: cp.hp, atk: cp.atk, luck: cp.luck, special: cp.specialName, attackName: cp.attackName, attackDmg: cp.attack, specialDmg: cp.special };
+}
+const fighterPower = (key) => {
+  const f = fighter(key);
+  return f.maxHp + f.atk * 1.6;
+};
+function bestTeam(userId) {
+  const seen = new Set();
+  return ownedKeys(userId)
+    .map(([k]) => k)
+    .sort((a, b) => fighterPower(b) - fighterPower(a))
+    .filter((k) => {
+      const id = k.replace("*", "");
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
+    .slice(0, 3);
+}
+const activeOf = (p) => p.team[p.active];
+const aliveBench = (p) => p.team.map((f, i) => ({ f, i })).filter(({ f, i }) => i !== p.active && f.hp > 0);
+
+// --- Moteur de résolution d'une manche ---
+function computeHit(att, def, type, guarded) {
+  let dmg = type === "special" ? 18 + att.atk * 1.1 : 10 + att.atk * 0.55;
+  dmg *= 0.85 + Math.random() * 0.3;
+  const mult = typeMult(att.series, def.series);
+  dmg *= mult;
+  const crit = Math.random() < att.luck / 350;
+  if (crit) dmg *= 1.5;
+  const dodge = type === "attack" && Math.random() < def.luck / 700;
+  if (dodge) dmg = 0;
+  if (guarded) dmg *= type === "special" ? 0.7 : 0.5;
+  return { dmg: Math.round(dmg), crit, dodge, mult, guarded };
+}
+function resolveRoundState(b) {
+  const lines = [];
+  const acts = b.players.map((p) => ({ ...(p.choice ?? { type: "guard", auto: true }) }));
+  acts.forEach((a, i) => {
+    if (a.type === "special" && b.players[i].energy < SPECIAL_COST) a.type = "attack";
+  });
+  // 1. changements de carte
+  acts.forEach((a, i) => {
+    const p = b.players[i];
+    if (a.type !== "switch") return;
+    if (p.team[a.to]?.hp > 0 && a.to !== p.active) {
+      lines.push({ side: i, text: `${p.name} rappelle ${activeOf(p).name} et envoie ${p.team[a.to].name} !` });
+      p.active = a.to;
+    } else a.type = "guard";
+  });
+  const clash = b.players.map((p) => ({ idx: p.active, before: activeOf(p).hp, dmgTaken: 0, crit: false, dodge: false, guarded: false, ko: false, mult: 1 }));
+  // 2. attaques simultanées
+  const hits = [null, null];
+  acts.forEach((a, i) => {
+    if (a.type !== "attack" && a.type !== "special") return;
+    const att = activeOf(b.players[i]), def = activeOf(b.players[1 - i]);
+    hits[i] = { ...computeHit(att, def, a.type, acts[1 - i].type === "guard"), att, def, type: a.type };
+    if (a.type === "special") b.players[i].energy -= SPECIAL_COST;
+  });
+  hits.forEach((h, i) => {
+    if (!h) return;
+    h.def.hp = Math.max(0, h.def.hp - h.dmg);
+    const c = clash[1 - i];
+    c.dmgTaken += h.dmg;
+    c.crit ||= h.crit;
+    c.dodge ||= h.dodge;
+    c.guarded ||= h.guarded;
+    c.mult = h.mult;
+    const tags = [h.crit && "coup critique", h.mult > 1 && "super efficace", h.mult < 1 && "peu efficace", h.guarded && "réduit par la garde"].filter(Boolean);
+    lines.push({
+      side: i,
+      text: h.dodge
+        ? `${h.att.name} attaque… mais ${h.def.name} esquive !`
+        : `${h.att.name} ${h.type === "special" ? `lance ${h.att.special}` : h.att.attackName !== "Attaque" ? `utilise ${h.att.attackName}` : "attaque"} : −${h.dmg} PV à ${h.def.name}${tags.length ? ` (${tags.join(", ")})` : ""}`,
+    });
+  });
+  // 3. contre-attaques de la garde
+  acts.forEach((a, i) => {
+    if (a.type !== "guard" || acts[1 - i].type !== "attack" || !hits[1 - i] || hits[1 - i].dodge) return;
+    const me = activeOf(b.players[i]), them = activeOf(b.players[1 - i]);
+    if (me.hp <= 0 || them.hp <= 0) return;
+    const counter = Math.round((10 + me.atk * 0.55) * 0.3);
+    them.hp = Math.max(0, them.hp - counter);
+    clash[1 - i].dmgTaken += counter;
+    lines.push({ side: i, text: `${me.name} pare et contre-attaque : −${counter} PV à ${them.name}` });
+  });
+  acts.forEach((a, i) => {
+    if (a.type === "guard" && !hits[1 - i]) lines.push({ side: i, text: `${activeOf(b.players[i]).name} se met en garde et recharge son énergie.` });
+  });
+  // 4. énergie
+  acts.forEach((a, i) => {
+    const p = b.players[i];
+    p.energy = Math.min(MAX_ENERGY, p.energy + (a.type === "guard" ? 2 : 1));
+  });
+  // 5. K.O. et remplaçants
+  clash.forEach((c, i) => {
+    c.after = b.players[i].team[c.idx].hp;
+    c.ko = c.after <= 0;
+  });
+  b.players.forEach((p, i) => {
+    if (activeOf(p).hp > 0) return;
+    lines.push({ side: 1 - i, text: `${activeOf(p).name} est K.O. !` });
+    const next = p.team.findIndex((f) => f.hp > 0);
+    if (next >= 0) {
+      p.active = next;
+      lines.push({ side: i, text: `${p.name} envoie ${p.team[next].name} dans l'arène.` });
+    }
+  });
+  return { acts, clash, lines };
+}
+
+// --- Rendu de l'arène ---
+function arenaBackground(W, H) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext("2d");
+  const bg = ctx.createRadialGradient(W / 2, H * 0.45, 40, W / 2, H * 0.5, W * 0.75);
+  bg.addColorStop(0, "#3d1219");
+  bg.addColorStop(1, "#060203");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(W / 2, H * 0.42);
+  for (let i = 0; i < 40; i++) {
+    ctx.rotate(TAU / 40);
+    ctx.fillStyle = rgba("#fbbf24", i % 2 ? 0.015 : 0.04);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-40, -W);
+    ctx.lineTo(40, -W);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  // sol de l'arène
+  const fy = H * 0.66;
+  const floor = ctx.createRadialGradient(W / 2, fy, 20, W / 2, fy, W * 0.5);
+  floor.addColorStop(0, "rgba(251,191,36,0.16)");
+  floor.addColorStop(1, "rgba(251,191,36,0)");
+  ctx.fillStyle = floor;
+  ctx.beginPath();
+  ctx.ellipse(W / 2, fy, W * 0.46, H * 0.12, 0, 0, TAU);
+  ctx.fill();
+  for (const [rx, a] of [[0.46, 0.5], [0.4, 0.25], [0.3, 0.15]]) {
+    ctx.strokeStyle = rgba("#fbbf24", a);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(W / 2, fy, W * rx, H * 0.12 * (rx / 0.46), 0, 0, TAU);
+    ctx.stroke();
+  }
+  // projecteurs
+  for (const x of [W * 0.12, W * 0.88]) glow(ctx, x, 0, 320, "#fde68a", 0.18);
+  guilloche(ctx, 0, 0, W, H, METAL.legendaire[0]);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = metalGradient(ctx, W, H, METAL.legendaire);
+  roundRect(ctx, 8, 8, W - 16, H - 16, 20);
+  ctx.stroke();
+  return c;
+}
+function hpBar(ctx, x, y, w, h, hp, max, showText = true) {
+  const pct = Math.max(0, hp / max);
+  roundRect(ctx, x, y, w, h, h / 2);
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  if (pct > 0) {
+    roundRect(ctx, x + 2, y + 2, Math.max(h - 4, (w - 4) * pct), h - 4, (h - 4) / 2);
+    const g = ctx.createLinearGradient(x, 0, x + w, 0);
+    const col = pct > 0.5 ? ["#16a34a", "#4ade80"] : pct > 0.25 ? ["#ca8a04", "#facc15"] : ["#b91c1c", "#f87171"];
+    g.addColorStop(0, col[0]);
+    g.addColorStop(1, col[1]);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+  if (showText) {
+    ctx.font = `${Math.round(h * 0.75)}px CardBold`;
+    ctx.fillStyle = "#ffffff";
+    const align = ctx.textAlign;
+    ctx.textAlign = "center";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 3;
+    ctx.fillText(`${Math.max(0, Math.round(hp))} / ${max} PV`, x + w / 2, y + h * 0.78);
+    ctx.shadowBlur = 0;
+    ctx.textAlign = align;
+  }
+}
+function bolt(ctx, x, y, s, on) {
+  ctx.fillStyle = on ? "#facc15" : "rgba(255,255,255,0.12)";
+  ctx.beginPath();
+  ctx.moveTo(x + s * 0.2, y - s);
+  ctx.lineTo(x - s * 0.55, y + s * 0.15);
+  ctx.lineTo(x - s * 0.02, y + s * 0.15);
+  ctx.lineTo(x - s * 0.2, y + s);
+  ctx.lineTo(x + s * 0.55, y - s * 0.15);
+  ctx.lineTo(x + s * 0.02, y - s * 0.15);
+  ctx.closePath();
+  ctx.fill();
+  if (on) {
+    ctx.strokeStyle = "rgba(120,53,15,0.6)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+async function drawFighterSide(ctx, b, i, W, opts = {}) {
+  const p = b.players[i], left = i === 0, cx = left ? W * 0.25 : W * 0.75;
+  // en-tête du joueur
+  const hx = left ? 40 : W - 40;
+  const av = p.avatar ? await fetchImage(`avatar:${p.avatar}`, p.avatar) : null;
+  const ax = left ? hx + 30 : hx - 30;
+  disc(ctx, ax, 58, 32, metalGradient(ctx, W, 700, METAL.legendaire));
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(ax, 58, 27, 0, TAU);
+  ctx.clip();
+  if (av) ctx.drawImage(av, ax - 27, 31, 54, 54);
+  else disc(ctx, ax, 58, 27, "#3f3f46");
+  ctx.restore();
+  ctx.textAlign = left ? "left" : "right";
+  const nx = left ? hx + 74 : hx - 74;
+  ctx.font = `${fitText(ctx, p.name, 300, 28, "CardTitle")}px CardTitle`;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(p.name, nx, 56);
+  const [, tierName, tierColor] = p.isAI ? [0, "Maître de l'Arène", "#f472b6"] : tierOf(arenaStats(p.id).elo);
+  ctx.font = "13px CardBold";
+  ctx.fillStyle = tierColor;
+  ctx.fillText(p.isAI ? tierName : `${tierName} · ${arenaStats(p.id).elo} pts`, nx, 78);
+  // énergie
+  for (let k = 0; k < MAX_ENERGY; k++) bolt(ctx, left ? nx + 8 + k * 22 : nx - 8 - k * 22, 98, 9, k < p.energy);
+  // statut du choix
+  if (opts.status) {
+    ctx.font = "12px CardBold";
+    ctx.textAlign = "center";
+    const [txt, col] = opts.status;
+    pill(ctx, cx, 136, txt, col, "#ffffff");
+  }
+  // carte active
+  const f = activeOf(p);
+  if (!f) return;
+  const cw = 232, ch = 325, x = cx - cw / 2, y = 160;
+  glow(ctx, cx, y + ch / 2, 200, METAL[f.card.rarity][4], 0.3);
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 24;
+  ctx.shadowOffsetY = 10;
+  if (f.hp <= 0) ctx.filter = "grayscale(1) brightness(0.5)";
+  ctx.drawImage(await cardThumb(f.card, isHoloKey(f.key), cw, ch), x, y, cw, ch);
+  ctx.restore();
+  hpBar(ctx, x - 8, y + ch + 14, cw + 16, 22, f.hp, f.maxHp);
+  ctx.textAlign = "center";
+  ctx.font = "12px CardBold";
+  ctx.fillStyle = "#cbb9a9";
+  ctx.fillText(`Attaque ${f.attackDmg} · Spécial ${f.specialDmg} · Chance ${f.luck} · ${SERIES_LABELS[f.series].replace(/^\S+ /, "")}`, cx, y + ch + 50);
+  // banc : les autres cartes de l'équipe
+  const bench = p.team.map((t, k) => ({ t, k })).filter(({ k }) => k !== p.active);
+  bench.forEach(({ t }, n) => {
+    const bw = 78, bh = 109, bx = left ? 26 + n * 0 : W - 26 - bw, by = 200 + n * 132;
+    const gx = left ? bx : bx;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 10;
+    if (t.hp <= 0) ctx.filter = "grayscale(1) brightness(0.45)";
+    ctx.drawImage(thumbSync(t), gx, by, bw, bh);
+    ctx.restore();
+    if (t.hp <= 0) {
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(gx + 12, by + 18);
+      ctx.lineTo(gx + bw - 12, by + bh - 18);
+      ctx.moveTo(gx + bw - 12, by + 18);
+      ctx.lineTo(gx + 12, by + bh - 18);
+      ctx.stroke();
+    }
+    hpBar(ctx, gx, by + bh + 4, bw, 9, t.hp, t.maxHp, false);
+  });
+  ctx.textAlign = "left";
+}
+// vignettes du banc préparées à l'avance (dessin synchrone)
+const benchThumbs = new Map();
+function thumbSync(f) {
+  return benchThumbs.get(`${f.key}`) ?? createCanvas(78, 109);
+}
+async function prepareThumbs(b) {
+  for (const p of b.players) for (const f of p.team) if (!benchThumbs.has(f.key)) benchThumbs.set(f.key, await cardThumb(f.card, isHoloKey(f.key), 78, 109));
+}
+async function drawArena(b, opts = {}) {
+  const W = 1200, H = 700;
+  b.bg ??= arenaBackground(W, H);
+  const c = createCanvas(W, H);
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(b.bg, 0, 0);
+  await prepareThumbs(b);
+  // titre et manche
+  ctx.textAlign = "center";
+  ctx.font = "16px CardEngrave";
+  ctx.fillStyle = "#ecc979";
+  spaced(ctx, "ARÈNE DE LA MAISON", W / 2, 40, 4);
+  ctx.font = "34px CardTitle";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(b.phase === "team" ? "Préparation" : `Manche ${b.round}`, W / 2, 80);
+  // médaillon VS
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 16;
+  disc(ctx, W / 2, 300, 50, metalGradient(ctx, W, H, METAL.legendaire));
+  ctx.restore();
+  disc(ctx, W / 2, 300, 42, "#1a0a0d");
+  ctx.font = "34px CardTitle";
+  ctx.fillStyle = "#fde68a";
+  ctx.fillText("VS", W / 2, 312);
+  ctx.textAlign = "left";
+  if (b.phase === "team") {
+    for (const [i, p] of b.players.entries()) {
+      const cx = i === 0 ? W * 0.25 : W * 0.75;
+      ctx.textAlign = "center";
+      ctx.font = "26px CardTitle";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(p.name, cx, 200);
+      ctx.font = "15px CardBold";
+      pill(ctx, cx, 236, p.ready ? "ÉQUIPE PRÊTE" : "COMPOSE SON ÉQUIPE…", p.ready ? "#16a34a" : "#d97706", "#ffffff");
+      for (let k = 0; k < 3; k++) {
+        const x = cx - 150 + k * 104, y = 280;
+        roundRect(ctx, x, y, 92, 129, 10);
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fill();
+        ctx.setLineDash([6, 5]);
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (p.ready) ctx.drawImage(drawBack("legendaire"), x, y, 92, 129);
+      }
+      ctx.textAlign = "left";
+    }
+  } else {
+    for (const i of [0, 1]) await drawFighterSide(ctx, b, i, W, { status: opts.statuses?.[i] });
+  }
+  // journal de la dernière manche
+  const lines = opts.lines ?? b.lastLines ?? [];
+  if (lines.length && b.phase !== "team") {
+    const lh = 24, boxH = Math.min(4, lines.length) * lh + 24, by = H - boxH - 18;
+    roundRect(ctx, W / 2 - 330, by, 660, boxH, 14);
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fill();
+    ctx.strokeStyle = rgba(METAL.legendaire[0], 0.35);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.textAlign = "center";
+    lines.slice(-4).forEach((l, k) => {
+      ctx.font = `${fitText(ctx, l.text, 630, 15, "CardBold")}px CardBold`;
+      ctx.fillStyle = l.side === 0 ? "#fde68a" : "#bfdbfe";
+      ctx.fillText(l.text, W / 2, by + 28 + k * lh);
+    });
+    ctx.textAlign = "left";
+  }
+  // paris des spectateurs
+  const pot = b.bets.reduce((a, x) => a + x.amount, 0);
+  if (pot > 0) {
+    const share = b.bets.filter((x) => x.side === 0).reduce((a, x) => a + x.amount, 0) / pot;
+    ctx.textAlign = "center";
+    ctx.font = "14px CardBold";
+    ctx.fillStyle = "#cbb9a9";
+    ctx.fillText(`Paris des spectateurs : ${euro(pot)} · ${Math.round(share * 100)} % ${b.players[0].name} / ${Math.round((1 - share) * 100)} % ${b.players[1].name}`, W / 2, 128);
+    ctx.textAlign = "left";
+  }
+  // bannière de fin
+  if (opts.banner) {
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(W / 2, H * 0.44);
+    ctx.rotate(-0.05);
+    const g = ctx.createLinearGradient(-500, 0, 500, 0);
+    g.addColorStop(0, "#78350f");
+    g.addColorStop(0.5, "#fde68a");
+    g.addColorStop(1, "#78350f");
+    ctx.fillStyle = g;
+    ctx.shadowColor = "rgba(0,0,0,0.7)";
+    ctx.shadowBlur = 30;
+    ctx.fillRect(-620, -60, 1240, 120);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#2a1305";
+    ctx.textAlign = "center";
+    ctx.font = "54px CardEngrave";
+    spaced(ctx, opts.banner, 0, 20, 4);
+    ctx.restore();
+    if (opts.subtitle) {
+      ctx.textAlign = "center";
+      ctx.font = "22px CardItalic";
+      ctx.fillStyle = "#fde68a";
+      ctx.fillText(opts.subtitle, W / 2, H * 0.44 + 100);
+    }
+    ctx.textAlign = "left";
+  }
+  return c;
+}
+
+// --- Animation d'une manche : les cartes se percutent ---
+async function clashGif(b, res) {
+  const W = 1000, H = 580, frames = 24;
+  const bg = arenaBackground(W, H);
+  const shots = [];
+  const sides = b.players.map((p, i) => {
+    const f = p.team[res.clash[i].idx];
+    return { f, act: res.acts[i], c: res.clash[i], left: i === 0 };
+  });
+  const thumbs = await Promise.all(sides.map((s) => cardThumb(s.f.card, isHoloKey(s.f.key), 220, 308)));
+  const R0 = seeded(b.round * 97 + 3);
+  const sparks = Array.from({ length: 40 }, () => ({ a: R0() * TAU, v: 6 + R0() * 14, s: 1.5 + R0() * 3 }));
+  for (let f = 0; f < frames; f++) {
+    await yieldLoop();
+    const c = createCanvas(W, H);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(bg, 0, 0);
+    ctx.textAlign = "center";
+    ctx.font = "26px CardTitle";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(`Manche ${b.round}`, W / 2, 50);
+    const impact = 6, q = Math.min(1, f / impact);
+    const anyHit = sides.some((s) => s.act.type === "attack" || s.act.type === "special");
+    if (anyHit && f >= impact && f < impact + 5) {
+      for (const pt of sparks) {
+        const life = f - impact, d = life * pt.v;
+        ctx.globalAlpha = Math.max(0, 1 - life / 5);
+        sparkle(ctx, W / 2 + Math.cos(pt.a) * d, 300 + Math.sin(pt.a) * d * 0.8, pt.s, life % 2 ? "#ffffff" : "#fbbf24");
+      }
+      ctx.globalAlpha = 1;
+    }
+    for (const [i, s] of sides.entries()) {
+      const baseX = s.left ? W * 0.27 : W * 0.73, dir = s.left ? 1 : -1;
+      const attacking = s.act.type === "attack" || s.act.type === "special";
+      let dx = 0, dy = 0, rot = 0;
+      if (attacking && f <= impact + 2) dx = Math.sin(Math.min(1, f / (impact + 2)) * Math.PI) * 120 * dir;
+      if (s.c.dmgTaken > 0 && f >= impact && f < impact + 8) dx += Math.sin((f - impact) * 2.6) * 10 * (1 - (f - impact) / 8);
+      const koT = s.c.ko ? Math.max(0, (f - 14) / 8) : 0;
+      if (koT > 0) {
+        rot = koT * 0.35 * -dir;
+        dy = koT * 40;
+      }
+      const cw = 220, ch = 308, x = baseX + dx, y = 300 + dy;
+      glow(ctx, x, y, 190, ACTIONS[s.act.type].color, s.act.type === "special" ? 0.45 : 0.22);
+      if (s.act.type === "special" && f < impact) {
+        // charge d'énergie avant le coup spécial
+        for (let k = 0; k < 16; k++) {
+          const a = (k / 16) * TAU + f * 0.3, d = 170 * (1 - q) + 30;
+          sparkle(ctx, x + Math.cos(a) * d, y + Math.sin(a) * d, 2.5, "#fde68a");
+        }
+      }
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rot);
+      ctx.shadowColor = "rgba(0,0,0,0.7)";
+      ctx.shadowBlur = 20;
+      if (koT > 0.4) ctx.filter = "grayscale(1) brightness(0.55)";
+      ctx.drawImage(thumbs[i], -cw / 2, -ch / 2, cw, ch);
+      ctx.restore();
+      // bouclier de garde
+      if (s.act.type === "guard") {
+        ctx.strokeStyle = `rgba(96,165,250,${0.5 + 0.3 * Math.sin(f * 0.6)})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.ellipse(x + 40 * dir, y, 40, 170, 0, -Math.PI / 2, Math.PI / 2, !s.left);
+        ctx.stroke();
+      }
+      // étiquette de l'action
+      ctx.font = "14px CardBold";
+      pill(ctx, x, y - ch / 2 - 22, s.act.type === "special" ? `SPÉCIAL : ${s.f.special.toUpperCase()}` : ACTIONS[s.act.type].label.toUpperCase(), ACTIONS[s.act.type].color, "#ffffff");
+      // barre de vie qui descend
+      const t2 = Math.min(1, Math.max(0, (f - impact) / 8));
+      hpBar(ctx, x - cw / 2 - 6, y + ch / 2 + 12, cw + 12, 20, s.c.before + (s.c.after - s.c.before) * t2, s.f.maxHp);
+      // dégâts flottants
+      if (f >= impact) {
+        const life = f - impact, ty = y - 60 - life * 7, alpha = Math.max(0, 1 - life / 14);
+        ctx.globalAlpha = alpha;
+        ctx.textAlign = "center";
+        if (s.c.dodge && !s.c.dmgTaken) {
+          ctx.font = "44px CardEngrave";
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText("ESQUIVE !", x, ty);
+        } else if (s.c.dmgTaken > 0) {
+          ctx.font = `${s.c.crit ? 78 : 64}px CardTitle`;
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = "rgba(0,0,0,0.7)";
+          ctx.strokeText(`−${s.c.dmgTaken}`, x, ty);
+          ctx.fillStyle = s.c.crit ? "#fbbf24" : "#f87171";
+          ctx.fillText(`−${s.c.dmgTaken}`, x, ty);
+          ctx.font = "20px CardEngrave";
+          ctx.fillStyle = "#fde68a";
+          const tag = [s.c.crit && "CRITIQUE !", s.c.mult > 1 && "SUPER EFFICACE", s.c.guarded && "GARDE"].filter(Boolean).join(" · ");
+          if (tag) ctx.fillText(tag, x, ty - (s.c.crit ? 64 : 52));
+        }
+        ctx.globalAlpha = 1;
+      }
+      // tampon K.O.
+      if (koT > 0.3) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-0.25);
+        ctx.font = "72px CardEngrave";
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = "#7f1d1d";
+        ctx.strokeText("K.O.", 0, 20);
+        ctx.fillStyle = "#ef4444";
+        ctx.fillText("K.O.", 0, 20);
+        ctx.restore();
+      }
+    }
+    if (anyHit && f >= impact && f < impact + 3) {
+      ctx.fillStyle = `rgba(255,255,255,${0.55 - (f - impact) * 0.18})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.textAlign = "left";
+    shots.push({ data: ditherData(c).data, width: W, height: H, delay: f === frames - 1 ? 4000 : 60, once: true });
+  }
+  return encodeFrames(shots);
+}
+
+// --- Messages du combat ---
+function battleComponents(b, disabled = false) {
+  const [A, B] = b.players;
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`carte_bt_a_${b.id}_attack`).setLabel("Attaque").setEmoji("⚔️").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+      new ButtonBuilder().setCustomId(`carte_bt_a_${b.id}_guard`).setLabel("Garde").setEmoji("🛡️").setStyle(ButtonStyle.Primary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId(`carte_bt_a_${b.id}_special`).setLabel(`Spécial (${SPECIAL_COST} ⚡)`).setEmoji("💥").setStyle(ButtonStyle.Success).setDisabled(disabled),
+      new ButtonBuilder().setCustomId(`carte_bt_a_${b.id}_switch`).setLabel("Changer").setEmoji("🔄").setStyle(ButtonStyle.Secondary).setDisabled(disabled)
+    ),
+  ];
+  const second = new ActionRowBuilder();
+  if (b.round <= BET_ROUNDS && !A.isAI && !B.isAI) {
+    second.addComponents(
+      new ButtonBuilder().setCustomId(`carte_bt_bet_${b.id}_0`).setLabel(`Parier sur ${A.name}`.slice(0, 80)).setEmoji("🎟️").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId(`carte_bt_bet_${b.id}_1`).setLabel(`Parier sur ${B.name}`.slice(0, 80)).setEmoji("🎟️").setStyle(ButtonStyle.Secondary).setDisabled(disabled)
+    );
+  }
+  second.addComponents(
+    new ButtonBuilder().setCustomId(`carte_bt_rules`).setLabel("Règles").setEmoji("📖").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`carte_bt_ff_${b.id}`).setLabel("Abandonner").setEmoji("🏳️").setStyle(ButtonStyle.Secondary).setDisabled(disabled)
+  );
+  rows.push(second);
+  return rows;
+}
+function statusesOf(b) {
+  return b.players.map((p) => (p.choice ? ["A CHOISI", "#16a34a"] : ["RÉFLÉCHIT...", "#d97706"]));
+}
+async function livePayload(b) {
+  const img = new AttachmentBuilder(await (await drawArena(b, { statuses: statusesOf(b) })).encode("jpeg", 90), { name: "arene.jpg" });
+  const [A, B] = b.players;
+  const embed = new EmbedBuilder()
+    .setColor(0xe9c46a)
+    .setTitle(`⚔️ ${A.name} contre ${B.name} — manche ${b.round}`)
+    .setDescription(
+      `⏱️ **Choisissez votre action** — fin de la manche <t:${Math.floor(b.deadline / 1000)}:R>\n` +
+        `${A.choice ? "✅" : "⌛"} ${A.name} · ${B.choice ? "✅" : "⌛"} ${B.name}\n` +
+        `*Les choix restent secrets jusqu'à la révélation. Sans réponse, la carte se met en garde.*` +
+        (b.mise ? `\n💰 Mise : **${formatEuro(b.mise)}** chacun` : "")
+    )
+    .setImage("attachment://arene.jpg");
+  return { content: null, embeds: [embed], files: [img], components: battleComponents(b) };
+}
+async function teamPayload(b) {
+  const img = new AttachmentBuilder(await (await drawArena(b)).encode("jpeg", 90), { name: "arene.jpg" });
+  const [A, B] = b.players;
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xe9c46a)
+        .setTitle(`⚔️ ${A.name} contre ${B.name} — préparation`)
+        .setDescription(
+          `Chaque joueur choisit **jusqu'à 3 cartes** de sa collection (ou l'équipe automatique, la plus forte).\n` +
+            `${A.ready ? "✅" : "⌛"} ${A.name} · ${B.ready ? "✅" : "⌛"} ${B.name}\n` +
+            `Le combat commence dès que les deux équipes sont prêtes (équipe automatique <t:${Math.floor(b.deadline / 1000)}:R>).` +
+            (b.mise ? `\n💰 Mise : **${formatEuro(b.mise)}** chacun · le gagnant remporte ${formatEuro(Math.round(b.mise * 2 * (1 - ARENA_FEE)))}` : "")
+        )
+        .setImage("attachment://arene.jpg"),
+    ],
+    files: [img],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`carte_bt_team_${b.id}`).setLabel("Choisir mon équipe").setEmoji("🃏").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`carte_bt_auto_${b.id}`).setLabel("Équipe automatique").setEmoji("⚡").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("carte_bt_rules").setLabel("Règles").setEmoji("📖").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`carte_bt_ff_${b.id}`).setLabel("Abandonner").setEmoji("🏳️").setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+const RULES_EMBED = () =>
+  new EmbedBuilder()
+    .setColor(0xe9c46a)
+    .setTitle("📖 Règles de l'Arène")
+    .setDescription(
+      "**Chaque manche**, les deux joueurs choisissent **en secret et en même temps** :\n" +
+        "⚔️ **Attaque** — dégâts selon l'attaque (ATQ) de la carte.\n" +
+        "🛡️ **Garde** — réduit les dégâts (−50 % contre une attaque, −30 % contre un spécial), **contre-attaque** si l'adversaire attaque et recharge **+2 ⚡**.\n" +
+        `💥 **Spécial** — coûte ${SPECIAL_COST} ⚡ : gros dégâts, impossible à esquiver.\n` +
+        "🔄 **Changer** — envoie une autre carte de l'équipe *avant* les attaques.\n\n" +
+        `**Énergie** : +1 ⚡ par manche (max ${MAX_ENERGY}). **Critique** et **esquive** dépendent de la CHANCE.\n` +
+        "**Types** : 🗼 Paris bat 🏢 Entreprises, qui battent 🏡 La Maison, qui bat 🗼 Paris (×1,25). Membres et Événements sont neutres.\n" +
+        `**K.O.** : la carte suivante entre automatiquement. Le premier joueur sans carte perd. Sans réponse en ${ROUND_SECONDS} s, la carte se met en garde.\n\n` +
+        `**Classement** : points Elo, rangs Bronze → Argent → Or → Diamant → Légende. **Paris** des spectateurs ouverts pendant les ${BET_ROUNDS} premières manches (commission de ${Math.round(ARENA_FEE * 100)} %).`
+    );
+
+// --- Déroulement ---
+function playerOf(user, name, isAI = false) {
+  return { id: user.id, name, avatar: user.displayAvatarURL({ extension: "png", size: 128 }), isAI, team: [], active: 0, energy: 1, choice: null, ready: false, afk: 0 };
+}
+function escrow(b) {
+  const st = load();
+  const items = [];
+  if (b.mise) for (const p of b.players) if (!p.isAI) items.push({ userId: p.id, amount: b.mise });
+  for (const x of b.bets) items.push({ userId: x.userId, amount: x.amount });
+  if (items.length) st.arenaEscrow[b.id] = items;
+  else delete st.arenaEscrow[b.id];
+  save();
+}
+async function startBattle(client, a, bUser, opts) {
+  const id = Date.now().toString(36);
+  const players = [playerOf(a.user, a.name), playerOf(bUser.user, bUser.name, bUser.isAI)];
+  const b = { id, players, round: 0, phase: "team", mise: opts.mise ?? 0, bets: [], lastLines: [], deadline: Date.now() + TEAM_SECONDS * 1000, startedAt: Date.now() };
+  if (players[1].isAI) {
+    players[1].ready = true;
+  }
+  battles.set(id, b);
+  for (const p of players) if (!p.isAI) userBattle.set(p.id, id);
+  escrow(b);
+  const thread = await channelRef?.threads.create({ name: `⚔️ ${players[0].name} vs ${players[1].name}`.slice(0, 95), autoArchiveDuration: 60, reason: "Combat de cartes" }).catch(() => null);
+  b.channel = thread ?? channelRef;
+  b.thread = thread;
+  const mentions = players.filter((p) => !p.isAI).map((p) => `<@${p.id}>`).join(" ");
+  b.message = await b.channel.send({ content: `${mentions} — le combat va commencer !`, ...(await teamPayload(b)), allowedMentions: { users: players.filter((p) => !p.isAI).map((p) => p.id) } }).catch(() => null);
+  if (!b.message) {
+    await cancelBattle(b, "salon introuvable");
+    return null;
+  }
+  b.timer = setTimeout(() => autoTeams(client, b).catch(() => null), TEAM_SECONDS * 1000);
+  return b;
+}
+function aiTeam(b) {
+  const ranks = b.players[0].team.map((f) => ORDER.indexOf(f.card.rarity));
+  const avg = ranks.length ? Math.round(ranks.reduce((x, y) => x + y, 0) / ranks.length) : 1;
+  const pool = boosterPool().filter((c) => Math.abs(ORDER.indexOf(c.rarity) - avg) <= 1);
+  const picks = [];
+  while (picks.length < Math.max(1, b.players[0].team.length) && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  return picks.map((c) => fighter(c.id));
+}
+async function setTeam(client, b, i, keys) {
+  const p = b.players[i];
+  p.team = keys.slice(0, 3).map(fighter);
+  p.active = 0;
+  p.ready = true;
+  if (b.players[1].isAI && i === 0) b.players[1].team = aiTeam(b);
+  if (b.players.every((x) => x.ready && x.team.length)) await beginRounds(client, b);
+  else await b.message.edit(await teamPayload(b)).catch(() => null);
+}
+async function autoTeams(client, b) {
+  if (b.phase !== "team") return;
+  for (const [i, p] of b.players.entries()) {
+    if (p.ready && p.team.length) continue;
+    const keys = p.isAI ? [] : bestTeam(p.id);
+    if (!p.isAI && !keys.length) return cancelBattle(b, `${p.name} n'a aucune carte`);
+    if (p.isAI) continue;
+    p.team = keys.map(fighter);
+    p.ready = true;
+    if (b.players[1].isAI && i === 0) b.players[1].team = aiTeam(b);
+  }
+  await beginRounds(client, b);
+}
+async function beginRounds(client, b) {
+  clearTimeout(b.timer);
+  b.phase = "choose";
+  b.round = 0;
+  await nextRound(client, b);
+}
+function aiChoice(b) {
+  const me = b.players[1], foe = b.players[0], f = activeOf(me), o = activeOf(foe);
+  if (me.energy >= SPECIAL_COST && (Math.random() < 0.7 || o.hp < 20 + f.atk)) return { type: "special" };
+  if (f.hp / f.maxHp < 0.3 && aliveBench(me).length && Math.random() < 0.35) {
+    const best = aliveBench(me).sort((x, y) => y.f.hp - x.f.hp)[0];
+    return { type: "switch", to: best.i };
+  }
+  return { type: Math.random() < 0.68 ? "attack" : "guard" };
+}
+async function nextRound(client, b) {
+  b.round++;
+  b.phase = "choose";
+  for (const p of b.players) p.choice = null;
+  b.deadline = Date.now() + ROUND_SECONDS * 1000;
+  if (b.players[1].isAI) b.players[1].choice = aiChoice(b);
+  await b.message.edit(await livePayload(b)).catch(() => null);
+  clearTimeout(b.timer);
+  b.timer = setTimeout(() => roundTimeout(client, b).catch(() => null), ROUND_SECONDS * 1000);
+}
+async function roundTimeout(client, b) {
+  if (b.phase !== "choose") return;
+  for (const p of b.players) {
+    if (p.choice) p.afk = 0;
+    else p.afk++;
+  }
+  if (b.players.every((p) => p.isAI || p.afk >= 2)) return cancelBattle(b, "aucun joueur n'a répondu");
+  await resolveRound(client, b);
+}
+async function resolveRound(client, b) {
+  if (b.phase !== "choose") return;
+  b.phase = "resolving";
+  clearTimeout(b.timer);
+  for (const p of b.players) if (p.choice) p.afk = 0;
+  const res = resolveRoundState(b);
+  b.lastLines = res.lines;
+  const gif = await clashGif(b, res).catch(() => null);
+  const [A, B] = b.players;
+  const actText = (p, a) => `${ACTIONS[a.type].emoji} **${p.name}** : ${a.type === "special" ? `Spécial — ${p.team[res.clash[b.players.indexOf(p)].idx].special}` : ACTIONS[a.type].label}${a.auto ? " *(automatique)*" : ""}`;
+  if (gif) {
+    await b.message
+      .edit({
+        content: null,
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xef4444)
+            .setTitle(`⚔️ Manche ${b.round} — révélation !`)
+            .setDescription(`${actText(A, res.acts[0])}\n${actText(B, res.acts[1])}\n\n${res.lines.map((l) => `• ${l.text}`).join("\n")}`)
+            .setImage("attachment://manche.gif"),
+        ],
+        files: [new AttachmentBuilder(gif, { name: "manche.gif" })],
+        components: battleComponents(b, true),
+      })
+      .catch(() => null);
+    await sleep(3400);
+  }
+  const alive = b.players.map((p) => p.team.some((f) => f.hp > 0));
+  if (!alive[0] || !alive[1] || b.round >= 30) {
+    const winner = alive[0] && !alive[1] ? 0 : alive[1] && !alive[0] ? 1 : -1;
+    return finishBattle(client, b, winner, winner >= 0 ? "K.O." : "égalité");
+  }
+  await nextRound(client, b);
+}
+function eloChange(ra, rb, score) {
+  const expected = 1 / (1 + 10 ** ((rb - ra) / 400));
+  return Math.round(32 * (score - expected));
+}
+async function finishBattle(client, b, winner, reason) {
+  if (b.phase === "over") return;
+  b.phase = "over";
+  clearTimeout(b.timer);
+  battles.delete(b.id);
+  for (const p of b.players) userBattle.delete(p.id);
+  const [A, B] = b.players;
+  const lines = [];
+  const pvp = !A.isAI && !B.isAI;
+  // classement
+  if (pvp) {
+    const sa = arenaStats(A.id), sb = arenaStats(B.id);
+    const score = winner === 0 ? 1 : winner === 1 ? 0 : 0.5;
+    const da = eloChange(sa.elo, sb.elo, score), db = eloChange(sb.elo, sa.elo, 1 - score);
+    sa.elo = Math.max(0, sa.elo + da);
+    sb.elo = Math.max(0, sb.elo + db);
+    for (const [s, r] of [[sa, score], [sb, 1 - score]]) {
+      if (r === 1) {
+        s.w++;
+        s.streak = Math.max(1, s.streak + 1);
+      } else if (r === 0) {
+        s.l++;
+        s.streak = 0;
+      } else s.d++;
+    }
+    lines.push(`📊 Classement : ${A.name} ${da >= 0 ? "+" : ""}${da} (${sa.elo}) · ${B.name} ${db >= 0 ? "+" : ""}${db} (${sb.elo})`);
+  }
+  // récompenses en poussière d'étoile
+  const dustWin = pvp ? 60 : 25, dustLose = pvp ? 20 : 5;
+  for (const [i, p] of b.players.entries()) {
+    if (p.isAI) continue;
+    const gain = winner === i ? dustWin : winner === -1 ? Math.round((dustWin + dustLose) / 2) : dustLose;
+    load().dust[p.id] = (load().dust[p.id] ?? 0) + gain;
+    lines.push(`✨ ${p.name} : +${gain} poussière d'étoile`);
+  }
+  // mises
+  if (b.mise) {
+    if (winner >= 0 && !b.players[winner].isAI) {
+      const prize = Math.round(b.mise * 2 * (1 - ARENA_FEE));
+      changeBalance(b.players[winner].id, prize, `Combat de cartes gagné contre ${b.players[1 - winner].name}`, { force: true });
+      lines.push(`💰 ${b.players[winner].name} remporte **${formatEuro(prize)}**`);
+    } else {
+      for (const p of b.players) if (!p.isAI) changeBalance(p.id, b.mise, "Combat de cartes : mise remboursée", { force: true });
+      lines.push("💰 Mises remboursées");
+    }
+  }
+  // paris des spectateurs
+  if (b.bets.length) {
+    const pot = b.bets.reduce((a, x) => a + x.amount, 0);
+    const winners = winner >= 0 ? b.bets.filter((x) => x.side === winner) : [];
+    const wsum = winners.reduce((a, x) => a + x.amount, 0);
+    if (!wsum) {
+      for (const x of b.bets) changeBalance(x.userId, x.amount, "Pari de combat remboursé", { force: true });
+      lines.push(`🎟️ Paris remboursés (${formatEuro(pot)})`);
+    } else {
+      for (const x of winners) changeBalance(x.userId, Math.round((x.amount / wsum) * pot * (1 - ARENA_FEE)), `Pari gagné : victoire de ${b.players[winner].name}`, { force: true });
+      lines.push(`🎟️ ${winners.length} parieur(s) se partagent **${formatEuro(Math.round(pot * (1 - ARENA_FEE)))}**`);
+    }
+  }
+  delete load().arenaEscrow[b.id];
+  save();
+  const banner = winner >= 0 ? `VICTOIRE DE ${b.players[winner].name.toUpperCase()}` : "MATCH NUL";
+  const subtitle = `${reason === "abandon" ? "par abandon" : reason === "K.O." ? `en ${b.round} manche${b.round > 1 ? "s" : ""}` : reason}`;
+  const img = new AttachmentBuilder(await (await drawArena(b, { banner: banner.slice(0, 34), subtitle })).encode("jpeg", 90), { name: "arene.jpg" });
+  await b.message
+    ?.edit({
+      content: null,
+      embeds: [new EmbedBuilder().setColor(0xfbbf24).setTitle(`🏆 ${winner >= 0 ? `${b.players[winner].name} remporte le combat !` : "Match nul !"}`).setDescription(lines.join("\n") || null).setImage("attachment://arene.jpg")],
+      files: [img],
+      components: [],
+    })
+    .catch(() => null);
+  if (b.thread) {
+    await channelRef
+      ?.send({ content: `⚔️ ${winner >= 0 ? `**${b.players[winner].name}** bat **${b.players[1 - winner].name}**` : `Match nul entre **${A.name}** et **${B.name}**`} ${subtitle} — ${b.thread}`, allowedMentions: { parse: [] } })
+      .then((m) => deleteLater(m, 120 * MINUTE))
+      .catch(() => null);
+    setTimeout(() => b.thread.setArchived(true).catch(() => null), 15 * MINUTE);
+  }
+  panelDirty = true;
+}
+async function cancelBattle(b, why) {
+  if (b.phase === "over") return;
+  b.phase = "over";
+  clearTimeout(b.timer);
+  battles.delete(b.id);
+  for (const p of b.players) userBattle.delete(p.id);
+  for (const x of load().arenaEscrow[b.id] ?? []) changeBalance(x.userId, x.amount, "Combat de cartes annulé : remboursement", { force: true });
+  delete load().arenaEscrow[b.id];
+  save();
+  await b.message?.edit({ content: `🚫 Combat annulé : ${why}. Les mises et les paris sont remboursés.`, embeds: [], components: [], attachments: [] }).catch(() => null);
+  if (b.thread) setTimeout(() => b.thread.setArchived(true).catch(() => null), 5 * MINUTE);
+}
+// remboursement des combats interrompus par un redémarrage
+function refundInterruptedBattles() {
+  const st = load();
+  for (const [id, items] of Object.entries(st.arenaEscrow)) {
+    for (const x of items) changeBalance(x.userId, x.amount, "Combat de cartes interrompu : remboursement", { force: true });
+    delete st.arenaEscrow[id];
+  }
+  save();
+}
+function arenaLeaderboard() {
+  return Object.entries(load().arena)
+    .filter(([, s]) => s.w + s.l + s.d > 0)
+    .sort((a, b) => b[1].elo - a[1].elo)
+    .slice(0, 10)
+    .map(([id, s], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} <@${id}> — **${s.elo}** · ${tierOf(s.elo)[1]} · ${s.w} V / ${s.l} D${s.streak >= 3 ? ` · 🔥 ${s.streak}` : ""}`)
+    .join("\n");
+}
+function arenaMenuPayload(userId) {
+  const s = arenaStats(userId), [, tier] = tierOf(s.elo);
+  return {
+    ephemeral: true,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xe9c46a)
+        .setTitle("⚔️ Arène de la Maison")
+        .setDescription(
+          `Votre rang : **${tier}** · **${s.elo}** points · ${s.w} victoire(s), ${s.l} défaite(s)${s.streak >= 2 ? ` · 🔥 série de ${s.streak}` : ""}\n\n` +
+            "Défiez un membre (avec une mise si vous voulez, par `/combat`) ou entraînez-vous contre **la Maison**."
+        )
+        .addFields({ name: "🏆 Classement", value: arenaLeaderboard() || "*Aucun combat pour le moment.*" }),
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId("carte_bt_pick").setPlaceholder("⚔️ Défier un membre…")),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("carte_bt_ai").setLabel("Affronter la Maison").setEmoji("🤖").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("carte_bt_rules").setLabel("Règles").setEmoji("📖").setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+async function sendChallenge(client, interaction, target, targetName, mise) {
+  const userId = interaction.user.id;
+  if (!target || target.bot || target.id === userId) return "Choisissez un autre membre (pas vous-même, ni un bot).";
+  if (userBattle.has(userId)) return "Vous êtes déjà en combat.";
+  if (userBattle.has(target.id)) return `${targetName} est déjà en combat.`;
+  if (!ownedKeys(userId).length) return "Il vous faut au moins une carte pour combattre.";
+  if (!ownedKeys(target.id).length) return `${targetName} n'a encore aucune carte.`;
+  if (mise && readBalance(userId) < mise) return `Vous n'avez pas ${formatEuro(mise)}.`;
+  const cid = Date.now().toString(36);
+  const fromName = interaction.member?.displayName ?? interaction.user.username;
+  const ch = { id: cid, from: interaction.user, fromName, to: target, toName: targetName, mise };
+  const sa = arenaStats(userId), sb = arenaStats(target.id);
+  ch.message = await channelRef
+    ?.send({
+      content: `⚔️ <@${target.id}>, **${fromName}** vous défie en combat de cartes !`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xef4444)
+          .setTitle(`⚔️ ${fromName} défie ${targetName}`)
+          .setDescription(
+            `${fromName} : **${tierOf(sa.elo)[1]}** (${sa.elo} pts) · ${targetName} : **${tierOf(sb.elo)[1]}** (${sb.elo} pts)\n` +
+              (mise ? `💰 Mise : **${formatEuro(mise)}** chacun — le gagnant remporte ${formatEuro(Math.round(mise * 2 * (1 - ARENA_FEE)))}\n` : "") +
+              `Le défi expire <t:${Math.floor(Date.now() / 1000) + CHALLENGE_MINUTES * 60}:R>.`
+          ),
+      ],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`carte_bt_ok_${cid}`).setLabel("Accepter le défi").setEmoji("⚔️").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`carte_bt_no_${cid}`).setLabel("Refuser").setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId(`carte_bt_x_${cid}`).setLabel("Annuler (auteur)").setStyle(ButtonStyle.Secondary)
+        ),
+      ],
+      allowedMentions: { users: [target.id] },
+    })
+    .catch(() => null);
+  if (!ch.message) return "Impossible de publier le défi.";
+  challenges.set(cid, ch);
+  setTimeout(() => {
+    if (!challenges.has(cid)) return;
+    challenges.delete(cid);
+    ch.message.edit({ content: `⌛ Le défi de **${fromName}** à **${targetName}** a expiré.`, embeds: [], components: [] }).catch(() => null);
+  }, CHALLENGE_MINUTES * 60000);
+  client.users.fetch(target.id).then((u) => u.send(`⚔️ **${fromName}** vous défie en combat de cartes : ${ch.message.url}`)).catch(() => null);
+  return null;
+}
+
+
 
 async function openBooster(interaction, client, pulls, title, pack = null) {
   await interaction.deferReply({ ephemeral: true });
@@ -5461,6 +6473,7 @@ async function panelMessage() {
             `🎁 **Booster gratuit** — ${daily} chaque jour\n\n` +
             "🎒 Les boosters achetés vont dans votre **inventaire** (`/inventaire`) : ouvrez-les tout de suite ou gardez-les. Seuls les boosters de la génération en cours sont vendus.\n" +
             "🏪 **Marché** (`/marche`) : achetez et vendez des cartes entre membres · 🔄 **Échanges** (`/echange`) : proposez cartes et argent contre cartes.\n" +
+            "⚔️ **Arène** (`/combat`) : combats de cartes en direct, avec mises, paris et classement.\n" +
             "**Raretés** : ⚪ Commune · 🟢 Peu commune · 🔵 Rare · 🟣 Épique · 🟡 Légendaire · 🔴 Mythique · ✦ Holo (5 %)\n" +
             "✨ Des **cartes sauvages** apparaissent ici de temps en temps : soyez le premier à les attraper !\n" +
             "♻️ Recyclez vos doublons en **poussière d'étoile** pour fabriquer la carte de votre choix."
@@ -5485,7 +6498,8 @@ async function panelMessage() {
       ),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("carte_mk").setLabel("Marché").setEmoji("🏪").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("carte_tr").setLabel("Échanger").setEmoji("🔄").setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId("carte_tr").setLabel("Échanger").setEmoji("🔄").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("carte_bt").setLabel("Arène").setEmoji("⚔️").setStyle(ButtonStyle.Danger)
       ),
     ],
   };
@@ -5511,6 +6525,22 @@ async function refreshPanel(client) {
 
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "combat") {
+    const target = interaction.options.getUser("membre");
+    const mise = Math.max(0, interaction.options.getInteger("mise") ?? 0);
+    if (!target) {
+      await interaction.reply(arenaMenuPayload(interaction.user.id));
+      return true;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const err = await sendChallenge(client, interaction, target, interaction.options.getMember("membre")?.displayName ?? target.username, mise);
+    await interaction.editReply({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${channelRef} !` });
+    return true;
+  }
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "arene") {
+    await interaction.reply(arenaMenuPayload(interaction.user.id));
+    return true;
+  }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "marche") {
     await interaction.deferReply({ ephemeral: true });
     await interaction.editReply(await marketPayload(interaction.user));
@@ -5552,6 +6582,219 @@ async function handleCartesInteraction(interaction, client) {
   if (typeof id !== "string" || !id.startsWith("carte_")) return false;
   const userId = interaction.user.id;
   load();
+
+  // --- Arène ---
+  if (id === "carte_bt") {
+    await interaction.reply(arenaMenuPayload(userId));
+    return true;
+  }
+  if (id === "carte_bt_rules") {
+    await interaction.reply({ embeds: [RULES_EMBED()], ephemeral: true });
+    return true;
+  }
+  if (id === "carte_bt_pick") {
+    const target = interaction.users.first();
+    const err = await sendChallenge(client, interaction, target, interaction.members?.first()?.displayName ?? target?.username ?? "?", 0);
+    await interaction.update({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${channelRef} !`, embeds: [], components: [] });
+    return true;
+  }
+  if (id === "carte_bt_ai") {
+    if (userBattle.has(userId)) {
+      await interaction.reply({ content: "❌ Vous êtes déjà en combat.", ephemeral: true });
+      return true;
+    }
+    if (!ownedKeys(userId).length) {
+      await interaction.reply({ content: "❌ Il vous faut au moins une carte pour combattre.", ephemeral: true });
+      return true;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const b = await startBattle(client, { user: interaction.user, name: interaction.member?.displayName ?? interaction.user.username }, { user: client.user, name: "La Maison", isAI: true }, {});
+    await interaction.editReply({ content: b ? `⚔️ Combat contre la Maison : ${b.message.url}` : "❌ Impossible de lancer le combat." });
+    return true;
+  }
+  const chAction = /^carte_bt_(ok|no|x)_(\w+)$/.exec(id);
+  if (chAction) {
+    const [, action, cid] = chAction;
+    const ch = challenges.get(cid);
+    if (!ch) {
+      await interaction.reply({ content: "ℹ️ Ce défi n'est plus valable.", ephemeral: true });
+      return true;
+    }
+    if ((action === "ok" || action === "no") && userId !== ch.to.id) {
+      await interaction.reply({ content: `⛔ Seul(e) **${ch.toName}** peut répondre à ce défi.`, ephemeral: true });
+      return true;
+    }
+    if (action === "x" && userId !== ch.from.id) {
+      await interaction.reply({ content: `⛔ Seul(e) **${ch.fromName}** peut annuler son défi.`, ephemeral: true });
+      return true;
+    }
+    if (action !== "ok") {
+      challenges.delete(cid);
+      await interaction.update({ content: action === "no" ? `✖️ **${ch.toName}** refuse le défi de **${ch.fromName}**.` : `🗑️ **${ch.fromName}** annule son défi.`, embeds: [], components: [] });
+      return true;
+    }
+    if (userBattle.has(ch.from.id) || userBattle.has(ch.to.id)) {
+      await interaction.reply({ content: "❌ L'un des deux joueurs est déjà en combat.", ephemeral: true });
+      return true;
+    }
+    if (ch.mise) {
+      if (changeBalance(ch.from.id, -ch.mise, `Mise de combat contre ${ch.toName}`) === null) {
+        await interaction.reply({ content: `❌ ${ch.fromName} n'a plus assez d'argent pour la mise.`, ephemeral: true });
+        return true;
+      }
+      if (changeBalance(ch.to.id, -ch.mise, `Mise de combat contre ${ch.fromName}`) === null) {
+        changeBalance(ch.from.id, ch.mise, "Mise de combat remboursée", { force: true });
+        await interaction.reply({ content: `❌ Il vous faut ${formatEuro(ch.mise)} pour accepter (ou votre compte est gelé).`, ephemeral: true });
+        return true;
+      }
+    }
+    challenges.delete(cid);
+    await interaction.deferUpdate();
+    const b = await startBattle(client, { user: ch.from, name: ch.fromName }, { user: ch.to, name: ch.toName }, { mise: ch.mise });
+    await interaction.editReply({ content: b ? `⚔️ **${ch.toName}** relève le défi de **${ch.fromName}** ! Suivez le combat en direct : ${b.message.url}` : "❌ Le combat n'a pas pu commencer (mises remboursées).", embeds: [], components: [] });
+    return true;
+  }
+  const bt = /^carte_bt_(team|auto|ts|a|sw|bet|bf|ff)_([a-z0-9]+)(?:_(\w+))?$/.exec(id);
+  if (bt) {
+    const [, kind, bid, arg] = bt;
+    const b = battles.get(bid);
+    if (!b) {
+      await interaction.reply({ content: "ℹ️ Ce combat est terminé.", ephemeral: true });
+      return true;
+    }
+    const pi = b.players.findIndex((p) => p.id === userId && !p.isAI);
+    const me = b.players[pi];
+    // paris des spectateurs
+    if (kind === "bet" || kind === "bf") {
+      const side = Number(arg);
+      if (pi >= 0) {
+        await interaction.reply({ content: "⛔ Les joueurs ne peuvent pas parier sur leur propre combat.", ephemeral: true });
+        return true;
+      }
+      if (b.round > BET_ROUNDS || b.phase === "over") {
+        await interaction.reply({ content: "🔒 Les paris sont fermés.", ephemeral: true });
+        return true;
+      }
+      if (kind === "bet") {
+        await interaction.showModal(
+          new ModalBuilder()
+            .setCustomId(`carte_bt_bf_${bid}_${side}`)
+            .setTitle(`Parier sur ${b.players[side].name}`.slice(0, 45))
+            .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("mise").setLabel("Montant du pari (100 € minimum)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10)))
+        );
+        return true;
+      }
+      const amount = parseAmount(interaction.fields.getTextInputValue("mise"));
+      if (!Number.isFinite(amount) || amount < 100 || amount > 1000000) {
+        await interaction.reply({ content: "❌ Pari invalide : entre 100 € et 1 000 000 €.", ephemeral: true });
+        return true;
+      }
+      if (b.bets.some((x) => x.userId === userId && x.side !== side)) {
+        await interaction.reply({ content: "❌ Vous avez déjà parié sur l'autre joueur.", ephemeral: true });
+        return true;
+      }
+      if (changeBalance(userId, -amount, `Pari sur le combat ${b.players[0].name} contre ${b.players[1].name}`) === null) {
+        await interaction.reply({ content: `❌ Fonds insuffisants (vous avez ${formatEuro(readBalance(userId))}), ou compte gelé.`, ephemeral: true });
+        return true;
+      }
+      b.bets.push({ userId, side, amount });
+      escrow(b);
+      await interaction.reply({ content: `🎟️ Pari de **${formatEuro(amount)}** sur **${b.players[side].name}** enregistré. Gains partagés entre les parieurs gagnants (commission de ${Math.round(ARENA_FEE * 100)} %).`, ephemeral: true });
+      return true;
+    }
+    if (pi < 0) {
+      await interaction.reply({ content: "👀 Vous êtes spectateur de ce combat : regardez, ou pariez pendant les premières manches !", ephemeral: true });
+      return true;
+    }
+    if (kind === "ff") {
+      await interaction.reply({ content: "🏳️ Vous abandonnez le combat.", ephemeral: true });
+      if (b.phase === "team" && !b.round) await finishBattle(client, b, 1 - pi, "abandon");
+      else await finishBattle(client, b, 1 - pi, "abandon");
+      return true;
+    }
+    // composition de l'équipe
+    if (kind === "team" || kind === "auto" || kind === "ts") {
+      if (b.phase !== "team") {
+        await interaction.reply({ content: "ℹ️ Le combat a déjà commencé.", ephemeral: true });
+        return true;
+      }
+      if (kind === "team") {
+        const seen = new Set();
+        const options = ownedKeys(userId)
+          .map(([k]) => k)
+          .sort((x, y) => fighterPower(y) - fighterPower(x))
+          .filter((k) => !seen.has(k.replace("*", "")) && seen.add(k.replace("*", "")))
+          .slice(0, 25)
+          .map((k) => {
+            const f = fighter(k);
+            return { label: keyLabel(k).slice(0, 100), value: k, emoji: RARITIES[f.card.rarity].emoji, description: `${f.maxHp} PV · attaque ${f.attackDmg} · spécial ${f.specialDmg} · ${SERIES_LABELS[f.series].replace(/^\S+ /, "")}`.slice(0, 100) };
+          });
+        await interaction.reply({
+          ephemeral: true,
+          content: "🃏 Choisissez **jusqu'à 3 cartes** (la première entre en premier dans l'arène). Les plus fortes sont en haut de la liste.",
+          components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`carte_bt_ts_${bid}`).setPlaceholder("Mon équipe…").setMinValues(1).setMaxValues(Math.min(3, options.length)).addOptions(options))],
+        });
+        return true;
+      }
+      const keys = kind === "auto" ? bestTeam(userId) : interaction.values;
+      if (!keys.length) {
+        await interaction.reply({ content: "❌ Vous n'avez aucune carte.", ephemeral: true });
+        return true;
+      }
+      const confirm = `✅ Équipe prête : ${keys.map(keyLabel).join(", ")}`;
+      if (kind === "ts") await interaction.update({ content: confirm, components: [] });
+      else await interaction.reply({ content: confirm, ephemeral: true });
+      await setTeam(client, b, pi, keys);
+      return true;
+    }
+    // actions de la manche
+    if (b.phase !== "choose") {
+      await interaction.reply({ content: "⏳ La manche est en cours de résolution, patientez…", ephemeral: true });
+      return true;
+    }
+    if (kind === "sw") {
+      const to = Number(interaction.values[0]);
+      if (!(me.team[to]?.hp > 0) || to === me.active) {
+        await interaction.update({ content: "❌ Cette carte ne peut pas entrer.", components: [] });
+        return true;
+      }
+      me.choice = { type: "switch", to };
+      await interaction.update({ content: `🔒 Choix verrouillé : **changer** pour **${me.team[to].name}**. L'adversaire ne le voit pas.`, components: [] });
+    } else {
+      const action = arg;
+      if (!ACTIONS[action]) return false;
+      if (action === "special" && me.energy < SPECIAL_COST) {
+        await interaction.reply({ content: `⚡ Il faut ${SPECIAL_COST} énergies pour le spécial (vous en avez ${me.energy}).`, ephemeral: true });
+        return true;
+      }
+      if (action === "switch") {
+        const bench = aliveBench(me);
+        if (!bench.length) {
+          await interaction.reply({ content: "❌ Aucune autre carte disponible.", ephemeral: true });
+          return true;
+        }
+        await interaction.reply({
+          ephemeral: true,
+          content: "🔄 Quelle carte envoyer dans l'arène ?",
+          components: [
+            new ActionRowBuilder().addComponents(
+              new StringSelectMenuBuilder()
+                .setCustomId(`carte_bt_sw_${bid}`)
+                .setPlaceholder("Carte remplaçante…")
+                .addOptions(bench.map(({ f, i }) => ({ label: f.name.slice(0, 100), value: String(i), emoji: RARITIES[f.card.rarity].emoji, description: `${f.hp} / ${f.maxHp} PV · attaque ${f.attackDmg} · spécial ${f.specialDmg}` })))
+            ),
+          ],
+        });
+        return true;
+      }
+      me.choice = { type: action };
+      const f = activeOf(me);
+      await interaction.reply({ content: `🔒 Choix verrouillé : **${ACTIONS[action].label}${action === "special" ? ` — ${f.special}` : ""}**. L'adversaire ne le voit pas.`, ephemeral: true });
+    }
+    if (b.players.every((p) => p.choice)) resolveRound(client, b).catch((err) => console.error("Combat:", err.message));
+    else b.message.edit(await livePayload(b)).catch(() => null);
+    return true;
+  }
 
   // --- Marché ---
   if (id === "carte_mk") {
@@ -6292,6 +7535,7 @@ async function setupCartes(client) {
   });
   state.channelId = channelRef.id;
   save();
+  refundInterruptedBattles();
   await syncMemberCards(guild);
   client.on("guildMemberUpdate", (_, member) => {
     if (member.guild.id !== guild.id || member.user.bot) return;
