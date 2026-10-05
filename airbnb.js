@@ -19,7 +19,7 @@ const {
   refreshRichestLeaderboard,
 } = require("./economie");
 // Part de la Maison sur chaque séjour, réglée par le maire (80 % par défaut)
-const { P, curfew } = require("./politique");
+const { P, curfew, lawActive } = require("./politique");
 const { deleteLater, deleteInteractionMessageLater, getDossiersChannel, MINUTE, HOUR } = require("./nettoyage");
 const hostShare = () => Math.round((1 - P().airbnbMaisonShare) * 100) / 100;
 
@@ -116,7 +116,9 @@ function atParisTime(ts, minutes) {
 
 // Prochaine demande : au moins 3 h plus tard, et entre 7 h et 21 h.
 function scheduleNextRequest(from) {
-  let t = from + MIN_GAP_MS + Math.floor(Math.random() * EXTRA_GAP_MS);
+  // Plan tourisme : demandes 50 % plus fréquentes
+  const speed = lawActive("planTourisme") ? 1.5 : 1;
+  let t = from + (MIN_GAP_MS + Math.floor(Math.random() * EXTRA_GAP_MS)) / speed;
   if (!inBookingHours(t)) {
     let morning = atParisTime(t, OPEN_HOUR * 60);
     if (morning <= t) morning = atParisTime(t + 24 * 3600 * 1000, OPEN_HOUR * 60);

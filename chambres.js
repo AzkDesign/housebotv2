@@ -131,6 +131,11 @@ function getRoom(roomId) {
   return ROOMS.find((r) => r.id === roomId);
 }
 
+// Frais de déménagement (gratuits avec la loi de libre circulation)
+function moveFee(q) {
+  return require("./politique").lawActive("libreCirculation") ? 0 : q.moveFee;
+}
+
 function maisonOf(room) {
   return MAISONS.find((m) => m.id === room.maison);
 }
@@ -243,7 +248,7 @@ function roomOptions(state, { onlyFree = false, exclude = null, withFee = false,
       return {
         label: `${room.name} — ${q.name}`.slice(0, 100),
         value: room.id,
-        description: `${libre > 0 ? `${libre} place(s) libre(s)` : "Complet"} · ${withFee ? `frais ${q.moveFee} €` : `${q.tax} €/sem.`}${MAISONS.length > 1 ? ` · ${maisonOf(room).name}` : ""}`.slice(0, 100),
+        description: `${libre > 0 ? `${libre} place(s) libre(s)` : "Complet"} · ${withFee ? `frais ${moveFee(q)} €` : `${q.tax} €/sem.`}${MAISONS.length > 1 ? ` · ${maisonOf(room).name}` : ""}`.slice(0, 100),
         emoji: q.emoji,
       };
     });
@@ -346,8 +351,8 @@ async function openMoveTicket(interaction) {
     return;
   }
   const q = QUARTIERS[room.quartier];
-  if (readBalance(member.id) < q.moveFee) {
-    await interaction.update({ content: `❌ Les frais pour ${q.name} sont de **${formatEuro(q.moveFee)}** : vous avez ${formatEuro(readBalance(member.id))}.`, components: [] });
+  if (readBalance(member.id) < moveFee(q)) {
+    await interaction.update({ content: `❌ Les frais pour ${q.name} sont de **${formatEuro(moveFee(q))}** : vous avez ${formatEuro(readBalance(member.id))}.`, components: [] });
     return;
   }
   await interaction.update({ content: "⏳ Ouverture du ticket…", components: [] });
@@ -389,7 +394,7 @@ async function openMoveTicket(interaction) {
           { name: "Membre", value: `${member}` },
           { name: "Actuellement", value: current ? `${current.quartier.emoji} ${current.quartier.name} — ${roomLabel(current.room)}` : "Sans chambre", inline: true },
           { name: "Souhaite aller", value: `${q.emoji} ${q.name} — ${roomLabel(room)}`, inline: true },
-          { name: "Frais", value: `${formatEuro(q.moveFee)} (solde : ${formatEuro(readBalance(member.id))})` }
+          { name: "Frais", value: `${formatEuro(moveFee(q))} (solde : ${formatEuro(readBalance(member.id))})` }
         )
         .setFooter({ text: "Décision réservée à la Fondation et aux gérants" })
         .setTimestamp(),
@@ -426,15 +431,15 @@ async function answerMove(interaction, decision, userId) {
       await interaction.reply({ content: "❌ La chambre n'a plus de place libre.", ephemeral: true });
       return;
     }
-    if (changeBalance(userId, -q.moveFee, `Déménagement vers ${q.name} (${roomLabel(room)})`) === null) {
-      await interaction.reply({ content: `❌ Le membre n'a plus assez d'argent (${formatEuro(q.moveFee)} nécessaires) ou son compte est gelé.`, ephemeral: true });
+    if (moveFee(q) > 0 && changeBalance(userId, -moveFee(q), `Déménagement vers ${q.name} (${roomLabel(room)})`) === null) {
+      await interaction.reply({ content: `❌ Le membre n'a plus assez d'argent (${formatEuro(moveFee(q))} nécessaires) ou son compte est gelé.`, ephemeral: true });
       return;
     }
-    addToTreasury("demenagements", q.moveFee);
+    if (moveFee(q) > 0) addToTreasury("demenagements", moveFee(q));
     const from = getResidence(userId)?.room ?? null;
     removeMemberFromAllRooms(state, userId);
     state.rooms[room.id].push(userId);
-    result = `✅ Déménagement **accepté** par ${interaction.user} : bienvenue à ${q.emoji} **${q.name}** (${roomLabel(room)}) ! ${formatEuro(q.moveFee)} prélevés.`;
+    result = `✅ Déménagement **accepté** par ${interaction.user} : bienvenue à ${q.emoji} **${q.name}** (${roomLabel(room)}) ! ${formatEuro(moveFee(q))} prélevés.`;
     delete state.moves[userId];
     saveState(state);
     await announceMove(interaction.client, userId, from, room);

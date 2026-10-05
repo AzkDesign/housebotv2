@@ -421,7 +421,8 @@ function bureauPanel() {
       new ActionRowBuilder().addComponents(
         btn("regime", "Changer de régime", "🏛️", ButtonStyle.Danger),
         btn("powers", "Pouvoirs du régime", "✨", ButtonStyle.Primary),
-        btn("assos", "Associations", "🤝", ButtonStyle.Success)
+        btn("assos", "Associations", "🤝", ButtonStyle.Success),
+        btn("lois", "Lois", "📜", ButtonStyle.Danger)
       ),
     ],
   };
@@ -857,6 +858,9 @@ async function bureauAction(interaction, action, client) {
 
     case "assos":
       return require("./associations").openMayorMenu(interaction);
+
+    case "lois":
+      return require("./lois").openMayorMenu(interaction);
 
     case "budget":
       return interaction.reply({

@@ -23,7 +23,7 @@ const {
   isFrozen,
 } = require("./economie");
 // Taxe de la maison sur le pot d'un défi (réglée par le maire), versée au jackpot
-const { P, curfew } = require("./politique");
+const { P, curfew, lawActive, lawParam } = require("./politique");
 const { deleteLater, deleteInteractionMessageLater, getDossiersChannel, MINUTE, HOUR } = require("./nettoyage");
 
 const CASINO_CHANNEL_ID = "1527054335928827954";
@@ -95,6 +95,7 @@ function parisWeekMinute(ts) {
 
 function isOpenAt(ts) {
   const wm = parisWeekMinute(ts);
+  if (lawActive("casinoMercredi") && wm >= 2 * 1440 + 20 * 60 && wm < 3 * 1440 + CLOSE_AT) return true;
   return wm >= OPEN_AT || wm < CLOSE_AT;
 }
 
@@ -112,8 +113,8 @@ function nextTransition(now) {
 let scheduleCache = { open: null, until: 0 };
 function getSchedule() {
   const now = Date.now();
-  if (scheduleCache.open === null || now >= scheduleCache.until) {
-    scheduleCache = { open: isOpenAt(now), until: nextTransition(now) };
+  if (scheduleCache.open === null || now >= scheduleCache.until || now - (scheduleCache.at ?? 0) > 60 * 1000) {
+    scheduleCache = { open: isOpenAt(now), until: nextTransition(now), at: now };
   }
   return scheduleCache;
 }
@@ -153,8 +154,18 @@ function parseBet(raw) {
 }
 
 // Débite la mise ; renvoie un message d'erreur ou null.
-function takeBet(userId, amount, game) {
+// Mise maximale fixée par la loi (pour la machine à sous : par tour)
+function betLimitError(bet) {
+  if (lawActive("miseMax") && bet > lawParam("miseMax")) {
+    return `📜 **Loi sur le jeu responsable** : mise maximale de **${formatEuro(lawParam("miseMax"))}** par partie.`;
+  }
+  return null;
+}
+
+function takeBet(userId, amount, game, perRound = amount) {
   if (amount < MIN_BET) return `❌ Mise minimum : **${formatEuro(MIN_BET)}**.`;
+  const limit = betLimitError(perRound);
+  if (limit) return limit;
   if (changeBalance(userId, -amount, `Casino — ${game} (mise)`) === null) {
     return `❌ Solde insuffisant (vous avez **${formatEuro(readBalance(userId))}**).`;
   }
@@ -854,7 +865,7 @@ function spinSymbol() {
 
 async function playSlots(interaction, spins, bet, client) {
   const userId = interaction.user.id;
-  const err = takeBet(userId, bet * spins, "machine à sous");
+  const err = takeBet(userId, bet * spins, "machine à sous", bet);
   if (err) {
     await interaction.reply({
       content: spins > 1 ? `${err}\n*(${spins} tours × ${formatEuro(bet)} = ${formatEuro(bet * spins)})*` : err,
@@ -878,6 +889,11 @@ async function playSlots(interaction, spins, bet, client) {
       if (reels[0].triple === null) {
         const state = loadState();
         gain = state.jackpot;
+        if (lawActive("taxeJackpot")) {
+          const tax = round2(gain * lawParam("taxeJackpot") / 100);
+          require("./mairie").budgetMove(tax, "Taxe sur le jackpot du casino (loi)");
+          gain = round2(gain - tax);
+        }
         jackpotWon += gain;
         state.jackpot = JACKPOT_SEED;
         saveState(state);
@@ -929,6 +945,15 @@ let duelCounter = 0;
 
 async function createDuel(interaction, opponentId, bet, client) {
   const challenger = interaction.member;
+  if (lawActive("interdictionDefis")) {
+    await interaction.reply({ content: "📜 **Loi anti-duels** : les défis d'argent entre membres sont interdits.", ephemeral: true });
+    return;
+  }
+  const limit = betLimitError(bet);
+  if (limit) {
+    await interaction.reply({ content: limit, ephemeral: true });
+    return;
+  }
   if (opponentId === challenger.id) {
     await interaction.reply({ content: "❌ Vous ne pouvez pas vous défier vous-même.", ephemeral: true });
     return;
@@ -1155,6 +1180,8 @@ async function handleCasinoInteraction(interaction, client) {
       await interaction.showModal(
         betModal(`casino_modal_slots_${spins}`, `🎰 Machine à sous — ${spins} tour(s)`, userId, true)
       );
+    } else if (id === "casino_play_duel" && lawActive("interdictionDefis")) {
+      await interaction.reply({ content: "📜 **Loi anti-duels** : les défis d'argent entre membres sont interdits.", ephemeral: true });
     } else if (id === "casino_play_duel") {
       await interaction.reply({
         content: "⚔️ Qui voulez-vous défier ?",

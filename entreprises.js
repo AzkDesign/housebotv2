@@ -26,7 +26,7 @@ const {
 const { ENTREPRENEUR_ROLE_ID, LICENCE_ROLE_ID, IRF_ROLE_ID } = require("./casino");
 const { randomPerson } = require("./airbnb");
 // Taux réglés par le maire : impôt sur les sociétés, dividendes, salaire minimum, frais…
-const { P, sectorBoost } = require("./politique");
+const { P, sectorBoost, lawActive } = require("./politique");
 const { findOrCreateChannel } = require("./salons");
 const { deleteLater, deleteInteractionMessageLater, sendDossier, MINUTE } = require("./nettoyage");
 
@@ -163,6 +163,12 @@ function autoConfirmation(sector) {
     commerce: ["🛍️ Commande payée et préparée.", "🛍️ Achat validé, paquet prêt à emporter."],
   };
   return pick(lines[sector] ?? ["✅ Demande confirmée."]);
+}
+
+// Horaires d'un secteur (+2 h le soir avec la loi des nocturnes)
+function sectorHours(sector) {
+  const [open, close] = SECTORS[sector].hours;
+  return [open, lawActive("commercesTard") ? Math.min(24, close + 2) : close];
 }
 
 function describePerson() {
@@ -616,7 +622,7 @@ function companyEmbed(company) {
     .setThumbnail(company.logo)
     .setDescription(
       `${SECTORS[company.sector].label}${company.status === "frozen" ? " — 🔒 **gelée par l'IRF**" : ""}\n${company.description}\n\n` +
-        `🕒 Clients entre **${SECTORS[company.sector].hours[0]}h et ${SECTORS[company.sector].hours[1]}h** quand quelqu'un est en service.`
+        `🕒 Clients entre **${sectorHours(company.sector)[0]}h et ${sectorHours(company.sector)[1]}h** quand quelqu'un est en service.`
     )
     .addFields(
       { name: "💰 Compte", value: formatEuro(company.balance), inline: true },
@@ -702,7 +708,7 @@ async function setDuty(interaction, company, on, auto = false) {
   }
   save();
   dirtyPanels.add(company.id);
-  const [open, close] = SECTORS[company.sector].hours;
+  const [open, close] = sectorHours(company.sector);
   if (on && auto) {
     await interaction.reply({
       content:
@@ -872,7 +878,7 @@ async function tick(client) {
 
     // Nouveau client
     const dutyCount = Object.keys(company.onDuty).length;
-    const [open, close] = SECTORS[company.sector].hours;
+    const [open, close] = sectorHours(company.sector);
     const hour = parisHour(now);
     if (
       company.status === "active" &&

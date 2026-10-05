@@ -423,10 +423,22 @@ async function assignProfileRoles(guild, stats) {
   }
 }
 
+// Loi d'accueil : la ville offre une prime à chaque nouveau membre accepté
+async function payWelcomePrime(memberId, channel) {
+  const politique = require("./politique");
+  if (!memberId || !politique.lawActive("primeBienvenue")) return;
+  const amount = politique.lawParam("primeBienvenue");
+  const mairie = require("./mairie");
+  if (!mairie.budgetMove(-amount, `Prime de bienvenue (loi) — ${memberId}`)) return; // budget de la ville insuffisant
+  require("./economie").changeBalance(memberId, amount, "Prime de bienvenue de la ville (loi d'accueil)");
+  await channel.send(`🎁 **Loi d'accueil** : la ville vous offre **${amount.toLocaleString("fr-FR")} €** pour bien démarrer !`).catch(() => null);
+}
+
 async function finalizeCandidature(channel, guild, stats, accepted, reason) {
   stats.status = accepted ? "accepted" : "rejected";
   persist();
   if (accepted) await assignProfileRoles(guild, stats);
+  if (accepted) await payWelcomePrime(stats.memberId, channel);
   await notifyCandidateResult(channel, accepted, reason);
   await updateLogVoteMessage(
     channel,
