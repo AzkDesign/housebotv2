@@ -18,7 +18,6 @@ const { findOrCreateChannel, findOrCreateRole } = require("./salons");
 const { deleteLater, MINUTE } = require("./nettoyage");
 
 const ANNOUNCE_CHANNEL_ID = "1509983723892903966"; // le salon des cartes est rangé à côté des annonces
-const SITUATION_DELICATE_ROLE_ID = "1554940813522505778";
 const STATE_FILE = require("./data").dataFile("cartes-state.json");
 const PANEL_TITLE = "🃏 Les Cartes de la Maison";
 
@@ -5095,10 +5094,6 @@ async function handleCartesInteraction(interaction, client) {
   }
 
   if (id === "carte_member") {
-    if (interaction.member?.roles.cache.has(SITUATION_DELICATE_ROLE_ID)) {
-      await interaction.reply({ content: "🔒 Les cartes de membres ne sont pas disponibles pour la Maison des Jeunes.", ephemeral: true });
-      return true;
-    }
     const s = load();
     const on = !s.optIn[userId];
     if (on) s.optIn[userId] = true;
