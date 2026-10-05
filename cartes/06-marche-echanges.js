@@ -710,5 +710,6 @@ async function closeTrade(id, status, client) {
   save();
   const msg = tr.messageId ? await channelRef?.messages.fetch(tr.messageId).catch(() => null) : null;
   await msg?.edit({ embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [] }).catch(() => null);
+  deleteLater(msg, MINUTE);
 }
 

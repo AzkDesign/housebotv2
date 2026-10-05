@@ -190,6 +190,7 @@ async function handleCartesInteraction(interaction, client) {
     if (action !== "ok") {
       challenges.delete(cid);
       await interaction.update({ content: action === "no" ? `✖️ **${ch.toName}** refuse le défi de **${ch.fromName}**.` : `🗑️ **${ch.fromName}** annule son défi.`, embeds: [], components: [] });
+      deleteLater(interaction.message, MINUTE);
       return true;
     }
     if (userBattle.has(ch.from.id) || userBattle.has(ch.to.id)) {
@@ -211,6 +212,7 @@ async function handleCartesInteraction(interaction, client) {
     await interaction.deferUpdate();
     const b = await startBattle(client, { user: ch.from, name: ch.fromName }, { user: ch.to, name: ch.toName }, { mise: ch.mise });
     await interaction.editReply({ content: b ? `⚔️ **${ch.toName}** relève le défi de **${ch.fromName}** ! Suivez le combat en direct : ${b.message.url}` : "❌ Le combat n'a pas pu commencer (mises remboursées).", embeds: [], components: [] });
+    deleteLater(interaction.message, MINUTE);
     return true;
   }
   const bt = /^carte_bt_(team|auto|ts|a|sw|bet|bf|ff)_([a-z0-9]+)(?:_(\w+))?$/.exec(id);
@@ -683,6 +685,7 @@ async function handleCartesInteraction(interaction, client) {
       tr.status = action === "no" ? "refused" : "cancelled";
       save();
       await interaction.editReply({ embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [] });
+      deleteLater(interaction.message, MINUTE);
       return true;
     }
     let problem = tradeProblem(tr);
@@ -704,6 +707,7 @@ async function handleCartesInteraction(interaction, client) {
       tr.status = "failed";
       save();
       await interaction.editReply({ embeds: [tradeEmbed(tr, `⚠️ ${problem}`)], files: [await tradeImage(tr)], components: [] });
+      deleteLater(interaction.message, MINUTE);
       return true;
     }
     for (const k of tr.give) moveKey(tr.from, tr.to, k);
@@ -716,6 +720,7 @@ async function handleCartesInteraction(interaction, client) {
     tr.doneAt = Date.now();
     save();
     await interaction.editReply({ content: `🤝 Échange conclu entre <@${tr.from}> et <@${tr.to}> !`, embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [], allowedMentions: { parse: [] } });
+    deleteLater(interaction.message, MINUTE);
     require("./logs")
       .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`<@${tr.from}> donne : ${tr.give.map(keyLabel).join(", ") || "rien"}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n<@${tr.to}> donne : ${tr.take.map(keyLabel).join(", ") || "rien"}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
       .catch(() => null);

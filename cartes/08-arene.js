@@ -1530,6 +1530,7 @@ async function sendChallenge(client, interaction, target, targetName, mise) {
     if (!challenges.has(cid)) return;
     challenges.delete(cid);
     ch.message.edit({ content: `⌛ Le défi de **${fromName}** à **${targetName}** a expiré.`, embeds: [], components: [] }).catch(() => null);
+    deleteLater(ch.message, MINUTE);
   }, CHALLENGE_MINUTES * 60000);
   client.users.fetch(target.id).then((u) => u.send(`⚔️ **${fromName}** vous défie en combat de cartes : ${ch.message.url}`)).catch(() => null);
   return null;
