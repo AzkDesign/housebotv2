@@ -79,6 +79,10 @@ async function registerSlashCommands(client, token) {
       .addUserOption((o) => o.setName("membre").setDescription("Voir la vitrine d'un autre membre"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("carte-fondation")
+      .setDescription("(Gérants) Télécharger les cartes DUO de l'équipe Fondation")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("pass")
       .setDescription("Votre pass de combat : paliers, récompenses, pass Premium")
       .toJSON(),

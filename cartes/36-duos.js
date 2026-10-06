@@ -729,3 +729,29 @@ async function drawDuoCard(card, holo = false, t = 0.37) {
     return true;
   };
 }
+
+// --- /carte-fondation (gérants) : les vraies cartes DUO de l'équipe Fondation, en fichiers à télécharger ---
+{
+  const handle = handleTeamInteraction;
+  handleTeamInteraction = async (interaction, client) => {
+    if (!(interaction.isChatInputCommand?.() && interaction.commandName === "carte-fondation")) return handle(interaction, client);
+    if (!isGerant(interaction.member)) {
+      await interaction.reply({ content: "⛔ Réservé aux gérants.", ephemeral: true });
+      return true;
+    }
+    const team = Object.values(teamsState()).find((t) => isFondation(t.name) && t.members.length === 2);
+    if (!team) {
+      await interaction.reply({ content: "❌ Aucune équipe « Fondation » complète (deux membres) pour le moment.", ephemeral: true });
+      return true;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const base = duoCardOf(duoSnapshot(team)), files = [];
+    for (const [card, name] of [[base, "fondation-duo"], ...DUO_VARIANTS.map(([k]) => [findCard(`${base.id}_${k}`), `fondation-duo-${k}`])]) {
+      if (!card) continue;
+      files.push(new AttachmentBuilder(await (await drawCard(card, false, 0.37)).encode("png"), { name: `${name}.png` }));
+    }
+    files.push(new AttachmentBuilder(await animatedCard(base, false), { name: "fondation-duo-anime.gif" }));
+    await interaction.editReply({ content: `🤝 Les cartes DUO de l'équipe **${team.name}** (${base.name}) : la carte, ses éditions et la version animée.`, files });
+    return true;
+  };
+}
