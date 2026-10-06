@@ -3,7 +3,11 @@
 // Inscriptions du vendredi 12 h au samedi 14 h (4 à 32 joueurs), puis tableau à élimination directe
 // classé par l'Arène. Chaque tour dure 3 heures ; les matchs se jouent en direct dans l'Arène.
 // Un joueur absent à la fin du tour perd par forfait. La finale a toujours lieu le dimanche à 20 h.
-const TOUR_MIN = 4, TOUR_MAX = 32;
+const TOUR_MIN = 4, TOUR_LIMIT = 32;
+const TOUR_SIZES = [4, 6, 8, 12, 16, 24, 32];
+// réglages choisis par un admin : nombre de places et tournoi actif ou non
+const tourConfig = () => (load().tournamentConfig ??= { max: 8, enabled: true });
+const tourMax = () => Math.min(TOUR_LIMIT, Math.max(TOUR_MIN, tourConfig().max));
 const TOUR_ROUND_HOURS = 3;
 const TOUR_READY_MIN = 15; // un joueur « prêt » attend son adversaire pendant 15 min
 const TOUR_SLOTS = [[5, 14], [5, 17], [5, 20], [6, 14], [6, 17], [6, 20]]; // [jour (lundi = 0), heure] des tours
@@ -91,12 +95,12 @@ async function tournamentTick(client) {
   let t = st.tournament;
   const key = tourKey(), open = parisAt(4, 12), close = parisAt(5, 14);
   if (!t || t.key !== key) {
-    if (now < open || now >= close) return;
+    if (now < open || now >= close || !tourConfig().enabled) return;
     t = st.tournament = { key, phase: "inscriptions", open, close, players: [], last: t?.champion ? { champion: t.champion, key: t.key } : (t?.last ?? null) };
     save();
     tourDirty = true;
     await chan("annonces")
-      ?.send({ content: `🏆 **Le tournoi du week-end est ouvert !** Inscrivez-vous dans ${chan("tournoi")} avant ${tourDayLabel(close)} : 32 places, élimination directe, finale dimanche à 20 h.` })
+      ?.send({ content: `🏆 **Le tournoi du week-end est ouvert !** Inscrivez-vous dans ${chan("tournoi")} avant ${tourDayLabel(close)} : ${tourMax()} places, élimination directe, finale dimanche à 20 h.` })
       .then((m) => deleteLater(m, 6 * 60 * MINUTE))
       .catch(() => null);
     return;
@@ -272,7 +276,7 @@ async function drawTournament(t) {
   iconTrophy(ctx, W / 2 + 380, 104, 30);
   ctx.font = "20px CardItalic";
   ctx.fillStyle = "#c4b5fd";
-  const sub = !t || t.phase === "cancelled" ? "Inscriptions chaque vendredi à midi · finale le dimanche à 20 h" : t.phase === "inscriptions" ? `Inscriptions ouvertes jusqu'à ${tourDayLabel(t.close)} · ${t.players.length} / ${TOUR_MAX} joueurs` : t.phase === "done" ? `Champion : ${pseudo(t.champion)}` : `${t.players.length} joueurs · élimination directe · finale dimanche à 20 h`;
+  const sub = !t || t.phase === "cancelled" ? "Inscriptions chaque vendredi à midi · finale le dimanche à 20 h" : t.phase === "inscriptions" ? `Inscriptions ouvertes jusqu'à ${tourDayLabel(t.close)} · ${t.players.length} / ${tourMax()} joueurs` : t.phase === "done" ? `Champion : ${pseudo(t.champion)}` : `${t.players.length} joueurs · élimination directe · finale dimanche à 20 h`;
   ctx.fillText(sub, W / 2, 164);
   if (!R) {
     // liste des inscrits (ou annonce du prochain tournoi)
@@ -387,8 +391,8 @@ async function tournamentPayload() {
   const t = tourState(), file = new AttachmentBuilder(await (await drawTournament(t)).encode("jpeg", 88), { name: "tournoi.jpg" });
   let desc;
   if (!t || t.phase === "cancelled" || (t.phase === "done" && Date.now() > parisAt(6, 23) + 3 * 3600000))
-    desc = `Chaque week-end, **32 joueurs** s'affrontent en élimination directe avec leurs cartes.\n✍️ Inscriptions du **vendredi midi** au **samedi 14 h** · 🏆 finale le **dimanche à 20 h**.${t?.phase === "cancelled" ? "\n\n*Ce week-end, il n'y a pas eu assez d'inscrits.*" : ""}`;
-  else if (t.phase === "inscriptions") desc = `✍️ **Inscriptions ouvertes** jusqu'à ${tourWhen(t.close)} (${tourRel(t.close)}).\n**${t.players.length} / ${TOUR_MAX}** inscrits · il faut au moins ${TOUR_MIN} joueurs.\n\nLe tableau est tiré selon le classement de l'Arène : les mieux classés peuvent être exemptés du premier tour.`;
+    desc = `Chaque week-end, jusqu'à **${tourMax()} joueurs** s'affrontent en élimination directe avec leurs cartes.\n✍️ Inscriptions du **vendredi midi** au **samedi 14 h** · 🏆 finale le **dimanche à 20 h**.${t?.phase === "cancelled" ? "\n\n*Ce week-end, il n'y a pas eu assez d'inscrits.*" : ""}`;
+  else if (t.phase === "inscriptions") desc = `✍️ **Inscriptions ouvertes** jusqu'à ${tourWhen(t.close)} (${tourRel(t.close)}).\n**${t.players.length} / ${tourMax()}** inscrits · il faut au moins ${TOUR_MIN} joueurs.\n\nLe tableau est tiré selon le classement de l'Arène : les mieux classés peuvent être exemptés du premier tour.`;
   else if (t.phase === "rounds") {
     const r = t.started.lastIndexOf(true), live = r >= 0 && !t.closed[r];
     const next = t.slots.findIndex((s, i) => !t.started[i]);
@@ -427,7 +431,7 @@ const TOUR_RULES = () =>
     .setColor(0xf59e0b)
     .setTitle("📖 Le tournoi du week-end")
     .setDescription(
-      `✍️ **Inscriptions** : du vendredi 12 h au samedi 14 h, gratuites, ${TOUR_MAX} places (il faut ${TOUR_MIN} joueurs au moins).\n` +
+      `✍️ **Inscriptions** : du vendredi 12 h au samedi 14 h, gratuites, ${tourMax()} places (il faut ${TOUR_MIN} joueurs au moins).\n` +
         "🎲 **Tableau** : élimination directe, classé selon l'Arène (les mieux classés peuvent être exemptés du premier tour).\n" +
         `⏰ **Tours** : samedi 14 h, 17 h, 20 h puis dimanche 14 h, 17 h et **finale à 20 h** (selon le nombre d'inscrits). Chaque tour dure ${TOUR_ROUND_HOURS} heures.\n` +
         "⚔️ **Matchs** : combat de l'Arène en direct. Cliquez sur **Jouer mon match** : le combat démarre dès que les deux joueurs sont prêts. Égalité : on rejoue.\n" +
@@ -441,7 +445,7 @@ function tourMePayload(userId) {
   const t = tourState();
   let text;
   if (!t || !["inscriptions", "rounds", "done"].includes(t.phase)) text = "Aucun tournoi en cours. Les inscriptions ouvrent **vendredi à midi**.";
-  else if (t.phase === "inscriptions") text = t.players.includes(userId) ? `✅ Vous êtes **inscrit** (${t.players.length} / ${TOUR_MAX}). Tirage du tableau ${tourRel(t.close)}.` : `Vous n'êtes pas inscrit. Il reste **${TOUR_MAX - t.players.length}** places, jusqu'à ${tourWhen(t.close)}.`;
+  else if (t.phase === "inscriptions") text = t.players.includes(userId) ? `✅ Vous êtes **inscrit** (${t.players.length} / ${tourMax()}). Tirage du tableau ${tourRel(t.close)}.` : `Vous n'êtes pas inscrit. Il reste **${Math.max(0, tourMax() - t.players.length)}** places, jusqu'à ${tourWhen(t.close)}.`;
   else if (!t.players.includes(userId)) text = "Vous ne participez pas à ce tournoi. Rendez-vous vendredi prochain !";
   else if (t.phase === "done") text = t.champion === userId ? "🏆 **Vous êtes le champion du tournoi !**" : "Le tournoi est terminé. Merci d'avoir participé !";
   else if (!tourAlive(t, userId)) text = "Vous avez été éliminé. Vous pouvez suivre la suite du tableau dans le salon du tournoi.";
@@ -459,6 +463,31 @@ function tourMePayload(userId) {
   return { content: `🏆 **Tournoi du week-end**\n${text}`, ephemeral: true };
 }
 
+// --- Réglages (admins) ---
+function tourAdminText() {
+  const cfg = tourConfig(), t = tourState();
+  const rounds = Math.ceil(Math.log2(tourMax()));
+  return (
+    `⚙️ **Réglages du tournoi** (admins)\n` +
+    `Tournoi : **${cfg.enabled ? "actif" : "désactivé"}** · places : **${tourMax()}**\n` +
+    `Avec ${tourMax()} joueurs : ${rounds} tours (${TOUR_SLOTS.slice(TOUR_SLOTS.length - rounds).map(([d, h]) => `${d === 5 ? "sam." : "dim."} ${h} h`).join(", ")}). Le tableau et les horaires s'adaptent tout seuls au nombre réel d'inscrits${tourMax() > TOUR_MIN ? ` (de ${TOUR_MIN} à ${tourMax()})` : ""}.` +
+    (t?.phase === "inscriptions" && t.players.length > tourMax() ? `\n⚠️ ${t.players.length} joueurs sont déjà inscrits : ils restent inscrits, mais plus personne ne peut s'ajouter.` : "") +
+    (t?.phase === "rounds" ? "\n*Le tournoi en cours n'est pas modifié : les réglages s'appliquent au prochain.*" : "")
+  );
+}
+function tourAdminRows() {
+  const cfg = tourConfig();
+  return [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("carte_to_cfg_max")
+        .setPlaceholder(`⚙️ Admin : nombre de places (${tourMax()})`)
+        .addOptions(TOUR_SIZES.map((n) => ({ label: `${n} joueurs`, value: String(n), description: `${Math.ceil(Math.log2(n))} tours, finale dimanche 20 h`, default: n === tourMax() })))
+    ),
+    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_to_cfg_toggle").setLabel(cfg.enabled ? "Admin : désactiver le tournoi" : "Admin : activer le tournoi").setEmoji("⚙️").setStyle(cfg.enabled ? ButtonStyle.Secondary : ButtonStyle.Success)),
+  ];
+}
+
 // --- Interactions ---
 async function handleTournamentInteraction(interaction, client) {
   const isCmd = interaction.isChatInputCommand?.() && interaction.commandName === "tournoi";
@@ -467,7 +496,21 @@ async function handleTournamentInteraction(interaction, client) {
   const userId = interaction.user.id, t = tourState();
   const say = async (p) => (await interaction.reply(typeof p === "string" ? { content: p, ephemeral: true } : p), true);
   if (isCmd || id === "carte_to_me") {
-    await interaction.reply({ ...tourMePayload(userId), components: tourButtons(t).map((r) => r) });
+    const admin = isGerant(interaction.member);
+    const me = tourMePayload(userId);
+    await interaction.reply({ ...me, content: admin ? `${me.content}
+
+${tourAdminText()}` : me.content, components: [...tourButtons(t), ...(admin ? tourAdminRows() : [])] });
+    return true;
+  }
+  if (id.startsWith("carte_to_cfg")) {
+    if (!isGerant(interaction.member)) return say("❌ Réservé aux admins.");
+    const cfg = tourConfig();
+    if (id === "carte_to_cfg_max") cfg.max = Number(interaction.values[0]);
+    if (id === "carte_to_cfg_toggle") cfg.enabled = !cfg.enabled;
+    save();
+    tourDirty = true;
+    await interaction.update({ content: tourAdminText(), components: [...tourButtons(tourState()), ...tourAdminRows()] });
     return true;
   }
   if (id === "carte_to_rules") {
@@ -477,12 +520,12 @@ async function handleTournamentInteraction(interaction, client) {
   if (id === "carte_to_join") {
     if (t?.phase !== "inscriptions") return say("❌ Les inscriptions ne sont pas ouvertes.");
     if (t.players.includes(userId)) return say("✅ Vous êtes déjà inscrit.");
-    if (t.players.length >= TOUR_MAX) return say("❌ Le tournoi est complet.");
+    if (t.players.length >= tourMax()) return say("❌ Le tournoi est complet.");
     if (bestTeam(userId).length < 3) return say("❌ Il faut au moins **3 cartes** pour participer. Ouvrez des boosters !");
     t.players.push(userId);
     save();
     tourDirty = true;
-    await interaction.reply({ content: `✅ **Inscrit au tournoi !** (${t.players.length} / ${TOUR_MAX}) Le tableau sera tiré ${tourRel(t.close)}. Vous serez prévenu en message privé avant chaque match.`, ephemeral: true });
+    await interaction.reply({ content: `✅ **Inscrit au tournoi !** (${t.players.length} / ${tourMax()}) Le tableau sera tiré ${tourRel(t.close)}. Vous serez prévenu en message privé avant chaque match.`, ephemeral: true });
     return true;
   }
   if (id === "carte_to_leave") {
