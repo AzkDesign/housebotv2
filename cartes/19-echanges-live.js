@@ -17,8 +17,7 @@ function liveTimer(tr, minutes, why) {
 function inviteRow(tid) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`carte_lt_yes_${tid}`).setLabel("Accepter l'invitation").setEmoji("🤝").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`carte_lt_no_${tid}`).setLabel("Refuser").setEmoji("✖️").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`carte_lt_x_${tid}`).setLabel("Annuler (auteur)").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`carte_lt_no_${tid}`).setLabel("Refuser").setEmoji("✖️").setStyle(ButtonStyle.Danger)
   );
 }
 function invitePayload(tr) {
@@ -159,13 +158,16 @@ async function inviteLiveTrade(client, user, fromName, target, toName) {
   const tr = { ...newDraft(user, target, fromName, toName), id: Date.now().toString(36), status: "invite", live: false, ready: { from: false, to: false }, filter: {} };
   delete tr.gf;
   delete tr.tf;
-  tr.message = await chan("echanges")?.send(invitePayload(tr)).catch(() => null);
-  if (!tr.message) return "Impossible de publier l'invitation.";
+  const invite = await sendInvite(client, target.id, invitePayload(tr), "echanges");
+  tr.message = invite.message;
+  if (!tr.message) return "Impossible d'envoyer l'invitation.";
+  lastInvite.set(user.id, { kind: "echange", dm: invite.dm, cancelId: `carte_lt_x_${tr.id}` });
+  tr.author = user;
   liveTrades.set(tr.id, tr);
   userLiveTrade.set(user.id, tr.id);
   userLiveTrade.set(target.id, tr.id);
   liveTimer(tr, LIVE_INVITE_MINUTES, "invitation expirée");
-  client.users.fetch(target.id).then((u) => u.send(`🔄 **${fromName}** vous invite à échanger des cartes : ${tr.message.url}`)).catch(() => null);
+  if (!invite.dm) client.users.fetch(target.id).then((u) => u.send(`🔄 **${fromName}** vous invite à échanger des cartes : ${tr.message.url}`)).catch(() => null);
   return null;
 }
 
@@ -175,7 +177,7 @@ async function handleLiveTradeInteraction(interaction, client) {
   if (interaction.isChatInputCommand?.() && interaction.commandName === "echange") {
     const target = interaction.options.getUser("membre");
     const err = await inviteLiveTrade(client, interaction.user, interaction.member?.displayName ?? interaction.user.username, target, interaction.options.getMember("membre")?.displayName ?? target?.username ?? "?");
-    await interaction.reply({ content: err ? errText(err) : `✅ Invitation envoyée dans ${chan("echanges")} ! Dès que **${interaction.options.getMember("membre")?.displayName ?? target.username}** accepte, la table d'échange s'ouvre.`, ephemeral: true });
+    await interaction.reply({ ...(err ? { content: errText(err) } : inviteSentPayload(interaction.user.id, interaction.options.getMember("membre")?.displayName ?? target.username)), ephemeral: true });
     return true;
   }
   if (id === "carte_tr") {
@@ -190,7 +192,7 @@ async function handleLiveTradeInteraction(interaction, client) {
     const target = interaction.users.first();
     const toName = interaction.members?.first()?.displayName ?? target?.username ?? "?";
     const err = await inviteLiveTrade(client, interaction.user, interaction.member?.displayName ?? interaction.user.username, target, toName);
-    await interaction.update({ content: err ? errText(err) : `✅ Invitation envoyée à **${toName}** dans ${chan("echanges")} ! La table d'échange s'ouvrira dès qu'il acceptera.`, components: err ? interaction.message.components : [] });
+    await interaction.update(err ? { content: errText(err), components: interaction.message.components } : inviteSentPayload(interaction.user.id, toName));
     return true;
   }
   const m = /^carte_lt_(yes|no|x|pick|money|mf|ok|ser|cards|clear)_(\w+)$/.exec(id ?? "");
@@ -219,6 +221,7 @@ async function handleLiveTradeInteraction(interaction, client) {
     if (action === "no") {
       await interaction.deferUpdate();
       await endLiveTrade(tr, "refused");
+      tr.author?.send?.(`✖️ **${tr.toName}** a refusé votre invitation à échanger.`).catch(() => null);
       return true;
     }
     await interaction.deferUpdate();
@@ -226,7 +229,15 @@ async function handleLiveTradeInteraction(interaction, client) {
     tr.status = "live";
     tr.at = Date.now();
     liveTimer(tr, LIVE_IDLE_MINUTES, "table inactive");
-    await refreshLive(tr);
+    if (!tr.message?.guildId) {
+      // invitation reçue en message privé : la table s'ouvre dans le salon des échanges
+      const dm = tr.message;
+      tr.message = await chan("echanges")?.send(await livePayloadTrade(tr)).catch(() => null);
+      tr.pinged = true;
+      await dm?.edit({ content: `✅ Invitation acceptée ! La table d'échange est ouverte : ${tr.message?.url ?? chan("echanges")}`, embeds: [], components: [] }).catch(() => null);
+      deleteLater(dm, MINUTE);
+    } else await refreshLive(tr);
+    tr.author?.send?.(`🔄 **${tr.toName}** accepte votre invitation ! La table d'échange est ouverte : ${tr.message?.url ?? ""}`).catch(() => null);
     return true;
   }
   if (action === "x") {
@@ -234,7 +245,8 @@ async function handleLiveTradeInteraction(interaction, client) {
       await interaction.reply({ content: `⛔ Seul(e) **${tr.fromName}** peut annuler son invitation (utilisez « Refuser »).`, ephemeral: true });
       return true;
     }
-    await interaction.deferUpdate();
+    if (interaction.message?.id !== tr.message?.id) await interaction.update({ content: "🗑️ Invitation annulée.", embeds: [], components: [] });
+    else await interaction.deferUpdate();
     await endLiveTrade(tr, "cancelled", `Échange annulé par **${side === "from" ? tr.fromName : tr.toName}**.`);
     return true;
   }

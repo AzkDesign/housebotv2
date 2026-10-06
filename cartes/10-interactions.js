@@ -91,7 +91,7 @@ async function handleCartesInteraction(interaction, client) {
     }
     await interaction.deferReply({ ephemeral: true });
     const err = await sendChallenge(client, interaction, target, interaction.options.getMember("membre")?.displayName ?? target.username, mise);
-    await interaction.editReply({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${chan("arene")} !` });
+    await interaction.editReply(err ? { content: `❌ ${err}` } : inviteSentPayload(interaction.user.id, interaction.options.getMember("membre")?.displayName ?? target.username));
     return true;
   }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "arene") {
@@ -230,7 +230,7 @@ async function handleCartesInteraction(interaction, client) {
   if (id === "carte_bt_pick") {
     const target = interaction.users.first();
     const err = await sendChallenge(client, interaction, target, interaction.members?.first()?.displayName ?? target?.username ?? "?", 0);
-    await interaction.update({ content: err ? `❌ ${err}` : `✅ Défi envoyé dans ${chan("arene")} !`, embeds: [], components: [] });
+    await interaction.update(err ? { content: `❌ ${err}`, embeds: [], components: [] } : inviteSentPayload(userId, interaction.members?.first()?.displayName ?? target?.username ?? "?"));
     return true;
   }
   if (id === "carte_bt_ai") {
@@ -265,8 +265,11 @@ async function handleCartesInteraction(interaction, client) {
     }
     if (action !== "ok") {
       challenges.delete(cid);
-      await interaction.update({ content: action === "no" ? `✖️ **${ch.toName}** refuse le défi de **${ch.fromName}**.` : `🗑️ **${ch.fromName}** annule son défi.`, embeds: [], components: [] });
-      deleteLater(interaction.message, MINUTE);
+      const text = action === "no" ? `✖️ **${ch.toName}** refuse le défi de **${ch.fromName}**.` : `🗑️ **${ch.fromName}** annule son défi.`;
+      await interaction.update({ content: text, embeds: [], components: [] });
+      if (interaction.message?.id !== ch.message?.id) await ch.message?.edit({ content: text, embeds: [], components: [] }).catch(() => null);
+      if (action === "no") ch.from.send?.(text).catch(() => null);
+      deleteLater(ch.message, MINUTE);
       return true;
     }
     if (userBattle.has(ch.from.id) || userBattle.has(ch.to.id)) {
@@ -288,6 +291,7 @@ async function handleCartesInteraction(interaction, client) {
     await interaction.deferUpdate();
     const b = await startBattle(client, { user: ch.from, name: ch.fromName }, { user: ch.to, name: ch.toName }, { mise: ch.mise });
     await interaction.editReply({ content: b ? `⚔️ **${ch.toName}** relève le défi de **${ch.fromName}** ! Suivez le combat en direct : ${b.message.url}` : "❌ Le combat n'a pas pu commencer (mises remboursées).", embeds: [], components: [] });
+    if (b) ch.from.send?.(`⚔️ **${ch.toName}** accepte votre défi ! Le combat commence : ${b.message.url}`).catch(() => null);
     deleteLater(interaction.message, MINUTE);
     return true;
   }

@@ -1516,8 +1516,7 @@ async function sendChallenge(client, interaction, target, targetName, mise) {
   const fromName = interaction.member?.displayName ?? interaction.user.username;
   const ch = { id: cid, from: interaction.user, fromName, to: target, toName: targetName, mise };
   const sa = arenaStats(userId), sb = arenaStats(target.id);
-  ch.message = await chan("arene")
-    ?.send({
+  const invite = await sendInvite(client, target.id, {
       content: `⚔️ <@${target.id}>, **${fromName}** vous défie en combat de cartes !`,
       embeds: [
         new EmbedBuilder()
@@ -1532,14 +1531,14 @@ async function sendChallenge(client, interaction, target, targetName, mise) {
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`carte_bt_ok_${cid}`).setLabel("Accepter le défi").setEmoji("⚔️").setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`carte_bt_no_${cid}`).setLabel("Refuser").setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId(`carte_bt_x_${cid}`).setLabel("Annuler (auteur)").setStyle(ButtonStyle.Secondary)
+          new ButtonBuilder().setCustomId(`carte_bt_no_${cid}`).setLabel("Refuser").setStyle(ButtonStyle.Danger)
         ),
       ],
       allowedMentions: { users: [target.id] },
-    })
-    .catch(() => null);
-  if (!ch.message) return "Impossible de publier le défi.";
+    }, "arene");
+  ch.message = invite.message;
+  if (!ch.message) return "Impossible d'envoyer le défi.";
+  lastInvite.set(userId, { kind: "combat", dm: invite.dm, cancelId: `carte_bt_x_${cid}` });
   challenges.set(cid, ch);
   setTimeout(() => {
     if (!challenges.has(cid)) return;
@@ -1547,7 +1546,7 @@ async function sendChallenge(client, interaction, target, targetName, mise) {
     ch.message.edit({ content: `⌛ Le défi de **${fromName}** à **${targetName}** a expiré.`, embeds: [], components: [] }).catch(() => null);
     deleteLater(ch.message, MINUTE);
   }, CHALLENGE_MINUTES * 60000);
-  client.users.fetch(target.id).then((u) => u.send(`⚔️ **${fromName}** vous défie en combat de cartes : ${ch.message.url}`)).catch(() => null);
+  if (!invite.dm) client.users.fetch(target.id).then((u) => u.send(`⚔️ **${fromName}** vous défie en combat de cartes : ${ch.message.url}`)).catch(() => null);
   return null;
 }
 

@@ -79,6 +79,13 @@ async function registerSlashCommands(client, token) {
       .addUserOption((o) => o.setName("membre").setDescription("Voir la vitrine d'un autre membre"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("invite")
+      .setDescription("Inviter un membre (en message privé) à un combat, un échange ou dans votre équipe")
+      .addUserOption((o) => o.setName("membre").setDescription("Le membre à inviter").setRequired(true))
+      .addStringOption((o) => o.setName("type").setDescription("À quoi l'inviter ?").setRequired(true).addChoices({ name: "⚔️ Combat de cartes", value: "combat" }, { name: "🔄 Échange de cartes", value: "echange" }, { name: "🛡️ Rejoindre mon équipe", value: "equipe" }))
+      .addIntegerOption((o) => o.setName("mise").setDescription("Mise en € pour un combat (facultatif)").setMinValue(0))
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("histoire")
       .setDescription("Le Mode Histoire : Les Secrets de la Maison, une enquête où vos choix comptent")
       .toJSON(),

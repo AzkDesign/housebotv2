@@ -556,7 +556,59 @@ function leaveTeam(userId) {
   return { team, refund };
 }
 
+// invitation dans l'équipe de l'auteur, envoyée en message privé (renvoie une erreur ou null)
+async function teamInviteSend(client, user, meName, target, tName) {
+  const team = teamOf(user.id);
+  if (!team) return "Vous n'avez pas d'équipe : créez-la d'abord avec /equipe.";
+  if (!target || target.bot || target.id === user.id) return "Choisissez un autre membre (pas vous-même, ni un bot).";
+  if (teamOf(target.id)) return `${tName} fait déjà partie d'une équipe.`;
+  if (team.members.length >= TEAM_MAX) return "Votre équipe est complète.";
+  const iid = Date.now().toString(36);
+  const inv = { id: iid, teamId: team.id, from: user.id, fromName: meName, to: target.id, toName: tName, toAvatar: target.displayAvatarURL({ extension: "png", size: 128 }) };
+  const invite = await sendInvite(
+    client,
+    target.id,
+    {
+      content: `📨 <@${target.id}>, **${meName}** vous invite à rejoindre l'équipe **${team.emblem} ${team.name}** !`,
+      embeds: [new EmbedBuilder().setColor(parseInt(emblemOf(team)[2].slice(1), 16)).setTitle(`${team.emblem} Invitation dans l'équipe ${team.name}`).setDescription(`Niveau **${teamLevel(team)}** (${TEAM_RANKS[teamLevel(team) - 1]}) · coffre **${team.vault} ✨**\nEn équipe : niveau commun, objectif de la semaine, coffre partagé, cadeaux de cartes et bonus sur l'île.\n\nL'invitation expire <t:${Math.floor(Date.now() / 1000) + TEAM_INVITE_MINUTES * 60}:R>.`).setThumbnail("attachment://blason.png")],
+      files: [await crestFile(team.emblem)],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`carte_eq_acc_${iid}`).setLabel("Rejoindre l'équipe").setEmoji("🤝").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`carte_eq_ref_${iid}`).setLabel("Refuser").setStyle(ButtonStyle.Danger)
+        ),
+      ],
+      allowedMentions: { users: [target.id] },
+    },
+    "equipes"
+  );
+  inv.message = invite.message;
+  if (!inv.message) return "Impossible d'envoyer l'invitation.";
+  lastInvite.set(user.id, { kind: "equipe", dm: invite.dm, cancelId: `carte_eq_xinv_${iid}` });
+  teamInvites.set(iid, inv);
+  setTimeout(() => {
+    if (!teamInvites.delete(iid)) return;
+    inv.message.edit({ content: `⌛ L'invitation de **${inv.fromName}** à **${inv.toName}** a expiré.`, embeds: [], components: [], attachments: [] }).catch(() => null);
+    deleteLater(inv.message, MINUTE);
+  }, TEAM_INVITE_MINUTES * MINUTE);
+  return null;
+}
+
 async function handleTeamInteraction(interaction, client) {
+  if (interaction.isChatInputCommand?.() && interaction.commandName === "invite") {
+    const target = interaction.options.getUser("membre"), kind = interaction.options.getString("type") ?? "echange";
+    const tName = interaction.options.getMember("membre")?.displayName ?? target?.username ?? "?";
+    const meName = interaction.member?.displayName ?? interaction.user.username;
+    await interaction.deferReply({ ephemeral: true });
+    const err =
+      kind === "equipe"
+        ? await teamInviteSend(client, interaction.user, meName, target, tName)
+        : kind === "combat"
+          ? await sendChallenge(client, interaction, target, tName, Math.max(0, interaction.options.getInteger("mise") ?? 0))
+          : await inviteLiveTrade(client, interaction.user, meName, target, tName);
+    await interaction.editReply(err ? { content: errText(err) } : inviteSentPayload(interaction.user.id, tName));
+    return true;
+  }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "equipe") {
     await interaction.deferReply({ ephemeral: true });
     await interaction.editReply(await myTeamPayload(interaction.user.id));
@@ -663,39 +715,8 @@ async function handleTeamInteraction(interaction, client) {
   }
   if (id === "carte_eq_invu") {
     const target = interaction.users.first(), tName = interaction.members?.first()?.displayName ?? target?.username ?? "?";
-    const err = !target || target.bot || target.id === userId ? "Choisissez un autre membre (pas vous-même, ni un bot)." : teamOf(target.id) ? `${tName} fait déjà partie d'une équipe.` : team.members.length >= TEAM_MAX ? "Votre équipe est complète." : null;
-    if (err) {
-      await interaction.update({ content: `❌ ${err}`, components: interaction.message.components });
-      return true;
-    }
-    const iid = Date.now().toString(36);
-    const inv = { id: iid, teamId: team.id, from: userId, fromName: me.name, to: target.id, toName: tName, toAvatar: target.displayAvatarURL({ extension: "png", size: 128 }) };
-    inv.message = await chan("equipes")
-      ?.send({
-        content: `📨 <@${target.id}>, **${me.name}** vous invite à rejoindre l'équipe **${team.emblem} ${team.name}** !`,
-        embeds: [new EmbedBuilder().setColor(parseInt(emblemOf(team)[2].slice(1), 16)).setTitle(`${team.emblem} Invitation dans l'équipe ${team.name}`).setDescription(`Niveau **${teamLevel(team)}** (${TEAM_RANKS[teamLevel(team) - 1]}) · coffre **${team.vault} ✨**\nEn équipe : niveau commun, objectif de la semaine, coffre partagé, cadeaux de cartes et bonus sur l'île.\n\nL'invitation expire <t:${Math.floor(Date.now() / 1000) + TEAM_INVITE_MINUTES * 60}:R>.`)],
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`carte_eq_acc_${iid}`).setLabel("Rejoindre l'équipe").setEmoji("🤝").setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`carte_eq_ref_${iid}`).setLabel("Refuser").setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`carte_eq_xinv_${iid}`).setLabel("Annuler (auteur)").setStyle(ButtonStyle.Secondary)
-          ),
-        ],
-        allowedMentions: { users: [target.id] },
-      })
-      .catch(() => null);
-    if (!inv.message) {
-      await interaction.update({ content: "❌ Impossible de publier l'invitation.", components: [] });
-      return true;
-    }
-    teamInvites.set(iid, inv);
-    setTimeout(() => {
-      if (!teamInvites.delete(iid)) return;
-      inv.message.edit({ content: `⌛ L'invitation de **${inv.fromName}** à **${inv.toName}** a expiré.`, embeds: [], components: [] }).catch(() => null);
-      deleteLater(inv.message, MINUTE);
-    }, TEAM_INVITE_MINUTES * MINUTE);
-    client.users.fetch(target.id).then((u) => u.send(`📨 **${me.name}** vous invite dans l'équipe **${team.name}** : ${inv.message.url}`)).catch(() => null);
-    await interaction.update({ content: `✅ Invitation envoyée à **${tName}** dans ${chan("equipes")} !`, components: [] });
+    const err = await teamInviteSend(client, interaction.user, me.name, target, tName);
+    await interaction.update(err ? { content: `❌ ${err}`, components: interaction.message.components } : inviteSentPayload(userId, tName));
     return true;
   }
   const invAct = /^carte_eq_(acc|ref|xinv)_(\w+)$/.exec(id);
@@ -724,7 +745,9 @@ async function handleTeamInteraction(interaction, client) {
       text = `🤝 **${inv.toName}** rejoint **${inv.fromName}** dans l'équipe **${t.emblem} ${t.name}** ! Le duo est au complet.`;
     }
     await interaction.update({ content: text, embeds: [], components: [], allowedMentions: { parse: [] } });
-    deleteLater(interaction.message, MINUTE);
+    if (interaction.message?.id !== inv.message?.id) await inv.message?.edit({ content: text, embeds: [], components: [] }).catch(() => null);
+    if (act !== "xinv") client.users.fetch(inv.from).then((u) => u.send(text)).catch(() => null);
+    deleteLater(inv.message, MINUTE);
     return true;
   }
   // --- coffre et boutique ---

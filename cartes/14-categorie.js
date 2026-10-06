@@ -17,6 +17,27 @@ const cardChannels = {};
 // anciens salons regroupés : les cartes sauvages vont dans la discussion, les grosses ventes avec les échanges
 const CHANNEL_ALIASES = { sauvages: "discussion", marche: "echanges" };
 const chan = (key) => cardChannels[CHANNEL_ALIASES[key] ?? key] ?? channelRef;
+// Invitations (combat, échange, équipe) : envoyées en message privé à l'invité ;
+// si ses messages privés sont fermés, elles sont publiées dans le salon prévu.
+const lastInvite = new Map(); // auteur -> dernière invitation envoyée (pour le bouton d'annulation)
+async function sendInvite(client, targetId, payload, fallbackKey) {
+  const dm = await client.users
+    .fetch(targetId)
+    .then((u) => u.send(payload))
+    .catch(() => null);
+  if (dm) return { message: dm, dm: true };
+  return { message: await chan(fallbackKey)?.send(payload).catch(() => null), dm: false };
+}
+const INVITE_PLACES = { combat: "arene", echange: "echanges", equipe: "equipes" };
+function inviteSentPayload(userId, targetName) {
+  const li = lastInvite.get(userId);
+  const where = li?.dm ? "en message privé" : `dans ${chan(INVITE_PLACES[li?.kind] ?? "panel")} (ses messages privés sont fermés)`;
+  return {
+    content: `✅ Invitation envoyée à **${targetName}** ${where} ! Vous serez prévenu dès qu'il répond.`,
+    embeds: [],
+    components: li ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(li.cancelId).setLabel("Annuler l'invitation").setEmoji("🗑️").setStyle(ButtonStyle.Secondary))] : [],
+  };
+}
 // efface les messages « X a commencé un fil » que Discord ajoute à chaque combat
 async function cleanThreadNotices(channel) {
   const recent = await channel?.messages?.fetch({ limit: 50 }).catch(() => null);
