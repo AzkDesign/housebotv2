@@ -10,7 +10,7 @@ const EVENT_HOW = {
   ev_champion: "Finir 1er d'une saison d'Arène",
   ev_podium: "Finir sur le podium d'une saison",
 };
-const craftableGroups = () => albumGroups().filter((g) => g !== "evenements" && g !== "saisons");
+const craftableGroups = () => albumGroups().filter((g) => g !== "evenements" && g !== "saisons" && g !== "histoire");
 // comment obtenir une carte : [icône, texte court, couleur]
 function howToGet(card) {
   if (card.shiny) return ["🍀", "Shiny · 1 chance sur 250", "#34d399"];
