@@ -271,13 +271,34 @@ async function clashAttack(client, userId, t, war = null) {
       .catch(() => null);
   }
   pushLog(me, `⚔️ Attaque${war ? " de guerre" : ""} sur ${target.name} : ${sim.pct} %, ${"⭐".repeat(sim.stars) || "0 étoile"} · +${loot.or} or +${loot.essence} essence${trophies ? ` · ${trophies > 0 ? "+" : ""}${trophies} 🏆` : ""}`);
-  if (sim.stars === 3) await clashNotice(`💥 **${me.name}** rase entièrement ${target.ghost ? "une Maison fantôme" : `la Maison de **${target.name}**`} : ⭐⭐⭐ !`);
+  const gif = await clashBattleGif(target, sim, me.name, { loot, trophies, war: !!war });
+  if (sim.stars === 3) setTimeout(() => clashNotice(`💥 **${me.name}** rase entièrement ${target.ghost ? "une Maison fantôme" : `la Maison de **${target.name}**`} : ⭐⭐⭐ !`).catch(() => null), gif?.duration ?? 0);
   if (sim.stars) ustat(userId, "clashStars", sim.stars);
   clashDirty = true;
   save();
   checkAchievements(userId).catch(() => null);
-  const gif = await clashBattleGif(target, sim, me.name, { loot, trophies, war: !!war });
   return { sim, loot, trophies, gif, target };
+}
+function clashLivePayload(r, war) {
+  return {
+    content: null,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xf59e0b)
+        .setTitle(`⚔️ Assaut en cours sur ${r.target.name}`)
+        .setDescription(war ? "Attaque de guerre lancée… regardez la bataille !" : "Vos soldats sont lancés… regardez la bataille !")
+        .setImage("attachment://combat.gif"),
+    ],
+    files: [new AttachmentBuilder(r.gif, { name: "combat.gif" })],
+    attachments: [],
+    components: [],
+  };
+}
+// montre la cinématique, puis remplace par le résultat une fois qu'elle est finie
+async function clashPlayBattle(send, r, war) {
+  await send(clashLivePayload(r, war));
+  await new Promise((ok) => setTimeout(ok, r.gif.duration ?? 0));
+  await send(clashResultPayload(r, war)).catch(() => null);
 }
 function clashResultPayload(r, war) {
   return {
@@ -287,9 +308,9 @@ function clashResultPayload(r, war) {
         .setColor(r.sim.stars ? 0x16a34a : 0xb91c1c)
         .setTitle(`${r.sim.stars ? "🏆 Victoire" : "💀 Défaite"} — ${r.sim.pct} % · ${"⭐".repeat(r.sim.stars) || "aucune étoile"}`)
         .setDescription(`**Butin** — ${r.loot.or.toLocaleString("fr-FR")} or · ${r.loot.essence.toLocaleString("fr-FR")} essence${war ? "\n🏆 Attaque de guerre : vos étoiles comptent pour votre équipe !" : `\nTrophées : **${r.trophies > 0 ? "+" : ""}${r.trophies}** 🏆`}`)
-        .setImage("attachment://combat.gif"),
+        .setImage(r.gif.poster ? "attachment://bilan.jpg" : "attachment://combat.gif"),
     ],
-    files: [new AttachmentBuilder(r.gif, { name: "combat.gif" })],
+    files: [r.gif.poster ? new AttachmentBuilder(r.gif.poster, { name: "bilan.jpg" }) : new AttachmentBuilder(r.gif, { name: "combat.gif" })],
     attachments: [],
     components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_cl_find").setLabel("Nouvelle attaque").setEmoji("⚔️").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId("carte_cl").setLabel("Ma Maison").setEmoji("🏰").setStyle(ButtonStyle.Secondary))],
   };
@@ -626,7 +647,7 @@ async function handleClashInteraction(interaction, client) {
     clashTargets.delete(userId);
     await interaction.deferUpdate();
     const r = await clashAttack(client, userId, t);
-    await show(clashResultPayload(r, false));
+    await clashPlayBattle(show, r, false);
     return true;
   }
   const wgo = /^carte_cl_wgo_(\d+)$/.exec(id);
@@ -650,7 +671,7 @@ async function handleClashInteraction(interaction, client) {
     if (r.sim.stars > before) pair.stars[side] += r.sim.stars - before;
     save();
     clashDirty = true;
-    await interaction.editReply(clashResultPayload(r, true));
+    await clashPlayBattle((p) => interaction.editReply(p), r, true);
     return true;
   }
   return false;

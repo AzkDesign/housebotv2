@@ -1701,5 +1701,11 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
     }
     push(ctx, o === OUT - 1 ? 6000 : o < 6 ? 90 : 120);
   }
-  return encodeFrames(shots);
+  const gif = encodeFrames(shots), end = createCanvas(W, H), ectx = end.getContext("2d"), im = ectx.createImageData(W, H);
+  im.data.set(shots.at(-1).data);
+  ectx.putImageData(im, 0, 0);
+  // durée jusqu'à l'apparition du bilan complet
+  gif.duration = shots.slice(0, -1).reduce((a, x) => a + x.delay, 0) + 1500;
+  gif.poster = await end.encode("jpeg", 88);
+  return gif;
 }
