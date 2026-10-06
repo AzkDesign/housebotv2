@@ -139,7 +139,7 @@ async function registerSlashCommands(client, token) {
     new SlashCommandBuilder()
       .setName("generation")
       .setDescription("(Gérants) Voir ou lancer la génération de cartes suivante")
-      .addStringOption((o) => o.setName("action").setDescription("Que faire").setRequired(true).addChoices({ name: "Voir l'état", value: "statut" }, { name: "Lancer la génération suivante", value: "lancer" }, { name: "Programmer le lancement", value: "programmer" }, { name: "Annuler le lancement programmé", value: "annuler" }))
+      .addStringOption((o) => o.setName("action").setDescription("Que faire").setRequired(true).addChoices({ name: "Voir l'état", value: "statut" }, { name: "Lancer la génération suivante", value: "lancer" }, { name: "Programmer le lancement", value: "programmer" }, { name: "Annuler le lancement programmé", value: "annuler" }, { name: "Cartes en attente (nouveaux membres, entreprises)", value: "attente" }))
       .addIntegerOption((o) => o.setName("jours").setDescription("Pour « programmer » : dans combien de jours (21 par défaut)").setMinValue(1).setMaxValue(90))
       .toJSON(),
     new SlashCommandBuilder()

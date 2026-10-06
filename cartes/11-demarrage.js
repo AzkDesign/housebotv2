@@ -17,6 +17,8 @@ async function setupCartes(client) {
   await setupCardCategory(client, guild, annonces).catch((err) => console.error("Catégorie des cartes:", err.message));
   refundInterruptedBattles();
   await syncMemberCards(guild);
+  freezeCardRoster(); // la liste des cartes de membres et d'entreprises ne change plus sans un gérant
+  rosterCheckCompanies();
   client.on("guildMemberUpdate", (_, member) => {
     if (member.guild.id !== guild.id || member.user.bot) return;
     if (member.roles.cache.has(MEMBER_CARD_ROLE_ID)) {
@@ -65,6 +67,7 @@ async function setupCartes(client) {
       tickStock();
       await clashLoop(client);
       await tournamentLoop(client);
+      if (new Date().getMinutes() % 10 === 8) rosterCheckCompanies();
       if (new Date().getMinutes() % 15 === 3) await sweepCardChannels(client).catch(() => null);
       if (islandsDirty || new Date().getMinutes() % 10 === 5) await refreshIslands().catch(() => null);
       if (teamsDirty || new Date().getMinutes() % 30 === 7) await refreshTeamsBoard().catch(() => null);

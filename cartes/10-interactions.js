@@ -1,5 +1,6 @@
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
+  if (await handleRosterInteraction(interaction)) return true;
   if (await handleIslandInteraction(interaction, client)) return true;
   if (await handleLiveTradeInteraction(interaction, client)) return true;
   if (await handleTeamInteraction(interaction, client)) return true;
