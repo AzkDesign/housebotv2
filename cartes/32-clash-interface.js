@@ -296,9 +296,10 @@ function clashLivePayload(r, war) {
 }
 // montre la cinématique, puis remplace par le résultat une fois qu'elle est finie
 async function clashPlayBattle(send, r, war) {
-  await send(clashLivePayload(r, war));
-  await new Promise((ok) => setTimeout(ok, r.gif.duration ?? 0));
-  await send(clashResultPayload(r, war)).catch(() => null);
+  // si la cinématique ne passe pas (envoi refusé), on montre directement le bilan
+  const shown = await send(clashLivePayload(r, war)).then(() => true).catch((e) => (console.error("[clash] cinématique non envoyée :", e?.message ?? e, `(${Math.round(r.gif.length / 1024)} Ko)`), false));
+  if (shown) await new Promise((ok) => setTimeout(ok, r.gif.duration ?? 0));
+  await send(clashResultPayload(r, war)).catch((e) => console.error("[clash] bilan non envoyé :", e?.message ?? e));
 }
 function clashResultPayload(r, war) {
   return {

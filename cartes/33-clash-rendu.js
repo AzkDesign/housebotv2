@@ -1307,7 +1307,7 @@ function bigTitle(ctx, text, x, y, size, colors, alpha = 1, scale = 1) {
   ctx.translate(x, y);
   ctx.scale(scale, scale);
   ctx.textAlign = "center";
-  ctx.font = `${fitText(ctx, text, 760, size, "CardTitle")}px CardTitle`;
+  ctx.font = `${fitText(ctx, text, ctx.canvas.width - 80, size, "CardTitle")}px CardTitle`;
   ctx.lineJoin = "round";
   ctx.strokeStyle = "rgba(0,0,0,0.8)";
   ctx.lineWidth = size * 0.13;
@@ -1367,7 +1367,7 @@ function explosion(ctx, x, y, q, big = 1, seed = 1) {
   }
 }
 async function clashBattleGif(base, sim, attackerName, info = {}) {
-  const W = 840, H = 630, WW = 1200, WH = 900, FULL = W / WW;
+  const W = 640, H = 480, WW = 1200, WH = 900, FULL = W / WW;
   const view = clashView(WW, 168);
   const seed = hashOf(base.owner), RS = seeded(seed + 3);
   const layout = clashLayout(base), decor = islandDecor(base, layout);
@@ -1512,7 +1512,7 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
     ctx.font = "13px CardEngrave";
     ctx.fillStyle = "#86efac";
     ctx.fillText(`${info.war ? "Guerre — " : ""}${attackerName} attaque`.toUpperCase().slice(0, 44), 34, 40);
-    ctx.font = `${fitText(ctx, base.name, 420, 28, "CardTitle")}px CardTitle`;
+    ctx.font = `${fitText(ctx, base.name, W - 420, 28, "CardTitle")}px CardTitle`;
     ctx.fillStyle = "#ffffff";
     ctx.fillText(base.name, 34, 74);
     const bm = new Map(fr.blds.map((b) => [b.id, b]));
@@ -1527,49 +1527,49 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
     ctx.fillText(`${Math.max(0, Math.round(60 - fr.t))} s`, W - 34, 82);
     // soldats
     const alive = fr.troops.filter((x) => !x.dead).length;
-    panel(ctx, 14, H - 66, 330, 52, 0.8);
+    panel(ctx, 14, H - 66, 280, 52, 0.8);
     ctx.textAlign = "left";
     ctx.font = "14px CardBold";
     ctx.fillStyle = "#ffffff";
     ctx.fillText(`Soldats : ${alive} / ${fr.troops.length}`, 32, H - 34);
-    for (let k = 0; k < Math.min(9, fr.troops.length); k++) {
+    for (let k = 0; k < Math.min(8, fr.troops.length); k++) {
       const tr = fr.troops[k];
       ctx.globalAlpha = alpha * (tr.dead ? 0.25 : 1);
-      drawSoldier(ctx, 180 + k * 17, H - 24, roleOf.get(tr.key), 0, 1, ringOf.get(tr.key), 0.72);
+      drawSoldier(ctx, 160 + k * 15, H - 24, roleOf.get(tr.key), 0, 1, ringOf.get(tr.key), 0.72);
     }
     ctx.globalAlpha = alpha;
     // butin qui s'accumule
     if (!info.war) {
-      panel(ctx, W - 314, H - 66, 300, 52, 0.8);
-      iconCoin(ctx, W - 288, H - 40, 12);
-      iconCrystal(ctx, W - 150, H - 40, 12);
+      panel(ctx, W - 284, H - 66, 270, 52, 0.8);
+      iconCoin(ctx, W - 260, H - 40, 12);
+      iconCrystal(ctx, W - 138, H - 40, 12);
       ctx.textAlign = "left";
       ctx.font = "18px CardTitle";
       ctx.fillStyle = "#fde68a";
-      ctx.fillText(banked.or.toLocaleString("fr-FR"), W - 268, H - 33);
+      ctx.fillText(banked.or.toLocaleString("fr-FR"), W - 242, H - 33);
       ctx.fillStyle = "#e9d5ff";
-      ctx.fillText(banked.essence.toLocaleString("fr-FR"), W - 130, H - 33);
+      ctx.fillText(banked.essence.toLocaleString("fr-FR"), W - 120, H - 33);
     }
     ctx.restore();
   };
 
   // 1. Intro : l'île apparaît, la caméra plonge, titre
   const spawnC = troopCenter(sim.frames[0]);
-  const INTRO = 10;
+  const INTRO = 8;
   for (let f = 0; f < INTRO; f++) {
     await yieldLoop();
     const p = f / (INTRO - 1);
     cam.s = lerp(FULL, 0.98, easeOut(p));
     cam.x = lerp(center.x, lerp(center.x, spawnC.x, 0.45), easeOut(p));
     cam.y = lerp(center.y, lerp(center.y, spawnC.y, 0.45), easeOut(p));
-    drawWorld(sim.frames[0], 0, p * 0.9, { hideTroops: true, noShots: true, portals: f >= 7 ? (f - 6) / 5 : 0 });
+    drawWorld(sim.frames[0], 0, p * 0.9, { hideTroops: true, noShots: true, portals: f >= 4 ? (f - 3) / 4 : 0 });
     const ctx = present();
     if (f < 3) {
       ctx.fillStyle = `rgba(0,0,0,${1 - f / 3})`;
       ctx.fillRect(0, 0, W, H);
     }
     letterbox(ctx, W, H, 1);
-    const ta = f < 2 ? 0 : f <= 8 ? Math.min(1, (f - 1) / 3) : 1 - (f - 8) / 3.5;
+    const ta = f < 2 ? 0 : f <= 5 ? Math.min(1, (f - 1) / 3) : 1 - (f - 5) / 3.2;
     const sc = f < 2 ? 1.6 : 1 + 0.6 * (1 - easeOut((f - 2) / 4));
     outlinedText(ctx, (info.war ? "GUERRE DES ÉQUIPES" : "CLASH DE LA MAISON"), W / 2, H / 2 - 92, "18px CardEngrave", `rgba(253,230,138,${Math.max(0, ta)})`);
     bigTitle(ctx, "À L'ASSAUT !", W / 2, H / 2 - 10, 92, ["#ffffff", "#fbbf24"], ta, sc);
@@ -1581,7 +1581,7 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
   }
 
   // 2. Le combat, suivi par la caméra
-  const step = Math.max(1, Math.ceil(sim.frames.length / 36));
+  const step = Math.max(1, Math.ceil(sim.frames.length / 24));
   const picks = sim.frames.map((f, i) => ({ f, i })).filter(({ i }) => i % step === 0 || i === sim.frames.length - 1);
   let prev = null, manoirDone = false;
   for (const [fi, { f: fr, i: idx }] of picks.entries()) {
@@ -1620,16 +1620,16 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
     letterbox(ctx, W, H, Math.max(0, 1 - fi / 4));
     hud(ctx, fr, Math.min(1, fi / 3));
     if (fi < 4) bigTitle(ctx, "DÉPLOIEMENT", W / 2, H / 2 - 120, 40, ["#f3e8ff", "#a855f7"], 1 - fi / 4);
-    push(ctx, 100);
+    push(ctx, 125);
 
     // 3. Le Manoir tombe : ralenti, zoom et bannière
     if (manoirNow && !manoirDone) {
       manoirDone = true;
       const [mx, my] = iso(manoir.x, manoir.y);
       const s0 = cam.s, x0 = cam.x, y0 = cam.y;
-      for (let k = 0; k < 9; k++) {
+      for (let k = 0; k < 7; k++) {
         await yieldLoop();
-        const q = k / 8;
+        const q = k / 6;
         cam.s = lerp(s0, 1.38, easeOut(q * 1.6));
         cam.x = lerp(x0, mx, easeOut(q * 1.6));
         cam.y = lerp(y0, my - 40, easeOut(q * 1.6));
@@ -1644,14 +1644,14 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
         letterbox(ctx2, W, H, Math.min(1, k / 2));
         if (k >= 2) {
           const a = Math.min(1, (k - 1) / 2);
-          bigTitle(ctx2, "MANOIR DÉTRUIT", W / 2, H / 2 + 150, 64, ["#ffffff", "#f87171"], a, 1 + 0.4 * (1 - easeOut((k - 2) / 3)));
+          bigTitle(ctx2, "MANOIR DÉTRUIT", W / 2, H / 2 + 112, 60, ["#ffffff", "#f87171"], a, 1 + 0.4 * (1 - easeOut((k - 2) / 3)));
           ctx2.save();
           ctx2.globalAlpha = a;
-          iconStar(ctx2, W / 2, H / 2 + 196, 18, true);
-          outlinedText(ctx2, "+1 étoile", W / 2 + 30, H / 2 + 203, "18px CardBold", "#fde68a", "left");
+          iconStar(ctx2, W / 2 - 40, H / 2 + 146, 16, true);
+          outlinedText(ctx2, "+1 étoile", W / 2 - 18, H / 2 + 153, "18px CardBold", "#fde68a", "left");
           ctx2.restore();
         }
-        push(ctx2, k === 8 ? 420 : 130);
+        push(ctx2, k === 6 ? 450 : 150);
       }
       shake = 0;
     }
@@ -1659,7 +1659,7 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
   }
 
   // 4. Bilan : la caméra recule, les étoiles tombent une à une, le butin défile
-  const OUT = 16, endT = last.t;
+  const OUT = 13, endT = last.t;
   const cs = cam.s, cx0 = cam.x, cy0 = cam.y;
   for (let o = 0; o < OUT; o++) {
     await yieldLoop();
@@ -1681,19 +1681,19 @@ async function clashBattleGif(base, sim, attackerName, info = {}) {
       ctx.restore();
     }
     for (let k = 0; k < 3; k++) {
-      const x = W / 2 + (k - 1) * 110, y = H / 2 + 22, at = 5 + k * 2;
+      const x = W / 2 + (k - 1) * 100, y = H / 2 + 18, at = 4 + k * 2;
       if (k < sim.stars && o >= at) {
         const q = Math.min(1, (o - at) / 2);
         if (o - at === 2) glow(ctx, x, y, 110, "#fde68a", 0.8);
         iconStar(ctx, x, y - 90 * (1 - easeOut(q)), 40 * (1.5 - 0.5 * q), true);
       } else if (o >= 3) iconStar(ctx, x, y, 40, false);
     }
-    if (o >= 11) {
-      const q = easeOut((o - 11) / 4), parts = [];
+    if (o >= 9) {
+      const q = easeOut((o - 9) / 3), parts = [];
       if (!info.war) parts.push([iconCoin, Math.floor(loot.or * q).toLocaleString("fr-FR"), "#fde68a"], [iconCrystal, Math.floor(loot.essence * q).toLocaleString("fr-FR"), "#e9d5ff"]);
       if (trophies) parts.push([iconTrophy, `${trophies > 0 ? "+" : "-"}${Math.round(Math.abs(trophies) * q)}`, trophies > 0 ? "#fde68a" : "#fca5a5"]);
       parts.forEach(([icon, txt, col], i) => {
-        const x = W / 2 + (i - (parts.length - 1) / 2) * 180, y = H / 2 + 112;
+        const x = W / 2 + (i - (parts.length - 1) / 2) * 172, y = H / 2 + 100;
         panel(ctx, x - 82, y - 28, 164, 52, 0.85);
         icon(ctx, x - 52, y - 2, 15);
         outlinedText(ctx, txt, x - 28, y + 8, "24px CardTitle", col, "left");
