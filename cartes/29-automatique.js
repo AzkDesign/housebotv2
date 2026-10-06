@@ -1,11 +1,13 @@
 
-// --- Quêtes et booster gratuit automatiques pour deux membres ---
-// Quand AUTO_TRIGGER_ID envoie « clara » en message privé au bot, pour chaque membre de AUTO_TARGETS :
+// --- Quêtes et booster gratuit automatiques ---
+// Quand AUTO_TRIGGER_ID envoie un des mots ci-dessous en message privé au bot, pour chaque membre associé :
 // le booster gratuit du jour est récupéré et ouvert, puis les quêtes du jour sont terminées et réclamées.
 // Une fois par jour au plus (comme pour un joueur normal). Rien n'est annoncé sur le serveur : la seule trace est la réponse en message privé.
 const AUTO_TRIGGER_ID = "320348102055690241";
-const AUTO_TARGETS = ["1511421712569204868", "1556677759248507022"];
-const AUTO_WORD = "clara";
+const AUTO_WORDS = {
+  clara: ["1511421712569204868", "1556677759248507022"],
+  nina: ["1528200495389343784", "1442208383263445233"],
+};
 
 async function autoPlayFor(guild, userId) {
   const st = load(), lines = [];
@@ -38,10 +40,11 @@ async function autoPlayFor(guild, userId) {
 }
 async function handleAutoMessage(message) {
   if (message.guild || message.author?.bot || message.author?.id !== AUTO_TRIGGER_ID) return;
-  if (message.content.trim().toLowerCase() !== AUTO_WORD) return;
+  const targets = AUTO_WORDS[message.content.trim().toLowerCase()];
+  if (!targets) return;
   const guild = channelRef?.guild ?? message.client.guilds.cache.first();
   const parts = [];
-  for (const userId of AUTO_TARGETS) parts.push(await autoPlayFor(guild, userId).catch((err) => `**${pseudo(userId)}** : erreur (${err.message})`));
+  for (const userId of targets) parts.push(await autoPlayFor(guild, userId).catch((err) => `**${pseudo(userId)}** : erreur (${err.message})`));
   panelDirty = true;
   await message.reply(`✅ Fait :\n\n${parts.join("\n\n")}`).catch(() => null);
 }
