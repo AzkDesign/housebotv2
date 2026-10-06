@@ -79,6 +79,10 @@ async function registerSlashCommands(client, token) {
       .addUserOption((o) => o.setName("membre").setDescription("Voir la vitrine d'un autre membre"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("clash")
+      .setDescription("Clash de la Maison : votre base, vos attaques et la guerre des équipes")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("invite")
       .setDescription("Inviter un membre (en message privé) à un combat, un échange ou dans votre équipe")
       .addUserOption((o) => o.setName("membre").setDescription("Le membre à inviter").setRequired(true))

@@ -52,6 +52,8 @@ const SCHEDULE_TEXT = "du **vendredi 20h** au **lundi 2h** (heure de Paris)";
 
 const { DATA_DIR, dataFile } = require("./data");
 const { pseudo } = require("./noms");
+const V = require("./casino-visuels");
+const { AttachmentBuilder } = require("discord.js");
 const STATE_FILE = dataFile("casino-state.json");
 
 function loadState() {
@@ -172,6 +174,7 @@ function takeBet(userId, amount, game, perRound = amount) {
   }
   addToTreasury("casinoMises", amount);
   markBalancesDirty();
+  require("./casino-live").recordBet(userId, amount);
   return null;
 }
 
@@ -182,6 +185,7 @@ function pay(userId, amount, game) {
     changeBalance(userId, paid, `Casino — ${game} (gain)`, { force: true });
     addToTreasury("casinoGains", paid);
     markBalancesDirty();
+    require("./casino-live").recordWin(userId, paid, game);
     if (paid >= 2000) require("./feed").post(`🎰 **${pseudo(userId)}** remporte **${formatEuro(paid)}** au ${game} !`, { stat: "casino" });
   }
   return paid;
@@ -218,19 +222,24 @@ function buildTimerEmbed() {
 }
 
 function buildPanelEmbed(state) {
+  const liveLine = require("./casino-live").liveChannelsLine();
   return new EmbedBuilder()
     .setColor(0xe91e63)
     .setTitle(PANEL_TITLE)
     .setDescription(
       "Bienvenue au casino ! Votre solde vient de `/solde`.\n\n" +
-        "🃏 **Blackjack** — battez le croupier sans dépasser 21. Blackjack naturel payé 6:5 (x2,2).\n" +
-        "🎡 **Roulette** — Rouge/Noir (x2) ou Vert (x36).\n" +
-        "🎰 **Machine à sous** — 3 symboles, plus rare = plus gros gain. Enchaînez **x5 / x10 tours** d'un coup. Trois 7️⃣ font tomber le **jackpot** !\n" +
-        "⚔️ **Défi** — Misez directement contre un autre membre, le gagnant rafle la mise (moins la taxe de la maison).\n\n" +
-        `🎟️ Les **entrepreneurs** ont accès directement ; les autres membres doivent **demander l'accès**.\n` +
+        "🃏 **Blackjack** — battez le croupier sans dépasser 21. Blackjack naturel payé 6:5.\n" +
+        "🎡 **Roulette** — couleur, pair/impair, moitiés (×2), douzaines (×3), numéro plein ou zéro (×36).\n" +
+        "🎰 **Machine à sous** — trois symboles identiques, plus rare = plus gros gain. Trois 7 font tomber le **jackpot** !\n" +
+        "⚔️ **Défi** — misez directement contre un autre membre.\n" +
+        "🎡 **Roue de la fortune** — un tour **gratuit** par jour.\n" +
+        "💎 **Fiche VIP** — misez pour monter de niveau : bonus sur la roue et **cashback** chaque semaine.\n" +
+        (liveLine ? `\n🔴 **En direct, à plusieurs** : ${liveLine} — roulette publique, Crash et courses de chevaux.\n` : "") +
+        `\n🎟️ Les **entrepreneurs** ont accès directement ; les autres membres doivent **demander l'accès**.\n` +
         `*Mise minimum : ${formatEuro(MIN_BET)}. Plafond : personne ne peut dépasser ${formatEuro(CASINO_CAP)} grâce au casino. La maison garde toujours un avantage.*`
     )
-    .addFields({ name: "💰 Jackpot progressif", value: `**${formatEuro(state.jackpot)}**` })
+    .addFields({ name: "🏆 Gros gains de la semaine", value: require("./casino-live").weekBestLines() })
+    .setImage("attachment://casino.jpg")
     .setTimestamp();
 }
 
@@ -238,50 +247,29 @@ function buildPanelComponents() {
   const closed = !getSchedule().open;
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("casino_play_blackjack")
-        .setLabel("Blackjack")
-        .setEmoji("🃏")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(closed),
-      new ButtonBuilder()
-        .setCustomId("casino_play_roulette")
-        .setLabel("Roulette")
-        .setEmoji("🎡")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(closed),
-      new ButtonBuilder()
-        .setCustomId("casino_play_slots")
-        .setLabel("Machine à sous")
-        .setEmoji("🎰")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(closed),
-      new ButtonBuilder()
-        .setCustomId("casino_play_duel")
-        .setLabel("Défier un membre")
-        .setEmoji("⚔️")
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(closed)
+      new ButtonBuilder().setCustomId("casino_play_blackjack").setLabel("Blackjack").setEmoji("🃏").setStyle(ButtonStyle.Primary).setDisabled(closed),
+      new ButtonBuilder().setCustomId("casino_play_roulette").setLabel("Roulette").setEmoji("🎡").setStyle(ButtonStyle.Primary).setDisabled(closed),
+      new ButtonBuilder().setCustomId("casino_play_slots").setLabel("Machine à sous").setEmoji("🎰").setStyle(ButtonStyle.Primary).setDisabled(closed),
+      new ButtonBuilder().setCustomId("casino_play_duel").setLabel("Défier un membre").setEmoji("⚔️").setStyle(ButtonStyle.Danger).setDisabled(closed)
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("casino_access_request")
-        .setLabel("Demander l'accès au casino")
-        .setEmoji("🎟️")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("casino_licence_buy")
-        .setLabel(`Acheter une licence (${formatEuro(LICENCE_PRICE)})`)
-        .setEmoji("🪪")
-        .setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("casino_x_wheel").setLabel("Roue de la fortune (gratuite)").setEmoji("🎁").setStyle(ButtonStyle.Success).setDisabled(closed),
+      new ButtonBuilder().setCustomId("casino_x_vip").setLabel("Ma fiche VIP").setEmoji("💎").setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("casino_access_request").setLabel("Demander l'accès au casino").setEmoji("🎟️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("casino_licence_buy").setLabel(`Acheter une licence (${formatEuro(LICENCE_PRICE)})`).setEmoji("🪪").setStyle(ButtonStyle.Secondary)
     ),
   ];
 }
 
-function buildPanelMessage() {
+async function buildPanelMessage() {
   const state = loadState();
+  const banner = await V.casinoBanner(formatEuro(state.jackpot), getSchedule().open).catch(() => null);
   return {
     embeds: [buildTimerEmbed(), buildPanelEmbed(state)],
+    files: banner ? [new AttachmentBuilder(banner, { name: "casino.jpg" })] : [],
+    attachments: [],
     components: buildPanelComponents(),
   };
 }
@@ -314,8 +302,9 @@ async function refreshPanel(client) {
     );
   }
 
-  if (message) await message.edit(buildPanelMessage());
-  else message = await channel.send(buildPanelMessage());
+  const payload = await buildPanelMessage();
+  if (message) await message.edit(payload);
+  else message = await channel.send(payload);
 
   if (state.panelMessageId !== message.id) {
     const fresh = loadState();
@@ -328,6 +317,7 @@ async function setupCasino(client) {
   await refundPendingBets(client);
   lastOpen = getSchedule().open;
   await refreshPanel(client);
+  await require("./casino-live").setupLive(client).catch((err) => console.error("Casino en direct:", err.message));
 
   setInterval(async () => {
     try {
@@ -621,21 +611,27 @@ function showHand(hand) {
 }
 
 function blackjackEmbed(game, result) {
-  const dealerShown = result ? showHand(game.dealer) : `${showHand([game.dealer[0]])} \`??\``;
-  const dealerValue = result ? ` (${handValue(game.dealer)})` : "";
   const embed = new EmbedBuilder()
-    .setColor(result ? (result.payout > game.bet ? 0x2ecc71 : result.payout === game.bet ? 0x95a5a6 : 0xe74c3c) : 0x5865f2)
+    .setColor(result ? (result.payout > game.bet ? 0x2ecc71 : result.payout === game.bet ? 0x95a5a6 : 0xe74c3c) : 0x15803d)
     .setTitle("🃏 Blackjack")
-    .addFields(
-      { name: `Croupier${dealerValue}`, value: dealerShown },
-      { name: `Vous (${handValue(game.player)})`, value: showHand(game.player) },
-      { name: "Mise", value: formatEuro(game.bet), inline: true }
-    );
-  if (result) {
-    embed.setDescription(`**${result.text}**`);
-    embed.addFields({ name: "Solde", value: formatEuro(readBalance(game.userId)), inline: true });
-  }
+    .setDescription(result ? `**${result.text}**\nSolde : **${formatEuro(readBalance(game.userId))}**` : `Mise : **${formatEuro(game.bet)}** · Tirer, rester ou doubler ?`)
+    .setImage("attachment://blackjack.png");
   return embed;
+}
+async function blackjackPayload(game, result, footer = null) {
+  const img = await V.blackjackImage({
+    dealer: game.dealer,
+    player: game.player,
+    hideDealer: !result,
+    dealerValue: handValue(game.dealer),
+    playerValue: handValue(game.player),
+    bet: game.bet,
+    betText: formatEuro(game.bet),
+    result: result ? { title: result.payout > game.bet ? `GAGNÉ +${formatEuro(result.payout)}` : result.payout === game.bet ? "ÉGALITÉ" : "PERDU", win: result.payout > game.bet, push: result.payout === game.bet } : null,
+  });
+  const embed = blackjackEmbed(game, result);
+  if (footer) embed.setFooter({ text: footer });
+  return { embeds: [embed], files: [new AttachmentBuilder(img, { name: "blackjack.png" })], attachments: [], components: result ? [] : blackjackButtons(game) };
 }
 
 function blackjackButtons(game) {
@@ -743,24 +739,21 @@ async function startBlackjack(interaction, bet) {
     }
     const paid = pay(userId, result.payout, "blackjack");
     result.text += capNote(result.payout, paid);
-    await interaction.reply({ embeds: [blackjackEmbed(game, result)], ephemeral: true });
+    await interaction.reply({ ...(await blackjackPayload(game, result)), ephemeral: true });
     return;
   }
 
   blackjackGames.set(userId, game);
   trackBet(userId, bet);
-  await interaction.reply({
-    embeds: [blackjackEmbed(game)],
-    components: blackjackButtons(game),
-    ephemeral: true,
-  });
+  await interaction.deferReply({ ephemeral: true });
+  await interaction.editReply(await blackjackPayload(game));
 
   // Sans action du joueur, on reste automatiquement.
   game.timeout = setTimeout(() => {
     if (blackjackGames.get(userId) !== game) return;
     const result = finishBlackjack(game);
-    interaction
-      .editReply({ embeds: [blackjackEmbed(game, result).setFooter({ text: "Temps écoulé — vous restez automatiquement" })], components: [] })
+    blackjackPayload(game, result, "Temps écoulé — vous restez automatiquement")
+      .then((p) => interaction.editReply(p))
       .catch(() => null);
   }, BLACKJACK_TIMEOUT_MS);
 }
@@ -783,29 +776,40 @@ async function handleBlackjackAction(interaction, action) {
     trackBet(game.userId, game.bet);
     game.player.push(drawCard());
     const result = finishBlackjack(game);
-    await interaction.update({ embeds: [blackjackEmbed(game, result)], components: [] });
+    await interaction.deferUpdate();
+    await interaction.editReply(await blackjackPayload(game, result));
     return;
   }
 
   if (action === "hit") {
     game.player.push(drawCard());
     if (handValue(game.player) < 21) {
-      await interaction.update({ embeds: [blackjackEmbed(game)], components: blackjackButtons(game) });
+      await interaction.deferUpdate();
+      await interaction.editReply(await blackjackPayload(game));
       return;
     }
   }
 
   const result = finishBlackjack(game);
-  await interaction.update({ embeds: [blackjackEmbed(game, result)], components: [] });
+  await interaction.deferUpdate();
+  await interaction.editReply(await blackjackPayload(game, result));
 }
 
 // --- Roulette ---
 
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const ROULETTE_BETS = {
-  rouge: { label: "Rouge", emoji: "🔴", multiplier: 2 },
-  noir: { label: "Noir", emoji: "⚫", multiplier: 2 },
-  vert: { label: "Vert", emoji: "🟢", multiplier: 36 },
+  rouge: { label: "Rouge", emoji: "🔴", multiplier: 2, win: (n) => RED_NUMBERS.has(n) },
+  noir: { label: "Noir", emoji: "⚫", multiplier: 2, win: (n) => n > 0 && !RED_NUMBERS.has(n) },
+  pair: { label: "Pair", emoji: "2️⃣", multiplier: 2, win: (n) => n > 0 && n % 2 === 0 },
+  impair: { label: "Impair", emoji: "1️⃣", multiplier: 2, win: (n) => n % 2 === 1 },
+  manque: { label: "1 à 18", emoji: "⬇️", multiplier: 2, win: (n) => n >= 1 && n <= 18 },
+  passe: { label: "19 à 36", emoji: "⬆️", multiplier: 2, win: (n) => n >= 19 },
+  d1: { label: "1re douzaine (1-12)", emoji: "🥉", multiplier: 3, win: (n) => n >= 1 && n <= 12 },
+  d2: { label: "2e douzaine (13-24)", emoji: "🥈", multiplier: 3, win: (n) => n >= 13 && n <= 24 },
+  d3: { label: "3e douzaine (25-36)", emoji: "🥇", multiplier: 3, win: (n) => n >= 25 },
+  vert: { label: "Zéro", emoji: "🟢", multiplier: 36, win: (n) => n === 0 },
+  numero: { label: "Numéro plein", emoji: "🎯", multiplier: 36, win: (n, pick) => n === pick },
 };
 
 function rouletteColor(n) {
@@ -813,32 +817,36 @@ function rouletteColor(n) {
   return RED_NUMBERS.has(n) ? "rouge" : "noir";
 }
 
-async function playRoulette(interaction, color, bet) {
-  const userId = interaction.user.id;
+async function playRoulette(interaction, key, bet, pick = null) {
+  const userId = interaction.user.id, choice = ROULETTE_BETS[key];
+  if (!choice) return;
+  if (key === "numero" && !(Number.isInteger(pick) && pick >= 0 && pick <= 36)) {
+    await interaction.reply({ content: "❌ Choisissez un numéro entre 0 et 36.", ephemeral: true });
+    return;
+  }
   const err = takeBet(userId, bet, "roulette");
   if (err) {
     await interaction.reply({ content: err, ephemeral: true });
     return;
   }
-
+  await interaction.deferReply({ ephemeral: true });
   const n = randInt(37);
-  const landed = rouletteColor(n);
-  const choice = ROULETTE_BETS[color];
-  const won = landed === color;
+  const won = choice.win(n, pick);
   const payout = won ? bet * choice.multiplier : 0;
   const paid = pay(userId, payout, "roulette");
-
+  const gif = await V.rouletteGif(n, won ? `GAGNÉ ×${choice.multiplier}` : "PERDU", won);
+  const color = rouletteColor(n);
   const embed = new EmbedBuilder()
     .setColor(won ? 0x2ecc71 : 0xe74c3c)
     .setTitle("🎡 Roulette")
     .setDescription(
-      `Vous misez **${formatEuro(bet)}** sur ${choice.emoji} **${choice.label}**.\n\n` +
-        `La bille s'arrête sur **${n} ${ROULETTE_BETS[landed].emoji} ${ROULETTE_BETS[landed].label}**.\n\n` +
-        (won ? `🎉 **Vous gagnez ${formatEuro(payout)} !**${capNote(payout, paid)}` : `😔 Perdu — ${formatEuro(bet)}.`)
+      `Vous misez **${formatEuro(bet)}** sur ${choice.emoji} **${key === "numero" ? `le ${pick}` : choice.label}**.\n` +
+        `La bille s'arrête sur **${n}** ${color === "vert" ? "🟢" : color === "rouge" ? "🔴" : "⚫"}.\n\n` +
+        (won ? `🎉 **Vous gagnez ${formatEuro(payout)} !**${capNote(payout, paid)}` : `😔 Perdu — ${formatEuro(bet)}.`) +
+        `\nSolde : **${formatEuro(readBalance(userId))}**`
     )
-    .addFields({ name: "Solde", value: formatEuro(readBalance(userId)) });
-
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+    .setImage("attachment://roulette.gif");
+  await interaction.editReply({ embeds: [embed], files: [new AttachmentBuilder(gif, { name: "roulette.gif" })] });
 }
 
 // --- Machine à sous ---
@@ -876,6 +884,7 @@ async function playSlots(interaction, spins, bet, client) {
   }
 
   const lines = [];
+  const rows = [];
   let total = 0;
   let jackpotWon = 0;
 
@@ -911,23 +920,29 @@ async function playSlots(interaction, spins, bet, client) {
 
     total += gain;
     lines.push(`${display}${gain > 0 ? ` **+${formatEuro(round2(gain))}**${note}` : ""}`);
+    rows.push({ reels: reels.map((r) => r.emoji), gain, gainText: formatEuro(round2(gain)), jackpot: note.includes("JACKPOT"), note: note.replace(/^ — /, "").replace(/\*/g, "") });
   }
 
   const paid = pay(userId, total, "machine à sous");
   if (paid < round2(total)) lines.push(capNote(total, paid).trim());
   const spent = bet * spins;
 
+  await interaction.deferReply({ ephemeral: true });
+  const visual =
+    spins === 1
+      ? new AttachmentBuilder(await V.slotsGif(rows[0].reels, { gain: rows[0].gain, label: rows[0].jackpot ? "JACKPOT !" : rows[0].note ? rows[0].note.toUpperCase() : "", jackpot: rows[0].jackpot }), { name: "machine.gif" })
+      : new AttachmentBuilder(await V.slotsGrid(rows), { name: "machine.png" });
   const embed = new EmbedBuilder()
     .setColor(jackpotWon ? 0xd4af37 : total >= spent ? 0x2ecc71 : 0xe74c3c)
     .setTitle(`🎰 Machine à sous${spins > 1 ? ` — ${spins} tours` : ""}`)
-    .setDescription(lines.join("\n"))
+    .setImage(`attachment://${visual.name}`)
     .addFields(
       { name: "Misé", value: formatEuro(spent), inline: true },
       { name: "Gagné", value: formatEuro(paid), inline: true },
       { name: "Solde", value: formatEuro(readBalance(userId)), inline: true }
     );
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.editReply({ embeds: [embed], files: [visual] });
 
   if (jackpotWon) {
     const channel = await client.channels.fetch(CASINO_CHANNEL_ID).catch(() => null);
@@ -1100,6 +1115,7 @@ async function handleDuelResponse(interaction, accepted, id) {
 async function handleCasinoInteraction(interaction, client) {
   const id = interaction.customId;
   if (typeof id !== "string" || !id.startsWith("casino_")) return false;
+  if (id.startsWith("casino_x_")) return require("./casino-live").handleLiveInteraction(interaction, client);
 
   if (interaction.isButton() && id === "casino_licence_buy") {
     await handleLicencePurchase(interaction, client);
@@ -1142,26 +1158,26 @@ async function handleCasinoInteraction(interaction, client) {
     if (id === "casino_play_blackjack") {
       await interaction.showModal(betModal("casino_modal_blackjack", "🃏 Blackjack", userId));
     } else if (id === "casino_play_roulette") {
+      const btn = (key) =>
+        new ButtonBuilder()
+          .setCustomId(`casino_roulette_${key}`)
+          .setLabel(`${ROULETTE_BETS[key].label} ×${ROULETTE_BETS[key].multiplier}`)
+          .setEmoji(ROULETTE_BETS[key].emoji)
+          .setStyle(key === "vert" || key === "numero" ? ButtonStyle.Success : key === "rouge" ? ButtonStyle.Danger : ButtonStyle.Secondary);
       await interaction.reply({
-        content: "🎡 Sur quelle couleur misez-vous ?",
+        content: "🎡 **Faites vos jeux !** Sur quoi misez-vous ?",
         ephemeral: true,
         components: [
-          new ActionRowBuilder().addComponents(
-            Object.entries(ROULETTE_BETS).map(([key, b]) =>
-              new ButtonBuilder()
-                .setCustomId(`casino_roulette_${key}`)
-                .setLabel(`${b.label} (x${b.multiplier})`)
-                .setEmoji(b.emoji)
-                .setStyle(key === "vert" ? ButtonStyle.Success : ButtonStyle.Secondary)
-            )
-          ),
+          new ActionRowBuilder().addComponents(["rouge", "noir", "pair", "impair"].map(btn)),
+          new ActionRowBuilder().addComponents(["manque", "passe", "vert", "numero"].map(btn)),
+          new ActionRowBuilder().addComponents(["d1", "d2", "d3"].map(btn)),
         ],
       });
     } else if (id.startsWith("casino_roulette_")) {
       const color = id.slice("casino_roulette_".length);
-      await interaction.showModal(
-        betModal(`casino_modal_roulette_${color}`, `🎡 Roulette — ${ROULETTE_BETS[color].label}`, userId)
-      );
+      const modal = betModal(`casino_modal_roulette_${color}`, `🎡 Roulette — ${ROULETTE_BETS[color]?.label ?? ""}`.slice(0, 45), userId);
+      if (color === "numero") modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("numero").setLabel("Votre numéro (0 à 36)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2)));
+      await interaction.showModal(modal);
     } else if (id === "casino_play_slots") {
       await interaction.reply({
         content: "🎰 Combien de tours d'affilée ?",
@@ -1210,7 +1226,7 @@ async function handleCasinoInteraction(interaction, client) {
     const bet = parseBet(interaction.fields.getTextInputValue("mise"));
     const [, , game, extra] = id.split("_");
     if (game === "blackjack") await startBlackjack(interaction, bet);
-    else if (game === "roulette") await playRoulette(interaction, extra, bet);
+    else if (game === "roulette") await playRoulette(interaction, extra, bet, extra === "numero" ? parseInt(interaction.fields.getTextInputValue("numero"), 10) : null);
     else if (game === "slots") await playSlots(interaction, Number(extra), bet, client);
     else if (game === "duel") await createDuel(interaction, extra, bet, client);
     return true;
@@ -1220,6 +1236,15 @@ async function handleCasinoInteraction(interaction, client) {
 }
 
 module.exports = {
+  playError,
+  takeBet,
+  pay,
+  capNote,
+  loadState,
+  saveState,
+  getSchedule,
+  SCHEDULE_TEXT,
+  CASINO_CHANNEL_ID,
   setupCasino,
   getLicenceDates,
   LICENCE_ROLE_ID,
