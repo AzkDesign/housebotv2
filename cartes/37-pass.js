@@ -31,8 +31,9 @@ function passReward(tier, track) {
   if (tier % 3 === 0) return { money: 900 + tier * 40 };
   return { dust: 90 + tier * 6 };
 }
-const passRewardText = (r) =>
-  [r.pack && `1 booster ${PACKS[r.pack].name}`, r.dust && `${r.dust} ✨`, r.money && formatEuro(r.money), r.or && `${r.or} or`, r.essence && `${r.essence} essence`].filter(Boolean).join(" + ");
+function passRewardText(r) {
+  return [r.pack && `1 booster ${PACKS[r.pack].name}`, r.dust && `${r.dust} ✨`, r.money && formatEuro(r.money), r.or && `${r.or} or`, r.essence && `${r.essence} essence`].filter(Boolean).join(" + ");
+}
 
 function passOf(userId) {
   const st = load();
@@ -65,7 +66,7 @@ function passClaimAll(userId, p = passOf(userId)) {
       const list = p.claimed[track];
       if (list.includes(k)) continue;
       list.push(k);
-      const r = passReward(k, track);
+      const r = passReward(k, track, p.season);
       passGive(userId, r);
       got.push([k, track, r]);
     }
