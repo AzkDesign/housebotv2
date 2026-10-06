@@ -2,8 +2,8 @@
 // --- Les Duos : une carte par équipe de deux (façon TAG TEAM) ---
 // Chaque équipe complète a sa carte DUO : les deux membres sur la même carte, le blason de l'équipe,
 // une attaque et une animation propres à son emblème. L'équipe « Fondation » est mythique, les autres légendaires.
-// On l'obtient dans les boosters, et chaque membre reçoit la sienne quand l'équipe atteint le niveau 3.
-const DUO_GRANT_LEVEL = 3;
+// On l'obtient dans les boosters, et chaque membre reçoit la sienne quand l'équipe atteint le niveau 6.
+const DUO_GRANT_LEVEL = 6;
 const DUO_EMBLEM = {
   "🐉": { element: "feu", attack: "Souffle jumeau", duo: "Couronne de flammes", fx: "dragon" },
   "🦁": { element: "chance", attack: "Rugissement", duo: "Crinière royale", fx: "lion" },
@@ -113,7 +113,7 @@ function duoCards(activeOnly = false) {
   };
 }
 
-// --- Obtention : chaque membre reçoit la carte de son duo au niveau 3 de l'équipe ---
+// --- Obtention : chaque membre reçoit la carte de son duo au niveau DUO_GRANT_LEVEL de l'équipe ---
 async function duoGrantTick(client) {
   const st = load();
   st.duoGranted ??= {};
