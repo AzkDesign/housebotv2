@@ -26,6 +26,7 @@ const CLASH_COUNTS = {
 const CLASH_MAX_MANOIR = 6;
 const CLASH_BUILDERS = 2;
 const CLASH_RES = { or: ["🪙", "Or"], essence: ["🔮", "Essence"] };
+const CLASH_ATTACKS_PER_DAY = 8; // plafond par jour, en plus de la formation
 const CLASH_TRAIN_MIN = 15; // après une attaque, les troupes se reforment pendant 15 minutes
 const CLASH_TROOP_COST = 30; // essence par troupe engagée
 const CLASH_BUFFER_HOURS = 8; // une mine se remplit en 8 h, puis s'arrête tant qu'on ne récolte pas
