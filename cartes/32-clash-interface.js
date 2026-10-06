@@ -92,7 +92,7 @@ async function clashHomePayload(userId, note = "") {
   const opts = clashOptions(base), army = clashArmy(base, userId), buffers = clashBuffers(base), goal = currentGoal(base);
   const soonest = base.buildings.filter((x) => x.upgrading).sort((a, b) => a.upgrading.done - b.upgrading.done)[0];
   const speedCost = soonest ? Math.max(1, Math.ceil((soonest.upgrading.done - Date.now()) / MINUTE)) * CLASH_SPEEDUP_DUST : 0;
-  const day = dayKey(), attacksLeft = CLASH_ATTACKS_PER_DAY - (base.attacks.day === day ? base.attacks.n : 0);
+  const training = (base.armyReady ?? 0) > Date.now();
   const goalDone = goal && goal.done(base);
   const rows = [
     new ActionRowBuilder().addComponents(
@@ -102,7 +102,7 @@ async function clashHomePayload(userId, note = "") {
         .setEmoji("🧺")
         .setStyle(ButtonStyle.Success)
         .setDisabled(buffers.or + buffers.essence <= 0),
-      new ButtonBuilder().setCustomId("carte_cl_find").setLabel("Attaquer").setEmoji("⚔️").setStyle(ButtonStyle.Danger).setDisabled(!army.length || attacksLeft <= 0),
+      new ButtonBuilder().setCustomId("carte_cl_find").setLabel(training ? `Troupes en formation (${Math.ceil((base.armyReady - Date.now()) / MINUTE)} min)` : "Attaquer").setEmoji(training ? "⏳" : "⚔️").setStyle(ButtonStyle.Danger).setDisabled(!army.length || training),
       ...(goalDone ? [new ButtonBuilder().setCustomId("carte_cl_goal").setLabel("Réclamer l'objectif").setEmoji("🎁").setStyle(ButtonStyle.Primary)] : [])
     ),
   ];
@@ -144,7 +144,7 @@ async function clashHomePayload(userId, note = "") {
           (note ? `${note}\n\n` : "") +
             (goal ? `**Objectif ${(base.goal ?? 0) + 1}/${CLASH_GOALS.length}** — ${goal.text}${goalDone ? " ✅" : ""}\n*Récompense : ${goalReward(goal.reward)}*\n\n` : "") +
             `**Armée** — ${army.length ? army.map((k) => `${keyLabel(k)} *(${TROOP_ROLES[troopRole(cardOfKey(k))].name})*`).join(", ") : "aucune : touchez « Armée automatique »"} · ${army.length}/${armySlots(base)} places\n` +
-            `**Attaques** — ${attacksLeft} restante${attacksLeft > 1 ? "s" : ""} aujourd'hui · une attaque coûte ${CLASH_TROOP_COST} essence par soldat${base.shield > Date.now() ? `\n**Bouclier** — protégé jusqu'à <t:${Math.floor(base.shield / 1000)}:t>` : ""}`
+            `**Troupes** — ${training ? `en formation, prêtes <t:${Math.floor(base.armyReady / 1000)}:R>` : "prêtes au combat"} · une attaque coûte ${CLASH_TROOP_COST} essence par soldat${base.shield > Date.now() ? `\n**Bouclier** — protégé jusqu'à <t:${Math.floor(base.shield / 1000)}:t>` : ""}`
         )
         .setImage("attachment://maison.jpg")
         .setFooter({ text: "Récoltez souvent : ce qui reste dans les mines est la cible préférée des pillards." }),
@@ -163,7 +163,7 @@ const CLASH_RULES = () =>
         "**2. Construire** — Deux ouvriers améliorent vos bâtiments. Le **Manoir** fixe le niveau maximum des autres et débloque de nouveaux bâtiments. Un chantier peut être fini tout de suite avec de la poussière d'étoile.\n\n" +
         "**3. Attaquer** — Vos **cartes sont vos soldats** (la caserne fixe le nombre de places) :\n" +
         Object.values(TROOP_ROLES).map((r) => `• **${r.name}** — ${r.desc}`).join("\n") +
-        "\nLes cartes rares et holos font de meilleurs soldats. Une attaque dure 60 secondes.\n\n" +
+        "\nLes cartes rares et holos font de meilleurs soldats. Une attaque dure 60 secondes, puis vos troupes se reforment pendant 15 minutes avant la suivante.\n\n" +
         "**Étoiles** — 50 % de destruction, Manoir détruit, 100 % : jusqu'à 3 étoiles.\n" +
         "**Butin** — la moitié de ce qui attend dans les mines détruites, plus une petite part des coffres.\n" +
         "**Défense** — vous pouvez être attaqué à tout moment ; après une défaite, un bouclier vous protège quelques heures.\n\n" +
@@ -239,7 +239,7 @@ function clashCanAttack(userId) {
   if (clashBusy.has(userId)) return "⏳ Une attaque est déjà en cours.";
   const army = clashArmy(me, userId);
   if (!army.length) return "⚔️ Choisissez d'abord votre armée.";
-  if (me.attacks.day === dayKey() && me.attacks.n >= CLASH_ATTACKS_PER_DAY) return `⏳ Vous avez déjà mené ${CLASH_ATTACKS_PER_DAY} attaques aujourd'hui. Revenez demain !`;
+  if ((me.armyReady ?? 0) > Date.now()) return `⏳ Vos troupes se reforment après la dernière attaque : prêtes <t:${Math.floor(me.armyReady / 1000)}:R>.`;
   if (me.res.essence < army.length * CLASH_TROOP_COST) return `❌ Il faut ${army.length * CLASH_TROOP_COST} essence pour lancer cette attaque.`;
   return null;
 }
@@ -250,6 +250,7 @@ async function clashAttack(client, userId, t, war = null) {
   me.shield = 0;
   if (me.attacks.day !== dayKey()) me.attacks = { day: dayKey(), n: 0 };
   me.attacks.n++;
+  me.armyReady = Date.now() + CLASH_TRAIN_MIN * MINUTE; // les troupes doivent se reformer
   const sim = clashSimulate(target, army);
   const dead = new Set(sim.blds.filter((x) => x.dead).map((x) => x.id));
   const loot = war ? { or: 150 * manoirOf(target) * sim.stars, essence: 150 * manoirOf(target) * sim.stars } : lootOf(target, sim.pct, dead);
@@ -629,8 +630,8 @@ async function handleClashInteraction(interaction, client) {
       await show(clashHomePayload(userId, "⚔️ Choisissez d'abord votre armée (vos cartes) dans la liste."));
       return true;
     }
-    if (base.attacks.day === dayKey() && base.attacks.n >= CLASH_ATTACKS_PER_DAY) {
-      await interaction.reply({ content: `⏳ Vous avez déjà mené ${CLASH_ATTACKS_PER_DAY} attaques aujourd'hui. Revenez demain !`, ephemeral: true });
+    if ((base.armyReady ?? 0) > Date.now()) {
+      await interaction.reply({ content: `⏳ Vos troupes se reforment après la dernière attaque : prêtes <t:${Math.floor(base.armyReady / 1000)}:R>.`, ephemeral: true });
       return true;
     }
     if (id === "carte_cl_next") {
