@@ -813,17 +813,26 @@ async function handleCartesInteraction(interaction, client) {
   // Achat d'un ou plusieurs boosters : ils vont dans l'inventaire
   const buy = /^carte_(?:booster|buy)_(standard|premium|prestige|frisson|givre)(?:_(\d+))?$/.exec(id);
   if (buy) {
-    const type = buy[1], n = Math.min(10, Math.max(1, Number(buy[2] ?? 1))), P = PACKS[type];
+    const type = buy[1], P = PACKS[type];
+    let n = Math.min(10, Math.max(1, Number(buy[2] ?? 1)));
     if (P.season && activeSeason() !== P.season) {
       await interaction.reply({ content: `${P.emoji} Le booster ${P.name} n'est vendu que pendant ${SEASONAL[P.season].name} (${SEASONAL[P.season].dates}).`, ephemeral: true });
       return true;
     }
+    const stock = stockCheck(userId, type, n);
+    if (stock.error) {
+      await interaction.reply({ content: stock.error, ephemeral: true });
+      return true;
+    }
+    n = stock.n;
     const price = boosterPrice(type) * n;
     if (changeBalance(userId, -price, `Achat de ${n} booster(s) de cartes ${P.name} (${GENERATIONS[CURRENT_GEN].code})`) === null) {
       await interaction.reply({ content: `❌ ${n > 1 ? `${n} boosters` : "Le booster"} ${P.name} coûte${n > 1 ? "nt" : ""} **${formatEuro(price)}** (vous avez ${formatEuro(readBalance(userId))}), ou votre compte est gelé.`, ephemeral: true });
       return true;
     }
     const key = packKey(CURRENT_GEN, type);
+    takeStock(userId, type, n);
+    if (stockOf(type) === 0) announceSoldOut(type).catch(() => null);
     addPacks(userId, key, n);
     bump("boosterSpend", price);
     await interaction.deferReply({ ephemeral: true });
@@ -834,7 +843,7 @@ async function handleCartesInteraction(interaction, client) {
         new EmbedBuilder()
           .setColor(parseInt(P.accent.slice(1), 16))
           .setTitle(`${P.emoji} ${n > 1 ? `${n} boosters ${P.name} ajoutés` : `Booster ${P.name} ajouté`} à votre inventaire`)
-          .setDescription(`**${G.name} — ${G.title}** · ${P.tagline.toLowerCase()}\nVous en avez maintenant **${load().packs[userId]?.[key] ?? 0}** en réserve.\n\nOuvrez-le maintenant ou gardez-le pour plus tard : quand la génération suivante sortira, ceux-ci ne seront plus vendus.`)
+          .setDescription(`**${G.name} — ${G.title}** · ${P.tagline.toLowerCase()}\nVous en avez maintenant **${load().packs[userId]?.[key] ?? 0}** en réserve.${stock.note ? `\n⚠️ Seulement ${n} acheté${n > 1 ? "s" : ""} : ${stock.note}.` : ""}\n🛒 Boutique : ${stockLine(type, userId)}\n\nOuvrez-le maintenant ou gardez-le pour plus tard : quand la génération suivante sortira, ceux-ci ne seront plus vendus.`)
           .setImage("attachment://booster.gif")
           .setFooter({ text: `Payé ${canvasText(formatEuro(price))} · /inventaire pour voir vos boosters` }),
       ],
@@ -898,7 +907,7 @@ async function handleCartesInteraction(interaction, client) {
   }
 
   if (id === "carte_shop") {
-    await interaction.reply(shopPayload());
+    await interaction.reply(shopPayload(userId));
     return true;
   }
 

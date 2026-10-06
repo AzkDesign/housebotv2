@@ -57,6 +57,7 @@ async function setupCartes(client) {
       await dailyBackup().catch((err) => console.error("Sauvegarde des cartes:", err.message));
       if (new Date().getMinutes() % 10 === 0) await refreshLeaderboards().catch(() => null);
       payIslands();
+      tickStock();
       if (islandsDirty || new Date().getMinutes() % 10 === 5) await refreshIslands().catch(() => null);
       if (teamsDirty || new Date().getMinutes() % 30 === 7) await refreshTeamsBoard().catch(() => null);
       await pickWeeklyCard();

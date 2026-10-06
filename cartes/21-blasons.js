@@ -132,7 +132,7 @@ function crestMotif(ctx, motif, cx, cy, R, pal) {
     }
   } else if (motif === "stars") {
     const rnd = seeded(77);
-    for (let i = 0; i < 46; i++) sparkle(ctx, cx + (rnd() - 0.5) * R * 2, cy + (rnd() - 0.5) * R * 2, 2 + rnd() * 6, rgba(pal[0], 0.35 + rnd() * 0.5));
+    for (let i = 0; i < 46; i++) crestSparkle(ctx, cx + (rnd() - 0.5) * R * 2, cy + (rnd() - 0.5) * R * 2, 2 + rnd() * 6, rgba(pal[0], 0.35 + rnd() * 0.5));
     ctx.beginPath();
     ctx.arc(cx, cy, R * 0.62, 0, TAU);
     ctx.strokeStyle = rgba(pal[0], 0.18);
@@ -172,7 +172,7 @@ function drawEnso(ctx, cx, cy, r, color, seed) {
     disc(ctx, cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1 + rnd() * r * 0.03, color);
   }
 }
-function sparkle(ctx, x, y, s, color) {
+function crestSparkle(ctx, x, y, s, color) {
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(x, y - s);
@@ -323,7 +323,7 @@ async function drawTeamCrest(emoji) {
   ctx.restore();
   // sceau et étincelles
   drawHanko(ctx, cx + R * 0.66, cy + R * 0.64, R * 0.27, d.kanji);
-  for (const [x, y, s] of [[-0.78, -0.7, 16], [0.82, -0.58, 11], [-0.9, 0.2, 9], [0.62, -0.92, 7]]) sparkle(ctx, cx + R * x, cy + R * y, s, "rgba(255,250,235,0.95)");
+  for (const [x, y, s] of [[-0.78, -0.7, 16], [0.82, -0.58, 11], [-0.9, 0.2, 9], [0.62, -0.92, 7]]) crestSparkle(ctx, cx + R * x, cy + R * y, s, "rgba(255,250,235,0.95)");
   crestCache.set(emoji, c);
   return c;
 }

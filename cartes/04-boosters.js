@@ -1086,7 +1086,7 @@ function packButtons(type) {
   if (BOOSTERS[type]) row.addComponents(new ButtonBuilder().setCustomId(`carte_buy_${type}_5`).setLabel("En acheter 5").setEmoji("🛒").setStyle(ButtonStyle.Primary));
   return row;
 }
-function shopPayload() {
+function shopPayload(userId = null) {
   const G = GENERATIONS[CURRENT_GEN];
   const soldes = lawActive("soldesBoosters") ? ` *(soldes −${lawParam("soldesBoosters")} %)*` : "";
   return {
@@ -1095,16 +1095,16 @@ function shopPayload() {
         .setColor(0xe9c46a)
         .setTitle(`🛒 Boutique — ${G.name} : ${G.title}`)
         .setDescription(
-          ["standard", "premium", "prestige"].map((t) => `${PACKS[t].emoji} **${PACKS[t].name}** — ${PACKS[t].tagline.toLowerCase()} · **${formatEuro(boosterPrice(t))}**${soldes}`).join("\n") +
-            (activeSeason() ? `\n${PACKS[SEASONAL[activeSeason()].pack].emoji} **${PACKS[SEASONAL[activeSeason()].pack].name}** — ${PACKS[SEASONAL[activeSeason()].pack].tagline.toLowerCase()} · **${formatEuro(boosterPrice(SEASONAL[activeSeason()].pack))}** *(édition limitée : ${SEASONAL[activeSeason()].dates})*` : "") +
-            "\n\nLes boosters achetés vont dans votre inventaire : ouvrez-les quand vous voulez. Quand une nouvelle génération sortira, ceux-ci ne seront plus vendus."
+          ["standard", "premium", "prestige"].map((t) => `${PACKS[t].emoji} **${PACKS[t].name}** — ${PACKS[t].tagline.toLowerCase()} · **${formatEuro(boosterPrice(t))}**${soldes}\n${stockLine(t, userId)}`).join("\n") +
+            (activeSeason() ? `\n${PACKS[SEASONAL[activeSeason()].pack].emoji} **${PACKS[SEASONAL[activeSeason()].pack].name}** — ${PACKS[SEASONAL[activeSeason()].pack].tagline.toLowerCase()} · **${formatEuro(boosterPrice(SEASONAL[activeSeason()].pack))}** *(édition limitée : ${SEASONAL[activeSeason()].dates})*\n${stockLine(SEASONAL[activeSeason()].pack, userId)}` : "") +
+            "\n\n🛒 **Le stock est commun à tout le serveur** et se remplit petit à petit (plein en 24 h). Quand il ne reste presque plus rien, le prix monte.\nLes boosters achetés vont dans votre inventaire : ouvrez-les quand vous voulez. Quand une nouvelle génération sortira, ceux-ci ne seront plus vendus."
         ),
     ],
     components: ["standard", "premium", "prestige", ...(activeSeason() ? [SEASONAL[activeSeason()].pack] : [])].map((t) =>
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`carte_buy_${t}_1`).setLabel(`${PACKS[t].name} ×1`).setEmoji(PACKS[t].emoji).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`carte_buy_${t}_5`).setLabel(`×5 (${canvasText(formatEuro(boosterPrice(t) * 5))})`).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`carte_buy_${t}_10`).setLabel(`×10 (${canvasText(formatEuro(boosterPrice(t) * 10))})`).setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`carte_buy_${t}_1`).setLabel(`${PACKS[t].name} ×1`).setEmoji(PACKS[t].emoji).setStyle(ButtonStyle.Primary).setDisabled(stockOf(t) < 1),
+        new ButtonBuilder().setCustomId(`carte_buy_${t}_5`).setLabel(`×5 (${canvasText(formatEuro(boosterPrice(t) * 5))})`).setStyle(ButtonStyle.Secondary).setDisabled(stockOf(t) < 1),
+        new ButtonBuilder().setCustomId(`carte_buy_${t}_10`).setLabel(`×10 (${canvasText(formatEuro(boosterPrice(t) * 10))})`).setStyle(ButtonStyle.Secondary).setDisabled(stockOf(t) < 1)
       )
     ),
     ephemeral: true,
