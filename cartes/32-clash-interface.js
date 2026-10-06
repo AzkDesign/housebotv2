@@ -230,6 +230,19 @@ async function clashNotice(text) {
   deleteLater(msg, MINUTE);
 }
 // une attaque : simulation, butin, trophées, bouclier, journaux
+// une seule attaque à la fois par joueur
+const clashBusy = new Set();
+// raison du refus, ou null si l'attaque est permise (vérifié juste avant de lancer, sans attente)
+function clashCanAttack(userId) {
+  const me = clashState()[userId];
+  if (!me) return "Fondez d'abord votre Maison.";
+  if (clashBusy.has(userId)) return "⏳ Une attaque est déjà en cours.";
+  const army = clashArmy(me, userId);
+  if (!army.length) return "⚔️ Choisissez d'abord votre armée.";
+  if (me.attacks.day === dayKey() && me.attacks.n >= CLASH_ATTACKS_PER_DAY) return `⏳ Vous avez déjà mené ${CLASH_ATTACKS_PER_DAY} attaques aujourd'hui. Revenez demain !`;
+  if (me.res.essence < army.length * CLASH_TROOP_COST) return `❌ Il faut ${army.length * CLASH_TROOP_COST} essence pour lancer cette attaque.`;
+  return null;
+}
 async function clashAttack(client, userId, t, war = null) {
   const me = clashState()[userId], target = targetBase(t);
   const army = clashArmy(me, userId), cost = army.length * CLASH_TROOP_COST;
@@ -271,6 +284,8 @@ async function clashAttack(client, userId, t, war = null) {
       .catch(() => null);
   }
   pushLog(me, `⚔️ Attaque${war ? " de guerre" : ""} sur ${target.name} : ${sim.pct} %, ${"⭐".repeat(sim.stars) || "0 étoile"} · +${loot.or} or +${loot.essence} essence${trophies ? ` · ${trophies > 0 ? "+" : ""}${trophies} 🏆` : ""}`);
+  clashDirty = true;
+  save();
   const gif = await clashBattleGif(target, sim, me.name, { loot, trophies, war: !!war });
   if (sim.stars === 3) setTimeout(() => clashNotice(`💥 **${me.name}** rase entièrement ${target.ghost ? "une Maison fantôme" : `la Maison de **${target.name}**`} : ⭐⭐⭐ !`).catch(() => null), gif?.duration ?? 0);
   if (sim.stars) ustat(userId, "clashStars", sim.stars);
@@ -641,14 +656,20 @@ async function handleClashInteraction(interaction, client) {
       await show(clashHomePayload(userId, "🛡️ Cette Maison vient d'activer un bouclier : cherchez une autre cible."));
       return true;
     }
-    if (base.res.essence < army.length * CLASH_TROOP_COST) {
-      await interaction.reply({ content: `❌ Il faut ${army.length * CLASH_TROOP_COST} essence pour lancer cette attaque.`, ephemeral: true });
+    const refused = clashCanAttack(userId);
+    if (refused) {
+      await interaction.reply({ content: refused, ephemeral: true });
       return true;
     }
     clashTargets.delete(userId);
-    await interaction.deferUpdate();
-    const r = await clashAttack(client, userId, t);
-    await clashPlayBattle(show, r, false);
+    clashBusy.add(userId);
+    try {
+      const attack = clashAttack(client, userId, t);
+      await interaction.deferUpdate();
+      await clashPlayBattle(show, await attack, false);
+    } finally {
+      clashBusy.delete(userId);
+    }
     return true;
   }
   const wgo = /^carte_cl_wgo_(\d+)$/.exec(id);
@@ -659,20 +680,36 @@ async function handleClashInteraction(interaction, client) {
       await interaction.reply({ content: "❌ Cette attaque de guerre n'est pas possible.", ephemeral: true });
       return true;
     }
-    if (!clashArmy(base, userId).length || base.res.essence < clashArmy(base, userId).length * CLASH_TROOP_COST) {
-      await interaction.reply({ content: "❌ Il vous faut une armée et assez d'essence pour attaquer.", ephemeral: true });
+    const refused = clashCanAttack(userId);
+    if (refused) {
+      await interaction.reply({ content: refused, ephemeral: true });
       return true;
     }
-    await interaction.deferReply({ ephemeral: true });
-    const r = await clashAttack(client, userId, { owner: foeUid, ghost: false }, pair);
+    clashBusy.add(userId);
+    (pair.attacks[userId] ??= []).push({ target: foeUid, stars: 0, pct: 0 }); // réservé tout de suite
+    const slot = pair.attacks[userId].at(-1);
+    let r;
+    try {
+      const attack = clashAttack(client, userId, { owner: foeUid, ghost: false }, pair);
+      await interaction.deferReply({ ephemeral: true });
+      r = await attack;
+    } catch (e) {
+      pair.attacks[userId].splice(pair.attacks[userId].indexOf(slot), 1);
+      clashBusy.delete(userId);
+      throw e;
+    }
     // seule la meilleure attaque de l'équipe sur chaque Maison compte
     const side = pair.a === team.id ? "a" : "b";
-    const before = Math.max(0, ...Object.entries(pair.attacks).filter(([a]) => team.members.includes(a)).flatMap(([, list]) => list.filter((x) => x.target === foeUid).map((x) => x.stars)));
-    (pair.attacks[userId] ??= []).push({ target: foeUid, stars: r.sim.stars, pct: r.sim.pct });
+    const before = Math.max(0, ...Object.entries(pair.attacks).filter(([a]) => team.members.includes(a)).flatMap(([, list]) => list.filter((x) => x !== slot && x.target === foeUid).map((x) => x.stars)));
+    Object.assign(slot, { stars: r.sim.stars, pct: r.sim.pct });
     if (r.sim.stars > before) pair.stars[side] += r.sim.stars - before;
     save();
     clashDirty = true;
-    await clashPlayBattle((p) => interaction.editReply(p), r, true);
+    try {
+      await clashPlayBattle((p) => interaction.editReply(p), r, true);
+    } finally {
+      clashBusy.delete(userId);
+    }
     return true;
   }
   return false;
