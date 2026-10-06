@@ -10,6 +10,7 @@ const CARD_CHANNELS = [
   ["echanges", "🔄・échanges", "🔄 Invitations et tables d'échange en direct : chacun pose ses cartes, puis les deux valident"],
   ["marche", "🏪・marché-des-cartes", "🏪 Les grosses ventes du marché (le marché s'ouvre avec /marche)"],
   ["iles", "🏝️・île", "🏝️ L'île de la Maison : gardez-la avec vos cartes (10 ✨ par heure)… et défendez-la contre les autres membres"],
+  ["equipes", "🛡️・équipes", "🛡️ Les duos de joueurs : créez votre équipe, invitez un partenaire, montez de niveau ensemble"],
   ["classements", "🏆・classements-cartes", "🏆 Classements en direct : collection, holos, shiny, arène et succès"],
   ["discussion", "💬・discussion-cartes", "💬 Parlez cartes, montrez vos plus belles prises et organisez vos échanges"],
 ];

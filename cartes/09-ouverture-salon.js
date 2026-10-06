@@ -242,6 +242,7 @@ async function panelMessage() {
             (load().genLaunchAt && GENERATIONS[CURRENT_GEN + 1] ? `🌍 **${GENERATIONS[CURRENT_GEN + 1].name} — ${GENERATIONS[CURRENT_GEN + 1].title}** arrive <t:${Math.floor(load().genLaunchAt / 1000)}:R> !\n` : "") +
             `⚔️ **Défi de la semaine** : ${weeklyRule()[1]} — ${weeklyRule()[2]}\n` +
             "🏅 **Succès** (`/succes`) · 🖼️ **Vitrine** (`/vitrine`) · 🏆 classements en direct\n" +
+            "🛡️ **Équipes** (`/equipe`) : formez un duo, montez de niveau ensemble, coffre commun et objectif de la semaine\n" +
             `🏝️ **L'île** (\`/iles\`) : gardez-la avec vos cartes et gagnez ${ISLAND_DUST} ✨ par heure — ${islandsState().lagon.holder ? `gardée par <@${islandsState().lagon.holder}>` : "**libre** !"}\n` +
             (weeklyCard() ? `🌟 **Carte de la semaine** : ${weeklyCard().name} — trois fois plus fréquente dans les boosters !\n` : "") +
             "**Raretés** : ⚪ Commune · 🟢 Peu commune · 🔵 Rare · 🟣 Épique · 🟡 Légendaire · 🔴 Mythique · ✦ Holo (5 %)\n" +
@@ -278,7 +279,8 @@ async function panelMessage() {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("carte_succ").setLabel("Succès").setEmoji("🏅").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("carte_vit").setLabel("Ma vitrine").setEmoji("🖼️").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("carte_ile").setLabel("L'île").setEmoji("🏝️").setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId("carte_ile").setLabel("L'île").setEmoji("🏝️").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("carte_eq").setLabel("Mon équipe").setEmoji("🛡️").setStyle(ButtonStyle.Primary)
       ),
     ],
   };

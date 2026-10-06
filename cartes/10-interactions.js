@@ -2,6 +2,7 @@
 async function handleCartesInteraction(interaction, client) {
   if (await handleIslandInteraction(interaction, client)) return true;
   if (await handleLiveTradeInteraction(interaction, client)) return true;
+  if (await handleTeamInteraction(interaction, client)) return true;
   if (interaction.isChatInputCommand?.() && interaction.commandName === "succes") {
     await interaction.reply(achievementsPayload(interaction.user.id));
     return true;
@@ -1216,6 +1217,8 @@ function getCollectionSummary(userId) {
   if (unlocked) lines.push(`🏅 ${title ?? ""} · ${unlocked}/${ACHIEVEMENTS.length} succès`);
   const vit = (load().showcase[userId] ?? []).filter((k) => (load().inv[userId]?.[k] ?? 0) > 0).map(keyLabel);
   if (vit.length) lines.push(`🖼️ ${vit.join(" · ")}`);
+  const teamLine = teamSummaryLine(userId);
+  if (teamLine) lines.push(teamLine);
   return lines.join("\n");
 }
 

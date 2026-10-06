@@ -75,6 +75,10 @@ async function registerSlashCommands(client, token) {
       .addUserOption((o) => o.setName("membre").setDescription("Voir la vitrine d'un autre membre"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("equipe")
+      .setDescription("Votre équipe (duo) : niveau, coffre commun, objectif de la semaine, cadeaux")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("iles")
       .setDescription("L'île des cartes : gardez-la avec vos cartes, ou attaquez son gardien")
       .toJSON(),

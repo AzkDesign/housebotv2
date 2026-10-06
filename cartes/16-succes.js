@@ -196,6 +196,7 @@ async function refreshLeaderboards() {
       { name: "✦ Holographiques", value: top(holoCount, 5, (v) => `**${v}** holo${v > 1 ? "s" : ""}`), inline: true },
       { name: "🍀 Chasseurs de Shiny", value: top(shinyCount, 5, (v) => `**${v}** shiny`), inline: true },
       { name: `⚔️ Arène — saison ${st.arenaSeason?.n ?? 1}`, value: arena, inline: false },
+      { name: "🛡️ Équipes", value: Object.values(teamsState()).sort((a, b) => b.xp - a.xp).slice(0, 5).map((t, i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} ${t.emblem} **${t.name}** — niveau ${teamLevel(t)} · ${t.members.map((m) => `<@${m}>`).join(" & ")}`).join("\n") || "*Aucune équipe.*", inline: false },
       { name: "🏝️ Gardien de l'île", value: islandsState().lagon.holder ? `<@${islandsState().lagon.holder}> depuis ${fmtHeld(Date.now() - islandsState().lagon.since)}` : "*L'île est libre !*", inline: true },
       { name: "🏅 Succès", value: top((id) => Object.keys(st.achievements[id]?.unlocked ?? {}).length, 5, (v) => `**${v}** / ${ACHIEVEMENTS.length}`), inline: true }
     )
