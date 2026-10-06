@@ -91,7 +91,7 @@ function clashRates(base) {
 const busyBuilders = (base) => base.buildings.filter((x) => x.upgrading).length;
 const maxLevelOf = (type, manoir) => (type === "manoir" ? CLASH_MAX_MANOIR : Math.min(CLASH_MAX_MANOIR, manoir + (type === "mine" || type === "distillerie" ? 1 : 0)));
 const armySlots = (base) => base.buildings.filter((x) => x.type === "caserne").reduce((a, x) => a + CLASH_BUILDINGS.caserne.slots(x.level), 0);
-const costText = (cost) => Object.entries(cost).filter(([, v]) => v > 0).map(([k, v]) => `${CLASH_RES[k][0]} ${v.toLocaleString("fr-FR")}`).join(" + ") || "gratuit";
+const costText = (cost) => Object.entries(cost).filter(([, v]) => v > 0).map(([k, v]) => `${v.toLocaleString("fr-FR")} ${k === "or" ? "or" : "essence"}`).join(" + ") || "gratuit";
 const minutesText = (m) => (m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60}` : ""}` : `${Math.floor(m / 1440)} j ${Math.floor((m % 1440) / 60)} h`);
 // ce que le joueur peut construire ou améliorer maintenant
 function clashOptions(base) {
@@ -136,9 +136,9 @@ function clashLayout(base) {
   };
   const of = (...kinds) => base.buildings.filter((x) => x.level > 0 && kinds.includes(CLASH_BUILDINGS[x.type].kind));
   ring(of("core"), 0, 0);
-  ring(of("defense"), 4.6, 0.4);
-  ring(of("storage", "army"), 7.4, 1.1);
-  ring(of("resource"), 9.8, 0.2);
+  ring(of("defense"), 5.3, 0.4);
+  ring(of("storage", "army"), 8.9, 1.1);
+  ring(of("resource"), 10.6, 0.65);
   return placed;
 }
 

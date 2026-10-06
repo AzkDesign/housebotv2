@@ -95,16 +95,15 @@ async function clashHomePayload(userId, note = "") {
     embeds: [
       new EmbedBuilder()
         .setColor(0x65a30d)
-        .setTitle(`🏰 ${base.name} — Manoir niveau ${manoirOf(base)}`)
+        .setTitle(`${base.name} — Manoir niveau ${manoirOf(base)}`)
         .setDescription(
           (note ? `${note}\n\n` : "") +
-            `🪙 **${Math.floor(base.res.or).toLocaleString("fr-FR")}** Or (+${rates.or}/h) · 🔮 **${Math.floor(base.res.essence).toLocaleString("fr-FR")}** Essence (+${rates.essence}/h) · stockage max **${cap.toLocaleString("fr-FR")}**\n` +
-            `👷 Ouvriers : **${CLASH_BUILDERS - busyBuilders(base)} / ${CLASH_BUILDERS}** libres${works.length ? `\n${works.join("\n")}` : ""}\n` +
-            `⚔️ Armée : ${army.length ? army.map((k) => `${TROOP_ROLES[troopRole(cardOfKey(k))].emoji} ${keyLabel(k)}`).join(", ") : "*aucune — choisissez vos cartes ci-dessous*"} (${army.length}/${armySlots(base)})\n` +
-            `🏆 **${base.trophies}** trophées · ${attacksLeft} attaque${attacksLeft > 1 ? "s" : ""} restante${attacksLeft > 1 ? "s" : ""} aujourd'hui${base.shield > Date.now() ? ` · 🛡️ bouclier jusqu'à <t:${Math.floor(base.shield / 1000)}:t>` : ""}`
+            `**Armée** — ${army.length ? army.map((k) => `${keyLabel(k)} *(${TROOP_ROLES[troopRole(cardOfKey(k))].name})*`).join(", ") : "aucune : choisissez vos cartes dans la liste"} · ${army.length}/${armySlots(base)} places\n` +
+            `**Attaques** — ${attacksLeft} restante${attacksLeft > 1 ? "s" : ""} aujourd'hui${base.shield > Date.now() ? ` · bouclier jusqu'à <t:${Math.floor(base.shield / 1000)}:t>` : ""}` +
+            (works.length ? `\n**Chantiers** — ${base.buildings.filter((x) => x.upgrading).map((x) => `${CLASH_BUILDINGS[x.type].name} niveau ${x.upgrading.to}, fini <t:${Math.floor(x.upgrading.done / 1000)}:R>`).join(" · ")}` : "")
         )
         .setImage("attachment://maison.jpg")
-        .setFooter({ text: `Une attaque coûte ${CLASH_TROOP_COST} 🔮 par troupe · accélérer un chantier : ${CLASH_SPEEDUP_DUST} ✨ par minute` }),
+        .setFooter({ text: `Clash de la Maison · une attaque coûte ${CLASH_TROOP_COST} d'essence par troupe · accélérer : ${CLASH_SPEEDUP_DUST} poussières d'étoile par minute` }),
     ],
     files: [img],
     attachments: [],
@@ -156,9 +155,9 @@ async function clashTargetPayload(userId) {
         .setTitle(`⚔️ Cible : ${base.name}${base.ghost ? " 👻" : ""}`)
         .setDescription(
           `Manoir niveau **${manoirOf(base)}** · ${base.ghost ? "Maison fantôme gardée par l'IA" : `🏆 ${base.trophies} trophées`}\n` +
-            `💰 Butin possible : 🪙 **${maxLoot.or.toLocaleString("fr-FR")}** · 🔮 **${maxLoot.essence.toLocaleString("fr-FR")}** (à 100 % de destruction)\n` +
+            `**Butin possible** — ${maxLoot.or.toLocaleString("fr-FR")} or · ${maxLoot.essence.toLocaleString("fr-FR")} essence (à 100 % de destruction)\n` +
             `⚔️ Votre armée : ${army.map((k) => keyLabel(k)).join(", ")}\n` +
-            `Coût de l'attaque : 🔮 **${cost}** (vous avez ${Math.floor(me.res.essence)})\n\n*Les cercles pointillés montrent la portée des défenses.*`
+            `**Coût** — ${cost} essence (vous en avez ${Math.floor(me.res.essence).toLocaleString("fr-FR")})\n\n*Les zones en pointillés montrent la portée des défenses.*`
         )
         .setImage("attachment://cible.jpg"),
     ],
@@ -167,7 +166,7 @@ async function clashTargetPayload(userId) {
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("carte_cl_go").setLabel("Lancer l'attaque").setEmoji("⚔️").setStyle(ButtonStyle.Danger).setDisabled(me.res.essence < cost),
-        new ButtonBuilder().setCustomId("carte_cl_next").setLabel("Cible suivante (50 🪙)").setEmoji("⏭️").setStyle(ButtonStyle.Secondary).setDisabled(me.res.or < 50),
+        new ButtonBuilder().setCustomId("carte_cl_next").setLabel("Cible suivante (50 or)").setEmoji("⏭️").setStyle(ButtonStyle.Secondary).setDisabled(me.res.or < 50),
         new ButtonBuilder().setCustomId("carte_cl").setLabel("Retour à ma Maison").setEmoji("🏰").setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -212,13 +211,13 @@ async function clashAttack(client, userId, t, war = null) {
     if (sim.stars) target.shield = Date.now() + sim.stars * 4 * 3600000;
     target.stats.defenses++;
     if (!sim.stars) target.stats.defWins++;
-    pushLog(target, `🛡️ ${me.name} vous attaque : ${sim.pct} %, ${"⭐".repeat(sim.stars) || "0 étoile"} · −🪙${loot.or} −🔮${loot.essence} · ${lost > 0 ? `−${lost}` : `+${-lost}`} 🏆`);
+    pushLog(target, `🛡️ ${me.name} vous attaque : ${sim.pct} %, ${"⭐".repeat(sim.stars) || "0 étoile"} · −${loot.or} or −${loot.essence} essence · ${lost > 0 ? `−${lost}` : `+${-lost}`} 🏆`);
     client?.users
       .fetch(target.owner)
-      .then((u) => u.send(`🏰 **${me.name}** a attaqué votre Maison : **${sim.pct} %** de destruction, ${"⭐".repeat(sim.stars) || "aucune étoile"}.${sim.stars ? ` Butin perdu : 🪙 ${loot.or} · 🔮 ${loot.essence}. Un bouclier vous protège ${sim.stars * 4} h.` : " Votre défense a tenu bon !"}`))
+      .then((u) => u.send(`🏰 **${me.name}** a attaqué votre Maison : **${sim.pct} %** de destruction, ${"⭐".repeat(sim.stars) || "aucune étoile"}.${sim.stars ? ` Butin perdu : ${loot.or} or et ${loot.essence} essence. Un bouclier vous protège ${sim.stars * 4} h.` : " Votre défense a tenu bon !"}`))
       .catch(() => null);
   }
-  pushLog(me, `⚔️ Attaque${war ? " de guerre" : ""} sur ${target.name} : ${sim.pct} %, ${"⭐".repeat(sim.stars) || "0 étoile"} · +🪙${loot.or} +🔮${loot.essence}${trophies ? ` · ${trophies > 0 ? "+" : ""}${trophies} 🏆` : ""}`);
+  pushLog(me, `⚔️ Attaque${war ? " de guerre" : ""} sur ${target.name} : ${sim.pct} %, ${"⭐".repeat(sim.stars) || "0 étoile"} · +${loot.or} or +${loot.essence} essence${trophies ? ` · ${trophies > 0 ? "+" : ""}${trophies} 🏆` : ""}`);
   if (sim.stars === 3) await clashNotice(`💥 **${me.name}** rase entièrement ${target.ghost ? "une Maison fantôme" : `la Maison de **${target.name}**`} : ⭐⭐⭐ !`);
   if (sim.stars) ustat(userId, "clashStars", sim.stars);
   clashDirty = true;
@@ -234,7 +233,7 @@ function clashResultPayload(r, war) {
       new EmbedBuilder()
         .setColor(r.sim.stars ? 0x16a34a : 0xb91c1c)
         .setTitle(`${r.sim.stars ? "🏆 Victoire" : "💀 Défaite"} — ${r.sim.pct} % · ${"⭐".repeat(r.sim.stars) || "aucune étoile"}`)
-        .setDescription(`Butin : 🪙 **${r.loot.or.toLocaleString("fr-FR")}** · 🔮 **${r.loot.essence.toLocaleString("fr-FR")}**${war ? "\n🏆 Attaque de guerre : vos étoiles comptent pour votre équipe !" : `\nTrophées : **${r.trophies > 0 ? "+" : ""}${r.trophies}** 🏆`}`)
+        .setDescription(`**Butin** — ${r.loot.or.toLocaleString("fr-FR")} or · ${r.loot.essence.toLocaleString("fr-FR")} essence${war ? "\n🏆 Attaque de guerre : vos étoiles comptent pour votre équipe !" : `\nTrophées : **${r.trophies > 0 ? "+" : ""}${r.trophies}** 🏆`}`)
         .setImage("attachment://combat.gif"),
     ],
     files: [new AttachmentBuilder(r.gif, { name: "combat.gif" })],
@@ -301,7 +300,7 @@ async function clashWarTick(client) {
       lines.push(`${A.emblem} **${A.name}** ${p.stars.a} ⭐ — ${p.stars.b} ⭐ **${B.name}** ${B.emblem} → ${winner ? `victoire de **${winner.name}** 🏆` : "match nul"}`);
     }
     meta.wars = [{ id: meta.war.id, end: now, lines }, ...(meta.wars ?? [])].slice(0, 5);
-    const msg = lines.length ? await chan("clash")?.send({ embeds: [new EmbedBuilder().setColor(0xfbbf24).setTitle("🏁 Fin de la guerre des équipes").setDescription(`${lines.join("\n")}\n\nVainqueurs : 🪙 3 000 · 🔮 3 000 · 300 ✨ chacun et 250 XP d'équipe. Perdants : 🪙 800 · 🔮 800 · 80 ✨.`)] }).catch(() => null) : null;
+    const msg = lines.length ? await chan("clash")?.send({ embeds: [new EmbedBuilder().setColor(0xfbbf24).setTitle("🏁 Fin de la guerre des équipes").setDescription(`${lines.join("\n")}\n\nVainqueurs : 3 000 or, 3 000 essence et 300 poussières d'étoile chacun, plus 250 XP d'équipe. Perdants : 800 or, 800 essence et 80 poussières d'étoile.`)] }).catch(() => null) : null;
     void msg;
     meta.war = null;
     save();
@@ -369,7 +368,7 @@ async function refreshClashBoard() {
     .setTitle("🏰 Clash de la Maison")
     .setDescription(
       "Bâtissez votre Maison, défendez-la, et attaquez celles des autres avec **vos cartes** comme troupes !\n" +
-        "🪙 Or · 🔮 Essence · ⭐ étoiles · 🏆 trophées · 🛡️ boucliers · ⚔️ guerre des équipes le week-end.\n\n" +
+        "Or, essence, étoiles, trophées, boucliers… et la guerre des équipes chaque week-end.\n\n" +
         (w && !w.done
           ? `⚔️ **Guerre en cours** (fin <t:${Math.floor(w.end / 1000)}:R>) :\n${w.pairs.map((p) => `${teamsState()[p.a]?.emblem ?? ""} ${teamsState()[p.a]?.name ?? "?"} **${p.stars.a}** ⭐ — ⭐ **${p.stars.b}** ${teamsState()[p.b]?.name ?? "?"} ${teamsState()[p.b]?.emblem ?? ""}`).join("\n") || "*Aucun duel cette semaine.*"}`
           : "⚔️ Prochaine **guerre des équipes** : vendredi 18 h → dimanche 22 h.")
@@ -514,7 +513,7 @@ async function handleClashInteraction(interaction, client) {
     }
     if (id === "carte_cl_next") {
       if (base.res.or < 50) {
-        await interaction.reply({ content: "❌ Il faut 50 🪙 pour chercher une autre cible.", ephemeral: true });
+        await interaction.reply({ content: "❌ Il faut 50 or pour chercher une autre cible.", ephemeral: true });
         return true;
       }
       base.res.or -= 50;
@@ -536,7 +535,7 @@ async function handleClashInteraction(interaction, client) {
       return true;
     }
     if (base.res.essence < army.length * CLASH_TROOP_COST) {
-      await interaction.reply({ content: `❌ Il faut ${army.length * CLASH_TROOP_COST} 🔮 pour lancer cette attaque.`, ephemeral: true });
+      await interaction.reply({ content: `❌ Il faut ${army.length * CLASH_TROOP_COST} essence pour lancer cette attaque.`, ephemeral: true });
       return true;
     }
     clashTargets.delete(userId);
