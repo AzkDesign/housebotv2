@@ -36,6 +36,36 @@ function clashArmyOptions(userId, base) {
       return { label: keyLabel(k).slice(0, 100), value: k, emoji: role.emoji, description: `${role.name} · ${Math.round(t.maxHp)} PV · ${Math.round(t.dps)} dégâts/s`.slice(0, 100), default: (base.army ?? []).includes(k) };
     });
 }
+// --- Objectifs guidés : ils montrent quoi faire, étape par étape ---
+const CLASH_GOALS = [
+  { text: "Récoltez votre mine et votre distillerie", done: (b) => (b.stats.collects ?? 0) >= 1, reward: { or: 250 } },
+  { text: "Préparez une armée d'au moins 3 cartes", done: (b) => (b.army?.length ?? 0) >= 3, reward: { essence: 250 } },
+  { text: "Attaquez une Maison", done: (b) => b.stats.attacks >= 1, reward: { or: 400 } },
+  { text: "Améliorez le Manoir au niveau 2", done: (b) => manoirOf(b) >= 2, reward: { essence: 500 } },
+  { text: "Améliorez une défense au niveau 2", done: (b) => b.buildings.some((x) => CLASH_BUILDINGS[x.type].kind === "defense" && x.level >= 2), reward: { or: 700 } },
+  { text: "Gagnez 6 étoiles en attaque", done: (b) => b.stats.stars >= 6, reward: { dust: 150 } },
+  { text: "Améliorez un coffre-fort au niveau 2", done: (b) => b.buildings.some((x) => x.type === "coffre" && x.level >= 2), reward: { or: 600, essence: 600 } },
+  { text: "Améliorez le Manoir au niveau 3", done: (b) => manoirOf(b) >= 3, reward: { pack: "premium" } },
+  { text: "Atteignez 200 trophées", done: (b) => b.trophies >= 200, reward: { dust: 300 } },
+  { text: "Améliorez le Manoir au niveau 4", done: (b) => manoirOf(b) >= 4, reward: { pack: "prestige" } },
+];
+const goalReward = (r) =>
+  [r.or && `${r.or.toLocaleString("fr-FR")} or`, r.essence && `${r.essence.toLocaleString("fr-FR")} essence`, r.dust && `${r.dust} poussières d'étoile`, r.pack && `1 booster ${PACKS[r.pack].name}`].filter(Boolean).join(" et ");
+const currentGoal = (base) => CLASH_GOALS[base.goal ?? 0] ?? null;
+function autoArmy(userId, base) {
+  const seen = new Set();
+  base.army = ownedKeys(userId)
+    .map(([k]) => k)
+    .sort((a, b) => fighterPower(b) - fighterPower(a))
+    .filter((k) => {
+      const id = k.replace("*", "");
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
+    .slice(0, armySlots(base));
+  return base.army;
+}
 async function clashHomePayload(userId, note = "") {
   const base = clashBaseOf(userId);
   if (!base)
@@ -45,50 +75,64 @@ async function clashHomePayload(userId, note = "") {
       embeds: [
         new EmbedBuilder()
           .setColor(0x65a30d)
-          .setTitle("🏰 Fondez votre Maison")
+          .setTitle("Fondez votre Maison")
           .setDescription(
-            "Bâtissez votre propre Maison : un **Manoir**, des **mines d'or** et des **distilleries d'essence**, des **coffres**, une **caserne** et des **défenses** (canons, tours de l'IRF, mortiers).\n\n" +
-              "⚔️ Vos **cartes deviennent vos troupes** : attaquez les Maisons des autres membres pour piller leurs ressources et gagner des trophées.\n🛡️ Pendant ce temps, les autres attaquent la vôtre… même quand vous dormez.\n🏆 Le week-end, la **guerre des équipes** oppose les duos entre eux."
+            "Bâtissez votre propre Maison sur une île flottante, faites-la grandir… et partez piller celles des autres.\n\n" +
+              "**1.** Vos mines et distilleries produisent de l'**or** et de l'**essence** : venez les **récolter**.\n" +
+              "**2.** Dépensez-les pour **construire et améliorer** vos bâtiments.\n" +
+              "**3.** Vos **cartes deviennent vos soldats** : attaquez d'autres Maisons pour gagner du butin et des trophées.\n\n" +
+              "Des **objectifs** vous guident pas à pas, et le week-end, la **guerre des équipes** oppose les duos."
           ),
       ],
       files: [],
       attachments: [],
-      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_cl_found").setLabel("Fonder ma Maison").setEmoji("🏰").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId("carte_cl_rules").setLabel("Règles").setEmoji("📖").setStyle(ButtonStyle.Secondary))],
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_cl_found").setLabel("Fonder ma Maison").setEmoji("🏰").setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId("carte_cl_rules").setLabel("Comment jouer").setEmoji("📖").setStyle(ButtonStyle.Secondary))],
     };
   const img = new AttachmentBuilder(await (await drawClashBase(base)).encode("jpeg", 86), { name: "maison.jpg" });
-  const rates = clashRates(base), cap = clashCap(base), opts = clashOptions(base), army = clashArmy(base, userId);
-  const works = base.buildings.filter((x) => x.upgrading).map((x) => `🔨 ${CLASH_BUILDINGS[x.type].emoji} ${CLASH_BUILDINGS[x.type].name} → niv. ${x.upgrading.to} · fini <t:${Math.floor(x.upgrading.done / 1000)}:R>`);
+  const opts = clashOptions(base), army = clashArmy(base, userId), buffers = clashBuffers(base), goal = currentGoal(base);
   const soonest = base.buildings.filter((x) => x.upgrading).sort((a, b) => a.upgrading.done - b.upgrading.done)[0];
   const speedCost = soonest ? Math.max(1, Math.ceil((soonest.upgrading.done - Date.now()) / MINUTE)) * CLASH_SPEEDUP_DUST : 0;
-  const rows = [];
+  const day = dayKey(), attacksLeft = CLASH_ATTACKS_PER_DAY - (base.attacks.day === day ? base.attacks.n : 0);
+  const goalDone = goal && goal.done(base);
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("carte_cl_collect")
+        .setLabel(buffers.or + buffers.essence > 0 ? `Récolter (${buffers.or.toLocaleString("fr-FR")} or · ${buffers.essence.toLocaleString("fr-FR")} essence)` : "Rien à récolter")
+        .setEmoji("🧺")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(buffers.or + buffers.essence <= 0),
+      new ButtonBuilder().setCustomId("carte_cl_find").setLabel("Attaquer").setEmoji("⚔️").setStyle(ButtonStyle.Danger).setDisabled(!army.length || attacksLeft <= 0),
+      ...(goalDone ? [new ButtonBuilder().setCustomId("carte_cl_goal").setLabel("Réclamer l'objectif").setEmoji("🎁").setStyle(ButtonStyle.Primary)] : [])
+    ),
+  ];
   if (opts.length)
     rows.push(
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("carte_cl_build")
-          .setPlaceholder(busyBuilders(base) >= CLASH_BUILDERS ? "🔨 Vos deux ouvriers sont occupés…" : "🔨 Construire ou améliorer…")
+          .setPlaceholder(busyBuilders(base) >= CLASH_BUILDERS ? "Vos deux ouvriers sont occupés…" : "Construire ou améliorer un bâtiment…")
           .setDisabled(busyBuilders(base) >= CLASH_BUILDERS)
           .addOptions(
             opts.slice(0, 25).map((o) => ({
-              label: `${o.kind === "new" ? "Construire" : "Améliorer"} ${CLASH_BUILDINGS[o.type].name}${o.kind === "up" ? ` → niv. ${o.to}` : ""}`.slice(0, 100),
+              label: `${o.kind === "new" ? "Construire" : "Améliorer"} : ${CLASH_BUILDINGS[o.type].name}${o.kind === "up" ? ` (niveau ${o.to})` : ""}`.slice(0, 100),
               value: o.kind === "new" ? `new:${o.type}` : `up:${o.id}`,
               emoji: CLASH_BUILDINGS[o.type].emoji,
-              description: `${costText(o.cost)} · ${minutesText(o.time)}${clashCanPay(base, o.cost) ? "" : " · ressources insuffisantes"}`.slice(0, 100),
+              description: `${costText(o.cost)} · ${minutesText(o.time)}${clashCanPay(base, o.cost) ? "" : " · pas assez de ressources"}`.slice(0, 100),
             }))
           )
       )
     );
   const armyOpts = clashArmyOptions(userId, base);
-  if (armyOpts.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_cl_army").setPlaceholder(`⚔️ Choisir mon armée (${armySlots(base)} places)…`).setMinValues(1).setMaxValues(Math.min(armySlots(base), armyOpts.length)).addOptions(armyOpts)));
+  if (armyOpts.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_cl_army").setPlaceholder(`Choisir mes soldats (${armySlots(base)} places)…`).setMinValues(1).setMaxValues(Math.min(armySlots(base), armyOpts.length)).addOptions(armyOpts)));
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("carte_cl_find").setLabel("Attaquer").setEmoji("⚔️").setStyle(ButtonStyle.Danger).setDisabled(!army.length),
-      new ButtonBuilder().setCustomId("carte_cl_speed").setLabel(soonest ? `Accélérer (${speedCost} ✨)` : "Accélérer").setEmoji("⏩").setStyle(ButtonStyle.Primary).setDisabled(!soonest || (load().dust[userId] ?? 0) < speedCost),
+      new ButtonBuilder().setCustomId("carte_cl_auto").setLabel("Armée automatique").setEmoji("🎖️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("carte_cl_speed").setLabel(soonest ? `Finir le chantier (${speedCost} ✨)` : "Finir un chantier").setEmoji("⏩").setStyle(ButtonStyle.Secondary).setDisabled(!soonest || (load().dust[userId] ?? 0) < speedCost),
       new ButtonBuilder().setCustomId("carte_cl_log").setLabel("Journal").setEmoji("📜").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("carte_cl").setLabel("Actualiser").setEmoji("🔄").setStyle(ButtonStyle.Secondary)
     )
   );
-  const day = dayKey(), attacksLeft = CLASH_ATTACKS_PER_DAY - (base.attacks.day === day ? base.attacks.n : 0);
   return {
     ephemeral: true,
     content: null,
@@ -98,12 +142,12 @@ async function clashHomePayload(userId, note = "") {
         .setTitle(`${base.name} — Manoir niveau ${manoirOf(base)}`)
         .setDescription(
           (note ? `${note}\n\n` : "") +
-            `**Armée** — ${army.length ? army.map((k) => `${keyLabel(k)} *(${TROOP_ROLES[troopRole(cardOfKey(k))].name})*`).join(", ") : "aucune : choisissez vos cartes dans la liste"} · ${army.length}/${armySlots(base)} places\n` +
-            `**Attaques** — ${attacksLeft} restante${attacksLeft > 1 ? "s" : ""} aujourd'hui${base.shield > Date.now() ? ` · bouclier jusqu'à <t:${Math.floor(base.shield / 1000)}:t>` : ""}` +
-            (works.length ? `\n**Chantiers** — ${base.buildings.filter((x) => x.upgrading).map((x) => `${CLASH_BUILDINGS[x.type].name} niveau ${x.upgrading.to}, fini <t:${Math.floor(x.upgrading.done / 1000)}:R>`).join(" · ")}` : "")
+            (goal ? `**Objectif ${(base.goal ?? 0) + 1}/${CLASH_GOALS.length}** — ${goal.text}${goalDone ? " ✅" : ""}\n*Récompense : ${goalReward(goal.reward)}*\n\n` : "") +
+            `**Armée** — ${army.length ? army.map((k) => `${keyLabel(k)} *(${TROOP_ROLES[troopRole(cardOfKey(k))].name})*`).join(", ") : "aucune : touchez « Armée automatique »"} · ${army.length}/${armySlots(base)} places\n` +
+            `**Attaques** — ${attacksLeft} restante${attacksLeft > 1 ? "s" : ""} aujourd'hui · une attaque coûte ${CLASH_TROOP_COST} essence par soldat${base.shield > Date.now() ? `\n**Bouclier** — protégé jusqu'à <t:${Math.floor(base.shield / 1000)}:t>` : ""}`
         )
         .setImage("attachment://maison.jpg")
-        .setFooter({ text: `Clash de la Maison · une attaque coûte ${CLASH_TROOP_COST} d'essence par troupe · accélérer : ${CLASH_SPEEDUP_DUST} poussières d'étoile par minute` }),
+        .setFooter({ text: "Récoltez souvent : ce qui reste dans les mines est la cible préférée des pillards." }),
     ],
     files: [img],
     attachments: [],
@@ -113,16 +157,17 @@ async function clashHomePayload(userId, note = "") {
 const CLASH_RULES = () =>
   new EmbedBuilder()
     .setColor(0x65a30d)
-    .setTitle("📖 Clash de la Maison — règles")
+    .setTitle("Comment jouer au Clash de la Maison")
     .setDescription(
-      "🏰 **Votre Maison** : le **Manoir** fixe le niveau maximum des autres bâtiments et débloque de nouveaux bâtiments. Les **mines** et **distilleries** produisent 🪙 Or et 🔮 Essence toutes seules, jusqu'à la limite des **coffres**. Deux **ouvriers** construisent en même temps ; un chantier peut être **accéléré** avec de la poussière d'étoile ✨.\n\n" +
-        "⚔️ **Attaquer** : votre armée est faite de **vos cartes** (la **caserne** fixe le nombre de places). Chaque série a son rôle :\n" +
-        Object.values(TROOP_ROLES).map((r) => `${r.emoji} **${r.name}** — ${r.desc}`).join("\n") +
-        "\nLes cartes rares et holos font des troupes plus fortes. Les défenses (canon, tour de l'IRF, mortier à éclaboussure) tirent sur vos troupes.\n\n" +
-        "⭐ **Étoiles** : 50 % de destruction, Manoir détruit, 100 % de destruction. Vous pillez jusqu'à 25 % des ressources de la Maison attaquée selon la destruction, et vous gagnez ou perdez des **trophées**.\n" +
-        `🛡️ **Bouclier** : une Maison battue est protégée quelques heures. Attaquer retire votre propre bouclier. ${CLASH_ATTACKS_PER_DAY} attaques par jour au maximum.\n` +
-        "👻 Quand personne n'est disponible, vous affrontez une **Maison fantôme**.\n\n" +
-        "🏆 **Guerre des équipes** : du **vendredi 18 h au dimanche 22 h**, chaque duo affronte un autre duo. Chaque membre a **2 attaques de guerre** sur les Maisons adverses ; l'équipe qui totalise le plus d'étoiles gagne de l'Or, de l'Essence, de la poussière d'étoile et de l'XP d'équipe."
+      "**1. Récolter** — Les mines (or) et distilleries (essence) se remplissent en 8 heures, puis s'arrêtent. Revenez récolter : la récolte va dans vos coffres, dans la limite de leur place.\n\n" +
+        "**2. Construire** — Deux ouvriers améliorent vos bâtiments. Le **Manoir** fixe le niveau maximum des autres et débloque de nouveaux bâtiments. Un chantier peut être fini tout de suite avec de la poussière d'étoile.\n\n" +
+        "**3. Attaquer** — Vos **cartes sont vos soldats** (la caserne fixe le nombre de places) :\n" +
+        Object.values(TROOP_ROLES).map((r) => `• **${r.name}** — ${r.desc}`).join("\n") +
+        "\nLes cartes rares et holos font de meilleurs soldats. Une attaque dure 60 secondes.\n\n" +
+        "**Étoiles** — 50 % de destruction, Manoir détruit, 100 % : jusqu'à 3 étoiles.\n" +
+        "**Butin** — la moitié de ce qui attend dans les mines détruites, plus une petite part des coffres.\n" +
+        "**Défense** — vous pouvez être attaqué à tout moment ; après une défaite, un bouclier vous protège quelques heures.\n\n" +
+        "**Guerre des équipes** — du vendredi 18 h au dimanche 22 h, chaque duo affronte un autre duo : 2 attaques par membre, l'équipe qui fait le plus d'étoiles gagne."
     );
 
 // --- Recherche d'un adversaire ---
@@ -139,9 +184,14 @@ function clashFindTarget(userId) {
   return { owner: `ghost:${Math.floor(Math.random() * 1e6)}`, ghost: true, seed: Math.floor(Math.random() * 1e6), manoir: manoirOf(me) };
 }
 const targetBase = (t) => (t.ghost ? ghostBase(t.manoir, t.seed) : clashState()[t.owner]);
-function lootOf(target, pct) {
-  const share = 0.25 * (pct / 100);
-  return { or: Math.floor((target.res.or ?? 0) * share), essence: Math.floor((target.res.essence ?? 0) * share) };
+function lootOf(target, pct, dead = null) {
+  const share = 0.15 * (pct / 100), out = { or: Math.floor((target.res.or ?? 0) * share), essence: Math.floor((target.res.essence ?? 0) * share) };
+  for (const x of target.buildings) {
+    const res = CLASH_BUILDINGS[x.type].res;
+    if (!res || !x.stock || (dead && !dead.has(x.id))) continue;
+    out[res] += Math.floor(x.stock * 0.5);
+  }
+  return out;
 }
 async function clashTargetPayload(userId) {
   const t = clashTargets.get(userId), base = targetBase(t), me = clashState()[userId];
@@ -188,7 +238,8 @@ async function clashAttack(client, userId, t, war = null) {
   if (me.attacks.day !== dayKey()) me.attacks = { day: dayKey(), n: 0 };
   me.attacks.n++;
   const sim = clashSimulate(target, army);
-  const loot = war ? { or: 300 * manoirOf(target) * sim.stars, essence: 300 * manoirOf(target) * sim.stars } : lootOf(target, sim.pct);
+  const dead = new Set(sim.blds.filter((x) => x.dead).map((x) => x.id));
+  const loot = war ? { or: 150 * manoirOf(target) * sim.stars, essence: 150 * manoirOf(target) * sim.stars } : lootOf(target, sim.pct, dead);
   const room = clashCap(me);
   loot.or = Math.min(loot.or, Math.max(0, room - me.res.or));
   loot.essence = Math.min(loot.essence, Math.max(0, room - me.res.essence));
@@ -204,8 +255,10 @@ async function clashAttack(client, userId, t, war = null) {
   if (sim.stars) me.stats.wins++;
   me.stats.loot += loot.or + loot.essence;
   if (!target.ghost && !war) {
-    target.res.or = Math.max(0, target.res.or - loot.or);
-    target.res.essence = Math.max(0, target.res.essence - loot.essence);
+    const fromStore = lootOf({ res: target.res, buildings: [] }, sim.pct);
+    target.res.or = Math.max(0, target.res.or - Math.min(loot.or, fromStore.or));
+    target.res.essence = Math.max(0, target.res.essence - Math.min(loot.essence, fromStore.essence));
+    for (const x of target.buildings) if (CLASH_BUILDINGS[x.type].res && dead.has(x.id) && x.stock) x.stock = Math.floor(x.stock * 0.5);
     const lost = sim.stars ? 4 * sim.stars : -5;
     target.trophies = Math.max(0, target.trophies - lost);
     if (sim.stars) target.shield = Date.now() + sim.stars * 4 * 3600000;
@@ -223,7 +276,7 @@ async function clashAttack(client, userId, t, war = null) {
   clashDirty = true;
   save();
   checkAchievements(userId).catch(() => null);
-  const gif = await clashBattleGif(target, sim, me.name);
+  const gif = await clashBattleGif(target, sim, me.name, { loot, trophies, war: !!war });
   return { sim, loot, trophies, gif, target };
 }
 function clashResultPayload(r, war) {
@@ -441,10 +494,11 @@ async function handleClashInteraction(interaction, client) {
   if (id === "carte_cl_found") {
     if (!clashState()[userId]) {
       clashState()[userId] = newBase(clashUserOf(interaction));
+      autoArmy(userId, clashState()[userId]);
       clashDirty = true;
       save();
     }
-    await show(clashHomePayload(userId, "🎉 **Votre Maison est fondée !** Choisissez votre armée, améliorez vos bâtiments… et partez à l'attaque."));
+    await show(clashHomePayload(userId, "**Votre Maison est fondée !** Suivez les objectifs : ils vous guident pas à pas."));
     return true;
   }
   const base = clashBaseOf(userId);
@@ -461,6 +515,37 @@ async function handleClashInteraction(interaction, client) {
     clashDirty = true;
     if (!err) ustat(userId, "clashBuild");
     await show(clashHomePayload(userId, err ? `❌ ${err}` : `🔨 Chantier lancé : **${CLASH_BUILDINGS[opt.type].name}** ${opt.kind === "new" ? "en construction" : `→ niveau ${opt.to}`} (${minutesText(opt.time)}).`));
+    return true;
+  }
+  if (id === "carte_cl_collect") {
+    const got = clashCollect(base);
+    base.stats.collects = (base.stats.collects ?? 0) + 1;
+    save();
+    clashDirty = true;
+    const full = clashBuffers(base);
+    await show(clashHomePayload(userId, got.or + got.essence ? `Récolte : **+${got.or.toLocaleString("fr-FR")} or** et **+${got.essence.toLocaleString("fr-FR")} essence**.${full.or + full.essence ? " Vos coffres sont pleins : améliorez-les pour stocker davantage." : ""}` : "Vos coffres sont pleins : améliorez un coffre-fort pour stocker davantage."));
+    return true;
+  }
+  if (id === "carte_cl_auto") {
+    autoArmy(userId, base);
+    save();
+    await show(clashHomePayload(userId, base.army.length ? `Armée prête : vos ${base.army.length} meilleures cartes.` : "Vous n'avez pas encore de cartes : ouvrez des boosters !"));
+    return true;
+  }
+  if (id === "carte_cl_goal") {
+    const goal = currentGoal(base);
+    if (!goal || !goal.done(base)) {
+      await show(clashHomePayload(userId));
+      return true;
+    }
+    const rw = goal.reward;
+    if (rw.or) base.res.or = Math.min(clashCap(base) + rw.or, base.res.or + rw.or);
+    if (rw.essence) base.res.essence = Math.min(clashCap(base) + rw.essence, base.res.essence + rw.essence);
+    if (rw.dust) load().dust[userId] = (load().dust[userId] ?? 0) + rw.dust;
+    if (rw.pack) addPacks(userId, packKey(CURRENT_GEN, rw.pack), 1);
+    base.goal = (base.goal ?? 0) + 1;
+    save();
+    await show(clashHomePayload(userId, `Objectif accompli ! Récompense : **${goalReward(rw)}**.`));
     return true;
   }
   if (id === "carte_cl_army") {
