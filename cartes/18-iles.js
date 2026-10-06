@@ -11,6 +11,8 @@ const ISLAND_BONUS = 1.1; // cartes de la série favorite de l'île : PV et atta
 const ISLAND_REGEN = 0.2; // part des PV récupérée chaque heure
 const ISLAND_HEAL_COST = 40;
 const ISLAND_COOLDOWN = 10 * MINUTE; // délai avant de réattaquer la même île après une défaite
+const ISLAND_PROTECT = 30 * MINUTE; // bouclier après une prise : personne ne peut attaquer
+const ISLAND_REVENGE = 2 * HOUR; // l'ancien gardien doit attendre avant de reprendre l'île
 const ISLAND_WEAR_AFTER = 12; // heures de garde avant que la défense ne s'use
 const ISLAND_WEAR_RATE = 0.02, ISLAND_WEAR_MAX = 0.4; // PV max perdus par heure d'usure, plafond
 const ISLAND_AI = { name: "Gardien", offset: 0, boost: 1, smart: 0.75 };
@@ -86,7 +88,7 @@ function payIslands() {
   }
 }
 function setHolder(id, user, keys) {
-  islandsState()[id] = { holder: user.id, holderName: user.name, avatar: user.avatar ?? null, team: keys.slice(0, 3).map((key) => ({ key, frac: 1 })), since: Date.now(), paidAt: Date.now(), hpAt: Date.now(), earned: 0, defenses: 0, cooldown: {} };
+  islandsState()[id] = { holder: user.id, holderName: user.name, avatar: user.avatar ?? null, team: keys.slice(0, 3).map((key) => ({ key, frac: 1 })), since: Date.now(), paidAt: Date.now(), hpAt: Date.now(), earned: 0, defenses: 0, cooldown: {}, protectUntil: Date.now() + ISLAND_PROTECT, revenge: {} };
   islandsDirty = true;
 }
 function releaseIsland(id) {
@@ -387,7 +389,8 @@ async function islandsPayload() {
         .setTitle(`${ISLANDS.lagon.emoji} ${ISLANDS.lagon.name}`)
         .setDescription(
           `Si l'île est libre, placez **jusqu'à 3 cartes** pour la garder : elle vous rapporte **${ISLAND_DUST} ✨ par heure**.\n` +
-            "Si elle est gardée, battez sa défense : c'est une **IA qui joue les cartes du gardien**. Mettez toutes ses cartes K.O. et l'île est à vous !"
+            "Si elle est gardée, battez sa défense : c'est une **IA qui joue les cartes du gardien**. Mettez toutes ses cartes K.O. et l'île est à vous !" +
+            (islandsState().lagon?.holder && (islandsState().lagon.protectUntil ?? 0) > Date.now() ? `\n\n🛡️ **Bouclier de conquête** : l'île ne peut pas être attaquée avant <t:${Math.floor(islandsState().lagon.protectUntil / 1000)}:t> (<t:${Math.floor(islandsState().lagon.protectUntil / 1000)}:R>).` : "")
         )
         .setImage("attachment://archipel.jpg")
         .setFooter({ text: `${held ? "L'île est gardée" : "L'île est libre"} · les dégâts restent d'un combat à l'autre` }),
@@ -408,6 +411,7 @@ const ISLAND_RULES = () =>
         `⭐ **Bonus** : l'île favorise la série **${SERIES_LABELS[ISLANDS.lagon.series].replace(/^\S+ /, "")}** ; ses cartes y ont **+10 %** de PV et d'attaque en défense.\n` +
         `⏳ **Usure** : après ${ISLAND_WEAR_AFTER} h de garde, la défense perd ${Math.round(ISLAND_WEAR_RATE * 100)} % de PV max par heure (jusqu'à -${Math.round(ISLAND_WEAR_MAX * 100)} %). L'île finit toujours par changer de mains !\n` +
         `🔒 Les cartes qui défendent ne peuvent être ni vendues ni échangées. Après une défaite, attendez ${ISLAND_COOLDOWN / MINUTE} min avant de réattaquer l'île.\n` +
+        `🛡️ **Bouclier de conquête** : après chaque prise, l'île est protégée ${ISLAND_PROTECT / MINUTE} min, et l'ancien gardien doit attendre ${ISLAND_REVENGE / HOUR} h avant de tenter de la reprendre.\n` +
         "🔁 Le gardien peut changer sa défense (les cartes ajoutées arrivent au niveau de PV le plus bas de l'équipe) ou quitter l'île : ses cartes redeviennent libres."
     );
 function placeOptions(userId, id) {
@@ -520,6 +524,7 @@ async function islandBattleOver(client, b, winner) {
       return;
     }
     setHolder(id, attacker, keys);
+    islandsState()[id].revenge[old] = Date.now() + ISLAND_REVENGE; // pas de reprise immédiate par l'ancien gardien
     load().dust[attacker.id] = (load().dust[attacker.id] ?? 0) + ISLAND_CAPTURE_DUST;
     ustat(attacker.id, "islands");
     save();
@@ -637,6 +642,14 @@ async function handleIslandInteraction(interaction, client) {
     }
     if (userBattle.has(userId)) {
       await interaction.reply({ content: "❌ Vous êtes déjà en combat.", ephemeral: true });
+      return true;
+    }
+    if (isl.holder && isl.holder !== userId && (isl.protectUntil ?? 0) > Date.now()) {
+      await interaction.reply({ content: `🛡️ L'**${def.name}** vient de changer de mains : elle est protégée jusqu'à <t:${Math.floor(isl.protectUntil / 1000)}:t> (<t:${Math.floor(isl.protectUntil / 1000)}:R>).`, ephemeral: true });
+      return true;
+    }
+    if (isl.holder && (isl.revenge?.[userId] ?? 0) > Date.now()) {
+      await interaction.reply({ content: `⏳ Vous venez de perdre l'**${def.name}** : vous pourrez tenter de la reprendre <t:${Math.floor(isl.revenge[userId] / 1000)}:R>.`, ephemeral: true });
       return true;
     }
     const wait = (isl.cooldown?.[userId] ?? 0) + ISLAND_COOLDOWN - Date.now();
