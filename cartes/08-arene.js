@@ -748,6 +748,141 @@ function fxShatter(ctx, thumb, cx, cy, w, h, q, seed) {
   }
 }
 
+// --- Coup de grâce : effets spéciaux réservés au coup spécial qui met K.O. la dernière carte adverse ---
+function fxLetterbox(ctx, W, H, q) {
+  const h = 58 * ease.out(q);
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(-30, -30, W + 60, h + 30);
+  ctx.fillRect(-30, H - h, W + 60, h + 30);
+}
+function fxPillar(ctx, x, y, H, q, color) {
+  const w = 30 + 90 * q;
+  const g = ctx.createLinearGradient(x - w, 0, x + w, 0);
+  g.addColorStop(0, rgba(color, 0));
+  g.addColorStop(0.5, rgba(color, 0.55 * q));
+  g.addColorStop(1, rgba(color, 0));
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = g;
+  ctx.fillRect(x - w, -20, w * 2, y + 40);
+  ctx.fillStyle = `rgba(255,255,255,${0.5 * q})`;
+  ctx.fillRect(x - w * 0.12, -20, w * 0.24, y + 40);
+  ctx.restore();
+  glow(ctx, x, y, 140 + 120 * q, color, 0.5 * q);
+}
+function fxSpiral(ctx, x, y, q, color, seed) {
+  const R = seeded(seed);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let k = 0; k < 46; k++) {
+    const a0 = R() * TAU, d0 = 160 + R() * 260, p = Math.min(1, q * (0.8 + R() * 0.6)), a = a0 + p * 4, d = d0 * (1 - p) + 18;
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.8;
+    ctx.strokeStyle = k % 3 ? rgba(color, 0.85) : "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 2 + R() * 2;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(x + Math.cos(a - 0.25) * (d + 26), y + Math.sin(a - 0.25) * (d + 26) * 0.8);
+    ctx.stroke();
+    disc(ctx, px, py, 2 + R() * 2, k % 2 ? "#ffffff" : color);
+  }
+  ctx.restore();
+}
+function fxRays(ctx, x, y, q, color, n = 24, spin = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(spin);
+  ctx.globalCompositeOperation = "screen";
+  for (let k = 0; k < n; k++) {
+    ctx.rotate(TAU / n);
+    ctx.fillStyle = k % 2 ? rgba(color, 0.35 * q) : `rgba(255,255,255,${0.28 * q})`;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-26, -900);
+    ctx.lineTo(26, -900);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function fxShockwave(ctx, x, y, q, color) {
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let k = 0; k < 4; k++) {
+    const p = q - k * 0.12;
+    if (p <= 0) continue;
+    const r = ease.out(Math.min(1, p)) * 620;
+    ctx.globalAlpha = Math.max(0, 1 - p);
+    ctx.strokeStyle = k % 2 ? "#ffffff" : color;
+    ctx.lineWidth = 18 * (1 - p) + 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.55, 0, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function fxDebris(ctx, x, y, q, seed, color) {
+  const R = seeded(seed);
+  for (let k = 0; k < 40; k++) {
+    const a = R() * TAU, v = 160 + R() * 420, d = v * ease.out(q), px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.7 + q * q * 160;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - q);
+    ctx.translate(px, py);
+    ctx.rotate(q * 8 + k);
+    ctx.fillStyle = k % 3 ? color : "#ffffff";
+    ctx.fillRect(-4, -2, 8 + R() * 8, 4);
+    ctx.restore();
+  }
+}
+function fxMegaBeam(ctx, x1, y1, x2, y2, q, color, seed) {
+  const len = Math.hypot(x2 - x1, y2 - y1), ang = Math.atan2(y2 - y1, x2 - x1), reach = len * Math.min(1, q * 1.6);
+  const R = seeded(seed + Math.floor(q * 10));
+  ctx.save();
+  ctx.translate(x1, y1);
+  ctx.rotate(ang);
+  ctx.globalCompositeOperation = "screen";
+  for (const [w, c] of [[90, rgba(color, 0.25)], [56, rgba(color, 0.55)], [26, "rgba(255,255,255,0.95)"]]) {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.moveTo(0, -w / 2);
+    for (let t = 0; t <= reach; t += 20) ctx.lineTo(t, -w / 2 + (R() - 0.5) * 10);
+    for (let t = reach; t >= 0; t -= 20) ctx.lineTo(t, w / 2 + (R() - 0.5) * 10);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // anneaux le long du rayon
+  for (let k = 0; k < 5; k++) {
+    const t = ((q * 3 + k / 5) % 1) * reach;
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(t, 0, 10, 58, 0, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.restore();
+  glow(ctx, x1, y1, 120, color, 0.7);
+}
+function fxBigText(ctx, text, x, y, size, color, scale = 1, alpha = 1, font = "CardTitle") {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.textAlign = "center";
+  ctx.font = `${size}px ${font}`;
+  ctx.lineJoin = "round";
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 30;
+  ctx.lineWidth = size / 7;
+  ctx.strokeStyle = "rgba(0,0,0,0.85)";
+  ctx.strokeText(text, 0, 0);
+  const g = ctx.createLinearGradient(0, -size, 0, size * 0.2);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.45, "#fde68a");
+  g.addColorStop(1, color);
+  ctx.fillStyle = g;
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
 async function clashGif(b, res, hp0, pre) {
   const W = 880, H = 500, CW = 178, CH = 249, gap = W * 0.48;
   const bg = arenaBackground(W, H);
@@ -755,9 +890,11 @@ async function clashGif(b, res, hp0, pre) {
   for (const p of b.players) for (const f of p.team) if (!thumbs.has(f.key)) thumbs.set(f.key, await cardThumb(f.card, isHoloKey(f.key), CW, CH));
   const home = [W / 2 - gap / 2, W / 2 + gap / 2], baseY = 268;
   const vs = b.players.map((p, i) => ({ idx: pre[i], dx: 0, dy: 0, rot: 0, scale: 1, sx: 1, alpha: 1, hp: [...hp0[i]], shield: 0, shieldFlash: 0, crack: false, glow: 0, glowColor: "#ffffff", trail: [], hidden: false, label: 0 }));
+  // coup spécial qui met K.O. la dernière carte adverse : le coup de grâce
+  const finisher = res.events.find((ev) => ev.kind === "strike" && ev.type === "special" && !ev.dodge && ev.to <= 0 && b.players[1 - ev.side].team.every((f) => f.hp <= 0)) ?? null;
   const shots = [];
   const floats = [];
-  let shake = 0, darken = 0, flash = 0, flashColor = "#ffffff", overlays = [], frameNo = 0;
+  let shake = 0, darken = 0, flash = 0, flashColor = "#ffffff", overlays = [], frameNo = 0, finale = false;
   const posOf = (i) => ({ x: home[i] + vs[i].dx, y: baseY + vs[i].dy });
   const addFloat = (i, text, color, size, dy = 0) => floats.push({ i, text, color, size, born: frameNo, dy });
   const draw = (delay = 55) => {
@@ -775,7 +912,7 @@ async function clashGif(b, res, hp0, pre) {
     ctx.textAlign = "center";
     ctx.font = "15px CardEngrave";
     ctx.fillStyle = "#ecc979";
-    spaced(ctx, `MANCHE ${b.round}`, W / 2, 34, 4);
+    if (!finale) spaced(ctx, `MANCHE ${b.round}`, W / 2, 34, 4);
     for (const i of [0, 1]) {
       const s = vs[i], p = b.players[i], f = p.team[s.idx], th = thumbs.get(f.key), { x, y } = posOf(i);
       // traînée de mouvement
@@ -801,7 +938,7 @@ async function clashGif(b, res, hp0, pre) {
         fxHexShield(ctx, x + (i === 0 ? 70 : -70), y, CH, "#60a5fa", s.shield * (0.55 + s.shieldFlash * 0.45), s.crack);
       }
       // étiquette de l'action révélée
-      if (s.label > 0) {
+      if (s.label > 0 && !finale) {
         const a = res.acts[i], name = a.type === "special" ? `SPÉCIAL : ${p.team[res.startIdx[i]].special}` : ACTIONS[a.type].label;
         ctx.save();
         ctx.translate(home[i], baseY - CH / 2 - 30);
@@ -812,10 +949,10 @@ async function clashGif(b, res, hp0, pre) {
       }
       // barre de vie et nom
       const ff = p.team[s.idx];
-      hpBar(ctx, home[i] - CW / 2 - 8, baseY + CH / 2 + 16, CW + 16, 20, s.hp[s.idx], ff.maxHp);
+      if (!finale) hpBar(ctx, home[i] - CW / 2 - 8, baseY + CH / 2 + 16, CW + 16, 20, s.hp[s.idx], ff.maxHp);
       ctx.font = "13px CardBold";
       ctx.fillStyle = "#cbb9a9";
-      ctx.fillText(`${p.name} · ${ff.name}`.slice(0, 40), home[i], baseY + CH / 2 + 56);
+      if (!finale) ctx.fillText(`${p.name} · ${ff.name}`.slice(0, 40), home[i], baseY + CH / 2 + 56);
     }
     for (const o of overlays) o(ctx);
     // textes flottants
@@ -952,7 +1089,68 @@ async function clashGif(b, res, hp0, pre) {
     }
     // --- coup : attaque ou spécial ---
     const impactX = () => posOf(o).x, impactY = () => posOf(o).y;
-    if (ev.type === "special") {
+    if (ev === finisher) {
+      const { x: ax, y: ay } = posOf(i);
+      // ralenti : tout s'assombrit, bandes de cinéma, battement de cœur
+      await run(9, (q) => {
+        darken = Math.min(1, q * 1.6);
+        overlays = [
+          (ctx) => fxLetterbox(ctx, W, H, q),
+          (ctx) => {
+            const beat = Math.abs(Math.sin(q * Math.PI * 3));
+            const g = ctx.createRadialGradient(W / 2, H / 2, 120, W / 2, H / 2, W * 0.7);
+            g.addColorStop(0, "rgba(127,29,29,0)");
+            g.addColorStop(1, `rgba(127,29,29,${0.55 * beat})`);
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, W, H);
+            fxBigText(ctx, "COUP DE GRÂCE", W / 2, H / 2 + 22, 76, color, 1.25 - 0.25 * ease.out(q), Math.min(1, q * 2.5));
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.font = "16px CardEngrave";
+            ctx.fillStyle = `rgba(253,230,138,${q})`;
+            spaced(ctx, "LA DERNIÈRE CARTE VACILLE…", W / 2, H / 2 + 62, 4);
+            ctx.restore();
+          },
+        ];
+      }, [90, 90, 90, 90, 90, 110, 130, 150, 260]);
+      // bandeau d'annonce du spécial
+      await run(8, (q) => {
+        overlays = [(ctx) => fxLetterbox(ctx, W, H, 1), (ctx) => fxCutIn(ctx, W, H, q, th, att.special, `${b.players[i].name} · ${att.name}`, color, i === 0)];
+      });
+      // charge : colonne de lumière, énergie en spirale, éclairs, la carte s'élève
+      await run(12, (q) => {
+        s.glow = 1;
+        s.glowColor = color;
+        s.dy = -36 * ease.out(q);
+        s.scale = 1 + 0.16 * q;
+        shake = 2 + 7 * q;
+        overlays = [
+          (ctx) => fxPillar(ctx, ax, posOf(i).y, H, q, color),
+          (ctx) => fxSpiral(ctx, ax, posOf(i).y, q, color, b.round * 17 + i),
+          (ctx) => {
+            for (let k = 0; k < 3; k++) if ((frameNo + k) % 2) fxLightning(ctx, ax + (k - 1) * 60, -10, ax + (k - 1) * 18, posOf(i).y, "#ffffff", frameNo * 7 + k, 3);
+          },
+          (ctx) => fxLetterbox(ctx, W, H, 1),
+        ];
+      });
+      // déchaînement : rayon géant, et l'effet propre au type de la carte
+      const style = att.series;
+      await run(9, (q) => {
+        shake = 14;
+        const { x, y } = posOf(i), tx = impactX(), ty = impactY();
+        overlays = [
+          (ctx) => fxSpeedLines(ctx, W, H, 0.5, frameNo),
+          (ctx) => fxMegaBeam(ctx, x, y, tx, ty, q, color, b.round * 13),
+          (ctx) => {
+            if (style === "entreprises") fxCoins(ctx, x, y, tx, ty, q, b.round * 7 + i);
+            else if (style === "evenements") fxFireworks(ctx, tx, ty, q, b.round * 11 + i);
+            else if (style === "maison" || style === "voyage") fxRings(ctx, x, y, tx, ty, q, color);
+          },
+          (ctx) => fxLetterbox(ctx, W, H, 1),
+        ];
+      });
+      overlays = [];
+    } else if (ev.type === "special") {
       // bandeau d'annonce
       await run(7, (q) => {
         darken = Math.min(1, q * 2);
@@ -1019,6 +1217,35 @@ async function clashGif(b, res, hp0, pre) {
       });
       t.trail = [];
       t.dx = t.dy = 0;
+    } else if (ev === finisher) {
+      const tx = impactX(), ty = impactY();
+      addFloat(o, `−${ev.dmg}`, "#fde68a", 96);
+      // arrêt sur image : flash blanc total
+      await run(3, (q) => {
+        flash = 1 - q * 0.4;
+        flashColor = "#ffffff";
+        shake = 26;
+        overlays = [(ctx) => fxRays(ctx, tx, ty, 1, color, 28, q)];
+      }, [140, 140, 200]);
+      flash = 0;
+      // onde de choc, rayons, débris, la vie tombe à zéro
+      await run(12, (q) => {
+        shake = 24 * (1 - q);
+        t.dx = -toward * 70 * Math.sin(q * Math.PI) * (1 - q * 0.4);
+        t.rot = -toward * 0.18 * Math.sin(q * Math.PI * 2) * (1 - q);
+        t.hp[ev.defIdx] = ev.from + (ev.to - ev.from) * ease.out(Math.min(1, q * 1.5));
+        s.dy = -36 * (1 - ease.out(q));
+        s.scale = 1.16 - 0.16 * q;
+        overlays = [
+          (ctx) => fxRays(ctx, tx, ty, 1 - q, color, 28, q * 0.8),
+          (ctx) => fxShockwave(ctx, tx, ty, q, color),
+          (ctx) => fxDebris(ctx, tx, ty, q, b.round * 23 + i, color),
+          (ctx) => fxImpact(ctx, tx, ty, Math.min(1, 0.3 + q), color, true),
+          (ctx) => fxLetterbox(ctx, W, H, 1 - q * 0.5),
+        ];
+      }, [90, 80, 70, 65, 60, 60, 55, 55, 55, 55, 55, 55]);
+      s.dy = 0;
+      s.glow = 0;
     } else {
       flash = big ? 0.55 : ev.crit ? 0.45 : 0.25;
       flashColor = ev.crit ? "#ffffff" : color;
@@ -1058,6 +1285,57 @@ async function clashGif(b, res, hp0, pre) {
     t.dx = t.rot = 0;
     darken = 0;
     overlays = [];
+  }
+  // après un coup de grâce : la carte victorieuse au centre, rayons dorés, feux d'artifice
+  if (finisher) {
+    const wi = finisher.side, w = vs[wi], f = b.players[wi].team[w.idx], wth = thumbs.get(f.key), color = fxColor(f);
+    const startX = home[wi];
+    finale = true;
+    await run(18, (q) => {
+      darken = 0.75;
+      w.hidden = true;
+      vs[1 - wi].hidden = true;
+      overlays = [
+        (ctx) => fxRays(ctx, W / 2, H / 2 - 10, Math.min(1, q * 2), "#fbbf24", 32, q * 1.4),
+        (ctx) => {
+          const p = ease.out(Math.min(1, q * 1.8)), x = startX + (W / 2 - startX) * p, sc = 1 + 0.35 * p;
+          glow(ctx, x, H / 2 - 10, 260, color, 0.6);
+          ctx.save();
+          ctx.translate(x, H / 2 - 10);
+          ctx.rotate(Math.sin(q * Math.PI * 2) * 0.03);
+          ctx.scale(sc, sc);
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 40;
+          ctx.drawImage(wth, -CW / 2, -CH / 2, CW, CH);
+          ctx.restore();
+        },
+        (ctx) => {
+          for (let k = 0; k < 3; k++) fxFireworks(ctx, 150 + k * 290, 120 + (k % 2) * 60, Math.min(1, Math.max(0, q * 1.6 - k * 0.2)), b.round * 41 + k);
+          const R = seeded(b.round * 3);
+          for (let k = 0; k < 60; k++) {
+            const x = R() * W, y = ((R() * H + q * 420 * (0.6 + R())) % (H + 40)) - 20;
+            ctx.fillStyle = ["#fbbf24", "#f472b6", "#60a5fa", "#a3e635", "#ffffff"][k % 5];
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(q * 6 + k);
+            ctx.fillRect(-4, -2, 8, 4);
+            ctx.restore();
+          }
+        },
+        (ctx) => fxBigText(ctx, "VICTOIRE", W / 2, 92, 70, "#f59e0b", 1.4 - 0.4 * ease.back(Math.min(1, q * 2)), Math.min(1, q * 3)),
+        (ctx) => {
+          ctx.save();
+          ctx.textAlign = "center";
+          ctx.font = "20px CardEngrave";
+          ctx.fillStyle = `rgba(253,230,138,${Math.min(1, q * 2)})`;
+          spaced(ctx, b.players[wi].name.toUpperCase().slice(0, 28), W / 2, H - 40, 4);
+          ctx.restore();
+        },
+      ];
+    }, [...Array(17).fill(70), 3200]);
+    shots.forEach((sh) => (sh.once = true));
+    const duration = shots.slice(0, -1).reduce((a, sh) => a + sh.delay, 0);
+    return { buffer: encodeFrames(shots), duration };
   }
   // final : on laisse les floats finir puis on fige
   await run(3, () => {}, [55, 55, 2500]);
