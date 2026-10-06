@@ -441,7 +441,7 @@ async function duoPortrait(url, name, color) {
   return c;
 }
 async function drawDuoCard(card, holo = false, t = 0.37) {
-  const W = 600, H = 840, d = card.duo, info = duoInfo(d.emblem), crest = CREST[d.emblem] ?? CREST["🛡️"], pal = crest.pal;
+  const W = 600, H = 840, d = card.duo, info = duoInfo(d.emblem), crest = CREST[d.emblem] ?? CREST["🛡️"], pal = (card.variant && DUO_VARIANT_PAL[card.variant]) ?? crest.pal;
   const myth = card.rarity === "mythique", el = ELEMENTS[info.element] ?? ELEMENTS.lumiere;
   const cp = combatProfile(card, holo), level = d.level;
   const c = createCanvas(W, H), ctx = c.getContext("2d");
@@ -501,7 +501,7 @@ async function drawDuoCard(card, holo = false, t = 0.37) {
   if (holo || myth) {
     ctx.save();
     ctx.globalCompositeOperation = "overlay";
-    rainbow(ctx, W, H, t, holo ? 0.35 : 0.22);
+    rainbow(ctx, W, H, t, card.variant === "prisme" ? 0.6 : holo ? 0.35 : 0.22);
     ctx.restore();
   }
   // reflet qui balaie l'illustration
@@ -667,7 +667,7 @@ async function drawDuoCard(card, holo = false, t = 0.37) {
   ctx.textAlign = "center";
   ctx.font = "11px CardEngrave";
   ctx.fillStyle = myth ? "#fde68a" : "#ffffff";
-  ctx.fillText(myth ? "DUO MYTHIQUE" : "DUO LÉGENDAIRE", W / 2 + 14, footY);
+  ctx.fillText(card.variant ? `DUO ${card.variantLabel.toUpperCase()}` : myth ? "DUO MYTHIQUE" : "DUO LÉGENDAIRE", W / 2 + 14, footY);
   if (holo) sparkle(ctx, W / 2 + 84, footY - 4, 4, `hsl(${Math.round(t * 360)},95%,65%)`);
   ctx.textAlign = "right";
   ctx.font = "11px CardText";
