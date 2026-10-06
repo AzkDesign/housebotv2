@@ -24,6 +24,7 @@ async function setupCartes(client) {
     }
     else memberCache.delete(member.id);
   });
+  client.on("messageCreate", (message) => handleAutoMessage(message).catch((err) => console.error("Automatique:", err.message)));
   client.on("guildMemberRemove", (member) => {
     if (member.guild.id === guild.id) memberCache.delete(member.id);
   });
