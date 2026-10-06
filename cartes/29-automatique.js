@@ -7,6 +7,7 @@ const AUTO_TRIGGER_ID = "320348102055690241";
 const AUTO_WORDS = {
   clara: ["1511421712569204868", "1556677759248507022"],
   nina: ["1528200495389343784", "1442208383263445233"],
+  fondation: ["1363979726418608148", "1445816241116807238"], // Azk et Ryuk
 };
 
 async function autoPlayFor(guild, userId) {
