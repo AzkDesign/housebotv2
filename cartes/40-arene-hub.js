@@ -495,3 +495,26 @@ async function handleArenaHubInteraction(interaction, client) {
   playerFacts = (userId) => ({ ...facts(userId), bossKills: load().userStats[userId]?.bossKills ?? 0 });
   ACHIEVEMENTS.push(["boss1", "👹", "Tueur de boss", "Participer à la victoire contre un boss de la semaine", "bossKills", 1, 200]);
 }
+
+// --- Combat de boss joué automatiquement (même moteur que l'Arène, sans salon) ---
+// Le joueur aligne ses 3 meilleures cartes : spécial dès qu'il a l'énergie, sinon attaque (et parfois garde).
+// Renvoie les dégâts infligés au boss ; rien n'est enregistré ici.
+function bossAutoFight(userId) {
+  const s = bossState(), def = bossDef(s.key), keys = bestTeam(userId);
+  if (!keys.length || s.defeated) return null;
+  const side = (id, name, isAI) => ({ id, name, avatar: null, isAI, team: [], active: 0, energy: ruleIs("surcharge") ? 3 : 1, choice: null, ready: true, afk: 0 });
+  const b = { id: "auto", ai: null, boss: def.key, aiLevel: BOSS_AI, players: [side(userId, pseudo(userId), false), side(`boss:${def.key}`, def.name, true)], round: 0, phase: "choose", history: [[], []], bets: [], lastLines: [] };
+  b.players[0].team = keys.map(fighter);
+  b.players[1].team = [bossFighter(b)];
+  for (let r = 0; r < 30; r++) {
+    b.round++;
+    const me = b.players[0];
+    me.choice = me.energy >= SPECIAL_COST ? { type: "special" } : { type: Math.random() < 0.8 ? "attack" : "guard" };
+    b.players[1].choice = aiChoice(b);
+    const res = resolveRoundState(b);
+    res.acts.forEach((a, i) => b.history[i].push(a.type));
+    if (!b.players.every((p) => p.team.some((f) => f.hp > 0))) break;
+  }
+  const f = b.players[1].team[0];
+  return Math.max(0, Math.min(s.hp, f.maxHp - Math.max(0, f.hp)));
+}

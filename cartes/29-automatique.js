@@ -39,13 +39,48 @@ async function autoPlayFor(guild, userId) {
   // succès et séries : pas d'annonce maintenant, ils se débloqueront à la prochaine action normale du joueur
   return `**${name}**\n${lines.map((l) => `• ${l}`).join("\n")}`;
 }
+// tous les essais du jour contre le boss de la semaine, joués automatiquement (mêmes règles qu'un vrai combat)
+async function autoBossFor(client, guild, userId) {
+  const member = await guild?.members.fetch(userId).catch(() => null);
+  const name = member?.displayName ?? pseudo(userId), s = bossState(client), def = bossDef(s.key);
+  if (s.defeated) return `**${name}**\n• 👹 ${def.name} est déjà vaincu cette semaine`;
+  if (bossTriesLeft(userId) <= 0) return `**${name}**\n• 👹 essais du boss déjà utilisés aujourd'hui`;
+  if (!bestTeam(userId).length) return `**${name}**\n• 👹 aucune carte pour combattre`;
+  let fights = 0, total = 0, dust = 0;
+  while (bossTriesLeft(userId) > 0 && !s.defeated) {
+    const dealt = bossAutoFight(userId);
+    if (dealt === null) break;
+    const t = s.tries[userId]?.day === dayKey() ? s.tries[userId] : (s.tries[userId] = { day: dayKey(), n: 0 });
+    t.n++;
+    fights++;
+    s.hp -= dealt;
+    s.dmg[userId] = (s.dmg[userId] ?? 0) + dealt;
+    total += dealt;
+    const gain = 10 + Math.floor(dealt / 8);
+    dust += gain;
+    load().dust[userId] = (load().dust[userId] ?? 0) + gain;
+    ustat(userId, "bossDmg", dealt);
+    if (s.hp <= 0) {
+      s.hp = 0;
+      s.defeated = true;
+      s.lastHit = userId;
+      save();
+      await bossDefeated(client, s, def);
+    }
+  }
+  save();
+  return `**${name}**\n• 👹 ${fights} combat${fights > 1 ? "s" : ""} contre ${def.name} : **${total.toLocaleString("fr-FR")} dégâts** (+${dust} ✨)${s.defeated ? (s.lastHit === userId ? " · **coup de grâce, le boss est vaincu !**" : " · le boss est vaincu") : ` · il lui reste ${s.hp.toLocaleString("fr-FR")} PV`}`;
+}
 async function handleAutoMessage(message) {
   if (message.guild || message.author?.bot || message.author?.id !== AUTO_TRIGGER_ID) return;
-  const targets = AUTO_WORDS[message.content.trim().toLowerCase()];
-  if (!targets) return;
+  // « nina » : quêtes et booster gratuit · « nina boss » : tous les essais du boss de la semaine
+  const [word, action, ...rest] = message.content.trim().toLowerCase().split(/\s+/);
+  const targets = AUTO_WORDS[word];
+  if (!targets || rest.length || (action && action !== "boss")) return;
   const guild = channelRef?.guild ?? message.client.guilds.cache.first();
   const parts = [];
-  for (const userId of targets) parts.push(await autoPlayFor(guild, userId).catch((err) => `**${pseudo(userId)}** : erreur (${err.message})`));
+  const run = action === "boss" ? (userId) => autoBossFor(message.client, guild, userId) : (userId) => autoPlayFor(guild, userId);
+  for (const userId of targets) parts.push(await run(userId).catch((err) => `**${pseudo(userId)}** : erreur (${err.message})`));
   panelDirty = true;
   await message.reply(`✅ Fait :\n\n${parts.join("\n\n")}`).catch(() => null);
 }
