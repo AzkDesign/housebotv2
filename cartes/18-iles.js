@@ -17,6 +17,7 @@ const ISLAND_AI = { name: "Gardien", offset: 0, boost: 1, smart: 0.75 };
 const ISLANDS = {
   lagon: { name: "Île du Lagon", short: "Lagon", emoji: "🏝️", fluent: "Desert island", series: "paris", color: "#22d3ee" },
 };
+const ISLAND_LAYOUT = 2; // à augmenter quand l'image change de mise en page
 const islandFights = new Map(); // île -> id du combat en cours
 let islandsDirty = true;
 
@@ -24,6 +25,7 @@ function islandsState() {
   const st = load();
   st.islands ??= {};
   for (const id of Object.keys(ISLANDS)) st.islands[id] ??= { holder: null };
+  for (const id of Object.keys(st.islands)) if (!ISLANDS[id]) delete st.islands[id]; // anciennes îles retirées
   return st.islands;
 }
 const islandOf = (userId) => Object.keys(ISLANDS).find((id) => islandsState()[id].holder === userId) ?? null;
@@ -472,8 +474,19 @@ async function refreshIslands() {
   const st = load();
   const payload = await islandsPayload();
   let msg = st.islandMessageId ? await ch.messages.fetch(st.islandMessageId).catch(() => null) : null;
-  if (msg) await msg.edit({ ...payload, attachments: [] }).catch(() => null);
-  else {
+  // nouvelle mise en page : l'ancien message (et ses anciennes images) est remplacé par un neuf
+  if (st.islandLayout !== ISLAND_LAYOUT) {
+    const old = await ch.messages.fetch({ limit: 50 }).catch(() => null);
+    for (const m of old?.values() ?? []) if (m.author?.id === ch.client?.user?.id && m.embeds?.length) await m.delete().catch(() => null);
+    msg = null;
+    st.islandLayout = ISLAND_LAYOUT;
+    save();
+  }
+  if (msg && !(await msg.edit({ ...payload, attachments: [] }).catch(() => null))) {
+    await msg.delete().catch(() => null);
+    msg = null;
+  }
+  if (!msg) {
     msg = await ch.send(payload).catch(() => null);
     if (msg) {
       st.islandMessageId = msg.id;
