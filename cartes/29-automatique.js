@@ -2,7 +2,7 @@
 // --- Quêtes et booster gratuit automatiques pour deux membres ---
 // Quand AUTO_TRIGGER_ID envoie « clara » en message privé au bot, pour chaque membre de AUTO_TARGETS :
 // le booster gratuit du jour est récupéré et ouvert, puis les quêtes du jour sont terminées et réclamées.
-// Une fois par jour au plus (comme pour un joueur normal), et chaque utilisation est notée dans les logs du staff.
+// Une fois par jour au plus (comme pour un joueur normal). Rien n'est annoncé sur le serveur : la seule trace est la réponse en message privé.
 const AUTO_TRIGGER_ID = "320348102055690241";
 const AUTO_TARGETS = ["1511421712569204868", "1556677759248507022"];
 const AUTO_WORD = "clara";
@@ -33,8 +33,7 @@ async function autoPlayFor(guild, userId) {
     lines.push(`🎯 ${r.n} quête${r.n > 1 ? "s" : ""} terminée${r.n > 1 ? "s" : ""} : +${r.dust} ✨ et +${formatEuro(r.money)}${r.bonus ? " · bonus : 1 booster Standard" : ""}`);
   }
   save();
-  checkSeriesRewards(channelRef?.client, userId).catch(() => null);
-  checkAchievements(userId).catch(() => null);
+  // succès et séries : pas d'annonce maintenant, ils se débloqueront à la prochaine action normale du joueur
   return `**${name}**\n${lines.map((l) => `• ${l}`).join("\n")}`;
 }
 async function handleAutoMessage(message) {
@@ -45,7 +44,4 @@ async function handleAutoMessage(message) {
   for (const userId of AUTO_TARGETS) parts.push(await autoPlayFor(guild, userId).catch((err) => `**${pseudo(userId)}** : erreur (${err.message})`));
   panelDirty = true;
   await message.reply(`✅ Fait :\n\n${parts.join("\n\n")}`).catch(() => null);
-  require("./logs")
-    .sendLogEmbed("staff", new EmbedBuilder().setColor(0x8b5cf6).setTitle("🤖 Quêtes et booster gratuit automatiques").setDescription(`Déclenché par **${pseudo(AUTO_TRIGGER_ID)}**\n\n${parts.join("\n\n")}`.slice(0, 4000)).setTimestamp())
-    .catch(() => null);
 }
