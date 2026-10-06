@@ -6,6 +6,7 @@ const CARD_CHANNELS = [
   ["panel", "🃏・cartes-de-la-maison", "🃏 Le salon principal : boosters, booster gratuit du jour, inventaire, album, codex, quêtes…"],
   ["annonces", "🌟・annonces-cartes", "🌟 Carte de la semaine, grosses ouvertures, séries complétées, succès et nouvelles générations"],
   ["arene", "⚔️・arène", "⚔️ Défis, combats en direct (un fil par combat), défi de la semaine et fin de saison"],
+  ["pass", "🎟️・pass-de-combat", "🎟️ Le pass de combat du mois : votre progression, le Pass Duo de votre équipe et les classements de la saison"],
   ["tournoi", "🏆・tournoi", "🏆 Le tournoi du week-end : inscriptions le vendredi midi, élimination directe, finale le dimanche à 20 h"],
   ["echanges", "🔄・échanges-et-marché", "🔄 Tables d'échange en direct (chacun pose ses cartes, puis les deux valident) et grosses ventes du marché"],
   ["histoire", "📖・mode-histoire", "📖 Les Secrets de la Maison : une enquête illustrée où vos choix changent tout. Cliquez sur « Ouvrir le livre » !"],
@@ -50,11 +51,12 @@ async function cleanThreadNotices(channel) {
 // On garde : les messages avec des boutons encore actifs, les tableaux en direct et les annonces avec image.
 async function sweepCardChannels(client) {
   const st = load();
-  const keep = new Set([st.clashBoardId, st.islandMessageId, st.teamsMessageId, st.ruleMessageId, st.seasonMessageId, st.weeklyCard?.messageId, st.boardMessageId, st.tournamentMessageId].filter(Boolean));
+  const keep = new Set([st.clashBoardId, st.islandMessageId, st.teamsMessageId, st.ruleMessageId, st.seasonMessageId, st.weeklyCard?.messageId, st.boardMessageId, st.tournamentMessageId, st.passMessageId].filter(Boolean));
   const rules = {
     arene: (m) => !m.components.length,
     iles: (m) => !m.components.length,
     tournoi: (m) => !m.components.length,
+    pass: (m) => !m.components.length,
     equipes: (m) => !m.components.length,
     echanges: (m) => !m.components.length,
     discussion: (m) => !m.components.length,

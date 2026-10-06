@@ -242,7 +242,7 @@ async function panelMessage() {
             (load().genLaunchAt && GENERATIONS[CURRENT_GEN + 1] ? `🌍 **${GENERATIONS[CURRENT_GEN + 1].name} — ${GENERATIONS[CURRENT_GEN + 1].title}** arrive <t:${Math.floor(load().genLaunchAt / 1000)}:R> !\n` : "") +
             `⚔️ **Défi de la semaine** : ${weeklyRule()[1]} — ${weeklyRule()[2]}\n` +
             "🏅 **Succès** (`/succes`) · 🖼️ **Vitrine** (`/vitrine`) · 🏆 classements en direct\n" +
-            `📖 ${chan("histoire")} · 🏰 ${chan("clash")} · 🏝️ ${chan("iles")} · 🛡️ ${chan("equipes")} · 🏆 ${chan("tournoi")} — le Mode Histoire, le Clash de la Maison, l'île, les équipes et le tournoi du week-end ont leur propre salon\n` +
+            `📖 ${chan("histoire")} · 🏰 ${chan("clash")} · 🏝️ ${chan("iles")} · 🛡️ ${chan("equipes")} · 🏆 ${chan("tournoi")} · 🎟️ ${chan("pass")} — le Mode Histoire, le Clash, l'île, les équipes, le tournoi et le pass de combat ont leur propre salon\n` +
             (weeklyCard() ? `🌟 **Carte de la semaine** : ${weeklyCard().name} — trois fois plus fréquente dans les boosters !\n` : "") +
             "**Raretés** : ⚪ Commune · 🟢 Peu commune · 🔵 Rare · 🟣 Épique · 🟡 Légendaire · 🔴 Mythique · ✦ Holo (5 %)\n" +
             `✨ Des **cartes sauvages** apparaissent dans ${chan("sauvages")} de temps en temps : soyez le premier à les attraper !\n` +
