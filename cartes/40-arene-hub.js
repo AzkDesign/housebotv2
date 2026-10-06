@@ -506,6 +506,7 @@ function bossAutoFight(userId) {
   const b = { id: "auto", ai: null, boss: def.key, aiLevel: BOSS_AI, players: [side(userId, pseudo(userId), false), side(`boss:${def.key}`, def.name, true)], round: 0, phase: "choose", history: [[], []], bets: [], lastLines: [] };
   b.players[0].team = keys.map(fighter);
   b.players[1].team = [bossFighter(b)];
+  applyUtility(b.players[0], bossItemOf(userId), true);
   for (let r = 0; r < 30; r++) {
     b.round++;
     const me = b.players[0];

@@ -376,7 +376,7 @@ async function handleCartesInteraction(interaction, client) {
         const options = ownedKeys(userId)
           .map(([k]) => k)
           .sort((x, y) => fighterPower(y) - fighterPower(x))
-          .filter((k) => !seen.has(k.replace("*", "")) && seen.add(k.replace("*", "")))
+          .filter((k) => !k.startsWith("ut_") && !seen.has(k.replace("*", "")) && seen.add(k.replace("*", "")))
           .slice(0, 25)
           .map((k) => {
             const f = fighter(k);

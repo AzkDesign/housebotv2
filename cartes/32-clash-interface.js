@@ -23,6 +23,7 @@ function clashArmyOptions(userId, base) {
   const seen = new Set();
   return ownedKeys(userId)
     .map(([k]) => k)
+    .filter((k) => !k.startsWith("ut_"))
     .sort((a, b) => fighterPower(b) - fighterPower(a))
     .filter((k) => {
       const id = k.replace("*", "");
@@ -56,6 +57,7 @@ function autoArmy(userId, base) {
   const seen = new Set();
   base.army = ownedKeys(userId)
     .map(([k]) => k)
+    .filter((k) => !k.startsWith("ut_"))
     .sort((a, b) => fighterPower(b) - fighterPower(a))
     .filter((k) => {
       const id = k.replace("*", "");

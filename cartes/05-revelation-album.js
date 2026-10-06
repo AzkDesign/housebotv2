@@ -327,7 +327,7 @@ async function drawSpread(results, title, gained) {
 }
 
 // --- Album en images ---
-const albumGroups = () => ["paris", "maison", ...(CURRENT_GEN >= 2 ? ["voyage"] : []), "entreprises", "membres", "duos", "saisons", "histoire", "evenements"];
+const albumGroups = () => ["paris", "maison", ...(CURRENT_GEN >= 2 ? ["voyage"] : []), "entreprises", "membres", "duos", "utilitaire", "saisons", "histoire", "evenements"];
 const ALBUM_PER_PAGE = 21;
 const seriesCards = (group) => allCards().filter((c) => seriesOf(c) === group);
 const thumbCache = new Map();

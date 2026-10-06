@@ -439,7 +439,7 @@ function placeOptions(userId, id) {
   // les deux membres du duo mettent leurs cartes en commun
   const owners = held ? islandMates(isl.holder) : [userId];
   return owners
-    .flatMap((owner) => ownedKeys(owner).map(([k]) => ({ owner, k })))
+    .flatMap((owner) => ownedKeys(owner).filter(([k]) => !k.startsWith("ut_")).map(([k]) => ({ owner, k })))
     .sort((a, b) => fighterPower(b.k) - fighterPower(a.k))
     .filter(({ owner, k }) => {
       const cid = `${owner}|${k.replace("*", "")}`;
