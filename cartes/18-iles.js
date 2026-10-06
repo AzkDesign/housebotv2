@@ -30,11 +30,23 @@ function islandsState() {
   for (const id of Object.keys(st.islands)) if (!ISLANDS[id]) delete st.islands[id]; // anciennes îles retirées
   return st.islands;
 }
-const islandOf = (userId) => Object.keys(ISLANDS).find((id) => islandsState()[id].holder === userId) ?? null;
+// l'île d'un duo appartient aux deux membres : le gardien et son coéquipier la gèrent tous les deux
+const islandMates = (holder) => {
+  const team = holder ? teamOf(holder) : null;
+  return team?.members.length === 2 ? team.members : holder ? [holder] : [];
+};
+const islandOf = (userId) => Object.keys(ISLANDS).find((id) => islandMates(islandsState()[id].holder).includes(userId)) ?? null;
+// nom affiché du gardien : l'équipe si c'est un duo
+function islandOwnerName(isl) {
+  const team = isl.holder ? teamOf(isl.holder) : null;
+  return team?.members.length === 2 ? `${team.emblem} ${team.name}` : isl.holderName ?? "?";
+}
 // exemplaires bloqués sur une île (ils ne peuvent être ni vendus ni échangés)
 function islandLocked(userId, key) {
   const id = islandOf(userId);
-  return id ? islandsState()[id].team.filter((d) => d.key === key).length : 0;
+  if (!id) return 0;
+  const isl = islandsState()[id];
+  return isl.team.filter((d) => d.key === key && (d.owner ?? isl.holder) === userId).length;
 }
 const islandAvailable = (userId, key) => (load().inv[userId]?.[key] ?? 0) - islandLocked(userId, key);
 function islandWear(isl) {
@@ -88,7 +100,7 @@ function payIslands() {
   }
 }
 function setHolder(id, user, keys) {
-  islandsState()[id] = { holder: user.id, holderName: user.name, avatar: user.avatar ?? null, team: keys.slice(0, 3).map((key) => ({ key, frac: 1 })), since: Date.now(), paidAt: Date.now(), hpAt: Date.now(), earned: 0, defenses: 0, cooldown: {}, protectUntil: Date.now() + ISLAND_PROTECT, revenge: {} };
+  islandsState()[id] = { holder: user.id, holderName: user.name, avatar: user.avatar ?? null, team: keys.slice(0, 3).map((key) => ({ key, frac: 1, owner: user.id })), since: Date.now(), paidAt: Date.now(), hpAt: Date.now(), earned: 0, defenses: 0, cooldown: {}, protectUntil: Date.now() + ISLAND_PROTECT, revenge: {} };
   islandsDirty = true;
 }
 function releaseIsland(id) {
@@ -273,23 +285,29 @@ async function drawIslandPanel(ctx, id, x, y, w, h) {
     }
     return;
   }
-  // gardien
-  const av = isl.avatar ? await fetchImage(`avatar:${isl.avatar}`, isl.avatar) : null;
+  // gardien : le blason et le nom de l'équipe pour un duo, sinon la photo du membre
+  const team = teamOf(isl.holder), duo = team?.members.length === 2;
   const ax = rx + 22, ay = y + 82;
-  disc(ctx, ax, ay, 23, def.color);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(ax, ay, 20, 0, TAU);
-  ctx.clip();
-  if (av) ctx.drawImage(av, ax - 20, ay - 20, 40, 40);
-  else disc(ctx, ax, ay, 20, "#1e293b");
-  ctx.restore();
+  if (duo) ctx.drawImage(await drawTeamCrest(team.emblem), ax - 30, ay - 30, 60, 60);
+  else {
+    const av = isl.avatar ? await fetchImage(`avatar:${isl.avatar}`, isl.avatar) : null;
+    disc(ctx, ax, ay, 23, def.color);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ax, ay, 20, 0, TAU);
+    ctx.clip();
+    if (av) ctx.drawImage(av, ax - 20, ay - 20, 40, 40);
+    else disc(ctx, ax, ay, 20, "#1e293b");
+    ctx.restore();
+  }
+  const ownerName = duo ? team.name : isl.holderName ?? "?";
   ctx.fillStyle = "#f8fafc";
-  fitText(ctx, isl.holderName ?? "?", rw - 60, 21, "CardBold");
-  ctx.fillText(isl.holderName ?? "?", rx + 54, ay - 3);
-  ctx.font = "14px CardText";
+  fitText(ctx, ownerName, rw - 60, 21, "CardBold");
+  ctx.fillText(ownerName, rx + 54, ay - 3);
+  const sub = `${duo ? `${team.members.map((m) => pseudo(m)).join(" & ")} · ` : ""}depuis ${fmtHeld(Date.now() - isl.since)} · ${isl.earned} poussières`;
+  ctx.font = `${fitText(ctx, sub, x + w - rx - 80, 14, "CardText")}px CardText`;
   ctx.fillStyle = "#94a3b8";
-  ctx.fillText(`depuis ${fmtHeld(Date.now() - isl.since)} · ${isl.earned} poussières gagnées`, rx + 54, ay + 18);
+  ctx.fillText(sub, rx + 54, ay + 18);
   // défenseurs
   const fs_ = islandDefenders(id);
   for (const [k, f] of fs_.entries()) {
@@ -412,23 +430,27 @@ const ISLAND_RULES = () =>
         `⏳ **Usure** : après ${ISLAND_WEAR_AFTER} h de garde, la défense perd ${Math.round(ISLAND_WEAR_RATE * 100)} % de PV max par heure (jusqu'à -${Math.round(ISLAND_WEAR_MAX * 100)} %). L'île finit toujours par changer de mains !\n` +
         `🔒 Les cartes qui défendent ne peuvent être ni vendues ni échangées. Après une défaite, attendez ${ISLAND_COOLDOWN / MINUTE} min avant de réattaquer l'île.\n` +
         `🛡️ **Bouclier de conquête** : après chaque prise, l'île est protégée ${ISLAND_PROTECT / MINUTE} min, et l'ancien gardien doit attendre ${ISLAND_REVENGE / HOUR} h avant de tenter de la reprendre.\n` +
+        "🤝 **Duos** : si un membre d'une équipe garde l'île, elle est à l'équipe : son coéquipier touche les mêmes gains, et les deux peuvent changer la défense (avec les cartes de l'un et de l'autre), la soigner ou la quitter.\n" +
         "🔁 Le gardien peut changer sa défense (les cartes ajoutées arrivent au niveau de PV le plus bas de l'équipe) ou quitter l'île : ses cartes redeviennent libres."
     );
 function placeOptions(userId, id) {
-  const def = ISLANDS[id], seen = new Set(), mine = islandsState()[id].holder === userId ? islandsState()[id].team.map((d) => d.key) : [];
-  return ownedKeys(userId)
-    .map(([k]) => k)
-    .sort((a, b) => fighterPower(b) - fighterPower(a))
-    .filter((k) => {
-      const cid = k.replace("*", "");
+  const def = ISLANDS[id], isl = islandsState()[id], seen = new Set(), held = islandOf(userId) === id;
+  const current = held ? isl.team.map((d) => `${d.owner ?? isl.holder}|${d.key}`) : [];
+  // les deux membres du duo mettent leurs cartes en commun
+  const owners = held ? islandMates(isl.holder) : [userId];
+  return owners
+    .flatMap((owner) => ownedKeys(owner).map(([k]) => ({ owner, k })))
+    .sort((a, b) => fighterPower(b.k) - fighterPower(a.k))
+    .filter(({ owner, k }) => {
+      const cid = `${owner}|${k.replace("*", "")}`;
       if (seen.has(cid)) return false;
       seen.add(cid);
       return true;
     })
     .slice(0, 25)
-    .map((k) => {
-      const f = fighter(k), bonus = f.series === def.series;
-      return { label: `${keyLabel(k)}`.slice(0, 100), value: k, emoji: RARITIES[f.card.rarity].emoji, description: `${f.maxHp} PV · attaque ${f.atk}${bonus ? " · bonus de l'île +10 %" : ""}`.slice(0, 100), default: mine.includes(k) };
+    .map(({ owner, k }) => {
+      const f = fighter(k), bonus = f.series === def.series, theirs = owner !== userId;
+      return { label: `${keyLabel(k)}${theirs ? ` (de ${pseudo(owner)})` : ""}`.slice(0, 100), value: `${owner}|${k}`, emoji: RARITIES[f.card.rarity].emoji, description: `${f.maxHp} PV · attaque ${f.atk}${bonus ? " · bonus de l'île +10 %" : ""}`.slice(0, 100), default: current.includes(`${owner}|${k}`) };
     });
 }
 function placeRow(userId, id, placeholder) {
@@ -545,7 +567,7 @@ async function islandBattleOver(client, b, winner) {
     isl.cooldown[attacker.id] = Date.now();
     load().dust[isl.holder] = (load().dust[isl.holder] ?? 0) + ISLAND_DEFENSE_DUST;
     save();
-    await islandNotice(`🛡️ La défense de **${isl.holderName}** repousse **${attacker.name}** sur l'**${def.name}** (+${ISLAND_DEFENSE_DUST} ✨ pour le gardien).`);
+    await islandNotice(`🛡️ La défense de **${islandOwnerName(isl)}** repousse **${attacker.name}** sur l'**${def.name}** (+${ISLAND_DEFENSE_DUST} ✨ pour le gardien).`);
   }
 }
 {
@@ -609,7 +631,7 @@ async function handleIslandInteraction(interaction, client) {
   const go = /^carte_ile_go_(\w+)$/.exec(id);
   if (go && ISLANDS[go[1]]) {
     const isl = islandsState()[go[1]], def = ISLANDS[go[1]];
-    if (isl.holder === userId) {
+    if (islandOf(userId) === go[1]) {
       await interaction.reply(myIslandPayload(userId));
       return true;
     }
@@ -660,22 +682,26 @@ async function handleIslandInteraction(interaction, client) {
     await interaction.deferReply({ ephemeral: true });
     islandFights.set(go[1], "?");
     const holderUser = await client.users.fetch(isl.holder).catch(() => client.user);
-    const b = await startBattle(client, { user: interaction.user, name }, { user: holderUser, name: `${def.emoji} ${def.short} · ${isl.holderName}`, isAI: true }, { island: go[1], aiLevel: ISLAND_AI, aiLabel: `Défense de l'${def.name}` });
+    const b = await startBattle(client, { user: interaction.user, name }, { user: holderUser, name: `${def.emoji} ${def.short} · ${islandOwnerName(isl)}`, isAI: true }, { island: go[1], aiLevel: ISLAND_AI, aiLabel: `Défense de l'${def.name}` });
     if (b) islandFights.set(go[1], b.id);
     else islandFights.delete(go[1]);
     islandsDirty = true;
-    await interaction.editReply({ content: b ? `⚔️ Attaque de l'**${def.name}** : ${b.message.url}\nMettez toutes les cartes de **${isl.holderName}** K.O. pour prendre l'île !` : "❌ Impossible de lancer le combat." });
+    await interaction.editReply({ content: b ? `⚔️ Attaque de l'**${def.name}** : ${b.message.url}\nMettez toutes les cartes de **${islandOwnerName(isl)}** K.O. pour prendre l'île !` : "❌ Impossible de lancer le combat." });
     return true;
   }
   const place = /^carte_ile_place_(\w+)$/.exec(id);
   if (place && ISLANDS[place[1]]) {
     const isl = islandsState()[place[1]], def = ISLANDS[place[1]];
-    const keys = [...new Set(interaction.values)].filter((k) => (load().inv[userId]?.[k] ?? 0) > 0).slice(0, 3);
-    if (!keys.length) {
+    const picks = [...new Set(interaction.values)]
+      .map((v) => (v.includes("|") ? v.split("|") : [userId, v]))
+      .filter(([owner, k]) => (owner === userId || islandMates(isl.holder).includes(owner)) && (load().inv[owner]?.[k] ?? 0) > 0)
+      .slice(0, 3);
+    const keys = picks.filter(([owner]) => owner === userId).map(([, k]) => k);
+    if (!picks.length) {
       await interaction.update({ content: "❌ Vous ne possédez plus ces cartes.", embeds: [], components: [] });
       return true;
     }
-    if (isl.holder === userId) {
+    if (islandOf(userId) === place[1]) {
       if (islandFights.has(place[1])) {
         await interaction.update({ content: "⚔️ Votre île est attaquée : vous changerez la défense après le combat.", embeds: [], components: [] });
         return true;
@@ -683,7 +709,7 @@ async function handleIslandInteraction(interaction, client) {
       // les cartes gardées conservent leurs PV ; les nouvelles arrivent au niveau le plus bas de l'équipe
       settleIsland(isl);
       const low = Math.min(...isl.team.map((d) => d.frac));
-      isl.team = keys.map((key) => isl.team.find((d) => d.key === key) ?? { key, frac: low });
+      isl.team = picks.map(([owner, key]) => isl.team.find((d) => d.key === key && (d.owner ?? isl.holder) === owner) ?? { key, frac: low, owner });
       save();
       islandsDirty = true;
       await interaction.update(myIslandPayload(userId));

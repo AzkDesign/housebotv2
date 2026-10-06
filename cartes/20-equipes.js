@@ -5,7 +5,7 @@
 const TEAM_MAX = 2;
 const TEAM_INVITE_MINUTES = 10;
 const TEAM_GIFTS_PER_DAY = 5;
-const TEAM_ISLAND_SHARE = 0.5; // le coéquipier du gardien de l'île touche la moitié de ses gains
+const TEAM_ISLAND_SHARE = 1; // le coéquipier du gardien de l'île touche autant que lui
 // XP d'équipe gagnée à chaque action d'un membre
 const TEAM_XP = { packs: 5, wins: 15, trades: 5, wild: 10, quests: 10, islands: 30, sales: 5 };
 const TEAM_RANKS = ["Recrues", "Apprentis", "Complices", "Aguerris", "Vétérans", "Élite", "Champions", "Maîtres", "Héros", "Légendes"];
@@ -135,7 +135,8 @@ function teamActivity(userId, key, n) {
     const go = /^carte_ile_go_(\w+)$/.exec(interaction.customId ?? "");
     const holder = go ? islandsState()[go[1]]?.holder : null;
     if (holder && holder !== interaction.user.id && partnerOf(interaction.user.id) === holder) {
-      await interaction.reply({ content: `🛡️ L'île est gardée par votre coéquipier : vous touchez déjà **${Math.round(TEAM_ISLAND_SHARE * 100)} %** de ses gains !`, ephemeral: true });
+      // c'est l'île de l'équipe : on ouvre sa gestion
+      await interaction.reply(myIslandPayload(interaction.user.id));
       return true;
     }
     return island(interaction, client);
@@ -848,4 +849,19 @@ async function handleTeamInteraction(interaction, client) {
     return true;
   }
   return false;
+}
+{
+  // un membre qui quitte son équipe reprend ses cartes posées sur l'île du duo
+  const leave = leaveTeam;
+  leaveTeam = (userId) => {
+    const id = islandOf(userId), out = leave(userId);
+    const isl = id ? islandsState()[id] : null;
+    // le duo est séparé : chacun ne garde sur l'île que les cartes du gardien
+    if (isl) {
+      isl.team = isl.team.filter((d) => (d.owner ?? isl.holder) === isl.holder);
+      if (!isl.team.length) isl.team = bestTeam(isl.holder).map((key) => ({ key, frac: 1, owner: isl.holder }));
+      islandsDirty = true;
+    }
+    return out;
+  };
 }
