@@ -452,6 +452,55 @@ async function storyDuelPayload(userId) {
   };
 }
 
+// --- Le salon du Mode Histoire ---
+async function refreshStoryPanel() {
+  const ch = chan("histoire");
+  if (!ch || ch === channelRef) return;
+  const st = load();
+  const saves = Object.values(st.story ?? {});
+  const done = (n) => saves.filter((sv) => sv.chapters?.includes(n)).length;
+  const last = Math.max(...Object.keys(STORY_CHAPTERS).map(Number));
+  const file = new AttachmentBuilder(await (await drawStoryCover()).encode("jpeg", 86), { name: "histoire.jpg" });
+  const payload = {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xe9c46a)
+        .setTitle("📖 Les Secrets de la Maison")
+        .setDescription(
+          "*Paris, une nuit de pluie. La Maison vous ouvre ses portes — une lettre signée du Fondateur. Le soir même, il disparaît. Il ne reste qu'un jeu de cartes… et vous.*\n\n" +
+            "🔀 **Vos choix changent l'histoire** : alliés, ennemis, secrets, fins différentes.\n" +
+            "🎲 **Épreuves** avec vos cartes · ⚔️ **Duels** · 🧩 **Énigmes** cachées dans le texte\n" +
+            `🎟️ **${STORY_TICKETS} épisodes par jour** · 🃏 **${Object.keys(STORY_CARDS).length} cartes exclusives** à collectionner\n\n` +
+            Object.entries(STORY_CHAPTERS).map(([n, c]) => `**Chapitre ${ROMAN[n]}** — ${c.title} · ${done(Number(n))} enquêteur${done(Number(n)) > 1 ? "s l'ont" : " l'a"} terminé`).join("\n") +
+            `\n*Chapitre ${ROMAN[last + 1]} : bientôt…*\n\n` +
+            "Votre lecture est **privée** : vous seul voyez votre livre. *C'est une fiction : ses personnages sont inventés et vos choix ne changent rien aux vraies institutions de la Maison.*"
+        )
+        .setImage("attachment://histoire.jpg")
+        .setFooter({ text: `👥 ${saves.filter((sv) => sv.scene).length} enquêteurs ont ouvert le livre` }),
+    ],
+    files: [file],
+    attachments: [],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("carte_hs").setLabel("Ouvrir le livre").setEmoji("📖").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("carte_hs_help").setLabel("Comment ça marche").setEmoji("❔").setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+  let msg = st.storyMessageId ? await ch.messages.fetch(st.storyMessageId).catch(() => null) : null;
+  if (msg && !(await msg.edit(payload).catch(() => null))) {
+    await msg.delete().catch(() => null);
+    msg = null;
+  }
+  if (!msg) {
+    msg = await ch.send(payload).catch(() => null);
+    if (msg) {
+      st.storyMessageId = msg.id;
+      save();
+    }
+  }
+}
+
 // --- Interactions ---
 async function handleStoryInteraction(interaction, client) {
   const isCmd = interaction.isChatInputCommand?.() && interaction.commandName === "histoire";
@@ -471,6 +520,10 @@ async function handleStoryInteraction(interaction, client) {
   };
   if (isCmd || id === "carte_hs") {
     await show(sv.pending ? storyNoTicketPayload(userId) : sv.scene ? storyScenePayload(userId, name) : storyCoverPayload(userId), true);
+    return true;
+  }
+  if (id === "carte_hs_help") {
+    await interaction.reply({ ephemeral: true, embeds: [new EmbedBuilder().setColor(0xe9c46a).setTitle("❔ Le Mode Histoire").setDescription(cardsGuideTopics().find(([k]) => k === "histoire")?.[3] ?? "")] });
     return true;
   }
   if (id === "carte_hs_start") {
