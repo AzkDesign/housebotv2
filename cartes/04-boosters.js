@@ -9,7 +9,7 @@ function pickRarity(weights, minRarity = null) {
 
 // Cartes d'une génération (les cartes d'entreprises et de membres sont dans toutes les générations)
 function genPool(gen) {
-  return boosterPool().filter((c) => c.id.startsWith("co_") || c.id.startsWith("mb_") || (c.gen ?? 1) === gen);
+  return boosterPool().filter((c) => c.id.startsWith("co_") || c.id.startsWith("mb_") || c.id.startsWith("duo_") || (c.gen ?? 1) === gen);
 }
 
 function drawOne(minRarity = null, weights = null, gen = CURRENT_GEN) {

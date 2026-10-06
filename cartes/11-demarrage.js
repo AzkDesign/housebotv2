@@ -40,6 +40,7 @@ async function setupCartes(client) {
   await refreshStoryPanel().catch((err) => console.error("Mode Histoire:", err.message));
   await refreshClashBoard().catch((err) => console.error("Clash:", err.message));
   await refreshTournament().catch((err) => console.error("Tournoi:", err.message));
+  await duoGrantTick(client).catch((err) => console.error("Duos:", err.message));
   sweepCardChannels(client).catch((err) => console.error("Ménage des salons:", err.message));
   publishCardsAnnouncement().catch((err) => console.error("Annonce des cartes:", err.message));
   // prépare les animations des boosters en arrière-plan : le premier acheteur n'attend pas
@@ -67,6 +68,7 @@ async function setupCartes(client) {
       tickStock();
       await clashLoop(client);
       await tournamentLoop(client);
+      await duoGrantTick(client).catch(() => null);
       if (new Date().getMinutes() % 10 === 8) rosterCheckCompanies();
       if (new Date().getMinutes() % 15 === 3) await sweepCardChannels(client).catch(() => null);
       if (islandsDirty || new Date().getMinutes() % 10 === 5) await refreshIslands().catch(() => null);
