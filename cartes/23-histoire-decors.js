@@ -1136,6 +1136,17 @@ function silhouetteDetails(ctx, who) {
     ctx.bezierCurveTo(70, 40, 62, 34, 70, 26);
     ctx.stroke();
     eyes(39);
+  } else if (who === "fondateur") {
+    for (const x of [45, 55]) {
+      glow(ctx, x, 38, 4, "#fde68a", 0.8);
+      disc(ctx, x, 38, 1, "#fffbeb");
+    }
+    ctx.strokeStyle = "rgba(253,230,138,0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(44, 47);
+    ctx.quadraticCurveTo(50, 52, 56, 47);
+    ctx.stroke();
   } else if (who === "ombre") {
     for (const x of [45, 55]) {
       glow(ctx, x, 38, 5, "#a78bfa", 0.9);

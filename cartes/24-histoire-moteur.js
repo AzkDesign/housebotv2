@@ -684,7 +684,7 @@ async function handleStoryInteraction(interaction, client) {
       return true;
     }
     const notes = [], S = storyCtx(userId, notes, name), c = sceneChoices(scene, S)[Number(idxText)];
-    const norm = (t) => String(t).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+    const norm = (t) => String(t).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9♥♣♦♠]/g, "");
     const answer = norm(interaction.fields.getTextInputValue("answer"));
     const tries = (sv.riddles[sceneId] = (sv.riddles[sceneId] ?? 0) + 1);
     if (c.riddle.answers.some((a) => norm(a) === answer)) {
