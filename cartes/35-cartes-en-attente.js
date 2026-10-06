@@ -24,18 +24,7 @@ function freezeCardRoster() {
   }
   save();
 }
-function notifyPending(kind, name) {
-  require("./logs")
-    .sendLogEmbed(
-      "staff",
-      new EmbedBuilder()
-        .setColor(0x64748b)
-        .setTitle("🃏 Carte en attente")
-        .setDescription(`**${name}** (${kind}) n'a **pas** été ajouté aux cartes : il est mis de côté pour la prochaine génération.\nPour l'ajouter maintenant : \`/generation action:Cartes en attente\`.`)
-        .setTimestamp()
-    )
-    .catch(() => null);
-}
+// aucun log : les cartes de la prochaine génération restent une surprise (seul /generation les montre aux gérants)
 // nouveau membre avec le rôle : mis en attente au lieu de devenir une carte
 function rosterNoteMember(id, name) {
   const r = cardRoster();
@@ -44,7 +33,6 @@ function rosterNoteMember(id, name) {
   if (p.members[id]) return;
   p.members[id] = { name, at: Date.now() };
   save();
-  notifyPending("membre", name);
 }
 function rosterCheckCompanies() {
   const r = cardRoster(), list = activeCompanyList();
@@ -55,7 +43,6 @@ function rosterCheckCompanies() {
     if (r.companies.includes(id) || p.companies[id]) continue;
     p.companies[id] = { name: co.name, at: Date.now() };
     save();
-    notifyPending("entreprise", co.name);
   }
 }
 {
@@ -131,9 +118,6 @@ async function handleRosterInteraction(interaction) {
   }
   save();
   panelDirty = true;
-  require("./logs")
-    .sendLogEmbed("staff", new EmbedBuilder().setColor(0x22c55e).setTitle("🃏 Cartes ajoutées").setDescription(`**${pseudo(interaction.user.id)}** ajoute aux cartes : ${added.map((x) => `**${x}**`).join(", ")}`).setTimestamp())
-    .catch(() => null);
   const next = pendingPayload();
   await interaction.update({ ...next, content: `✅ Ajouté aux cartes : ${added.map((x) => `**${x}**`).join(", ")}.` });
   return true;
