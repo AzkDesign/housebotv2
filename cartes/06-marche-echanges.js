@@ -425,6 +425,7 @@ function sellPickerPayload(userId, series = "all") {
 // --- Échanges : rendu de la table d'échange ---
 const TRADE_STATUS = {
   draft: ["BROUILLON — EN PRÉPARATION", "#2563eb"],
+  live: ["EN DIRECT — CHACUN CHOISIT SES CARTES", "#2563eb"],
   pending: ["EN ATTENTE DE RÉPONSE", "#d97706"],
   done: ["ÉCHANGE CONCLU", "#16a34a"],
   refused: ["ÉCHANGE REFUSÉ", "#dc2626"],
@@ -464,16 +465,17 @@ async function drawTrade(tr) {
   ctx.fillStyle = "#fde68a";
   ctx.shadowColor = "rgba(0,0,0,0.7)";
   ctx.shadowBlur = 8;
-  spaced(ctx, "PROPOSITION D'ÉCHANGE", W / 2, 64, 4);
+  spaced(ctx, tr.live ? "TABLE D'ÉCHANGE" : "PROPOSITION D'ÉCHANGE", W / 2, 64, 4);
   ctx.shadowBlur = 0;
-  const [statusLabel, statusColor] = TRADE_STATUS[tr.status] ?? TRADE_STATUS.pending;
+  let [statusLabel, statusColor] = TRADE_STATUS[tr.status] ?? TRADE_STATUS.pending;
+  if (tr.status === "live" && (tr.ready?.from || tr.ready?.to)) [statusLabel, statusColor] = [`${tr.ready.from ? tr.fromName : tr.toName} a validé — en attente de l'autre`.toUpperCase().slice(0, 60), "#16a34a"];
   ctx.font = "14px CardBold";
   pill(ctx, W / 2, 98, statusLabel, statusColor, "#ffffff");
   ctx.textAlign = "left";
 
   const sides = [
-    { name: tr.fromName, avatar: tr.fromAvatar, keys: tr.give, money: tr.giveMoney, verb: "donne" },
-    { name: tr.toName, avatar: tr.toAvatar, keys: tr.take, money: tr.takeMoney, verb: tr.status === "done" ? "a donné" : "donnerait" },
+    { name: tr.fromName, avatar: tr.fromAvatar, keys: tr.give, money: tr.giveMoney, verb: tr.live ? (tr.status === "done" ? "a donné" : "propose") : "donne", ready: tr.ready?.from },
+    { name: tr.toName, avatar: tr.toAvatar, keys: tr.take, money: tr.takeMoney, verb: tr.status === "done" ? "a donné" : tr.live ? "propose" : "donnerait", ready: tr.ready?.to },
   ];
   const values = sides.map((sd) => sideValue(sd.keys, sd.money));
   for (const [i, sd] of sides.entries()) {
@@ -502,12 +504,18 @@ async function drawTrade(tr) {
     if (av) ctx.drawImage(av, px + 23, py + 23, 58, 58);
     else disc(ctx, px + 52, py + 52, 29, "#3f3f46");
     ctx.restore();
-    ctx.font = `${fitText(ctx, sd.name ?? "?", pw - 130, 30, "CardTitle")}px CardTitle`;
+    ctx.font = `${fitText(ctx, sd.name ?? "?", pw - (tr.status === "live" ? 270 : 130), 30, "CardTitle")}px CardTitle`;
     ctx.fillStyle = "#ffffff";
     ctx.fillText(sd.name ?? "?", px + 100, py + 54);
     ctx.font = "17px CardItalic";
     ctx.fillStyle = "#ecc979";
     ctx.fillText(sd.verb, px + 102, py + 80);
+    if (tr.status === "live") {
+      ctx.font = "13px CardBold";
+      ctx.textAlign = "center";
+      pill(ctx, px + pw - 70, py + 40, sd.ready ? "VALIDÉ" : "EN RÉFLEXION", sd.ready ? "#16a34a" : "#52525b", "#ffffff");
+      ctx.textAlign = "left";
+    }
     // cartes en éventail
     const n = sd.keys.length, cw = 150, ch = 210, area = pw - 60;
     const step = n > 1 ? Math.min(cw + 16, (area - cw) / (n - 1)) : 0, total = n > 1 ? step * (n - 1) + cw : cw;
@@ -599,6 +607,7 @@ async function drawTrade(tr) {
   ctx.fillStyle = "#a08a7a";
   ctx.fillText(sides[0].name ?? "", gx - 10 - ctx.measureText(sides[0].name ?? "").width / 2, gy + 10);
   ctx.fillText(sides[1].name ?? "", gx + gw + 10 + ctx.measureText(sides[1].name ?? "").width / 2, gy + 10);
+  if (tr.status === "live") ctx.fillText("Chacun ajoute ses cartes · toute modification annule les validations · l'échange se fait quand les deux ont validé", W / 2, H - 24);
   if (tr.status === "pending") {
     const left = Math.max(0, tr.at + TRADE_HOURS * 3600000 - Date.now());
     ctx.fillText(`Seul(e) ${sides[1].name} peut accepter · expire dans ${Math.floor(left / 3600000)} h ${Math.floor((left % 3600000) / 60000)} min`, W / 2, H - 24);

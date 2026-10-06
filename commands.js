@@ -131,7 +131,7 @@ async function registerSlashCommands(client, token) {
       .toJSON(),
     new SlashCommandBuilder()
       .setName("echange")
-      .setDescription("Proposer un échange de cartes (et d'argent) à un membre")
+      .setDescription("Inviter un membre à échanger : vous posez vos cartes ensemble, en direct")
       .addUserOption((o) => o.setName("membre").setDescription("Le membre avec qui échanger").setRequired(true))
       .toJSON(),
     new SlashCommandBuilder()

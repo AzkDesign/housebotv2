@@ -1,6 +1,7 @@
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
   if (await handleIslandInteraction(interaction, client)) return true;
+  if (await handleLiveTradeInteraction(interaction, client)) return true;
   if (interaction.isChatInputCommand?.() && interaction.commandName === "succes") {
     await interaction.reply(achievementsPayload(interaction.user.id));
     return true;

@@ -177,7 +177,7 @@ function oceanBackground(W, H) {
   oceanCache = c;
   return c;
 }
-function pill(ctx, x, y, text, color, align = "center", size = 14) {
+function islandPill(ctx, x, y, text, color, align = "center", size = 14) {
   ctx.font = `${size}px CardBold`;
   const w = ctx.measureText(text).width + 22, h = size + 12;
   const left = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
@@ -235,7 +235,7 @@ async function drawIslandPanel(ctx, id, x, y, w, h) {
   ctx.shadowOffsetY = 8;
   if (art) ctx.drawImage(art, ix - 78, iy - 92, 156, 156);
   ctx.restore();
-  pill(ctx, ix, y + h - 34, `BONUS ${SERIES_LABELS[def.series].replace(/^\S+ /, "").toUpperCase().replace(/^(LE|LA|LES) /, "")} +10 %`, def.color, "center", 13);
+  islandPill(ctx, ix, y + h - 34, `BONUS ${SERIES_LABELS[def.series].replace(/^\S+ /, "").toUpperCase().replace(/^(LE|LA|LES) /, "")} +10 %`, def.color, "center", 13);
   // nom et état
   const rx = x + 222, rw = w - 222 - 22;
   ctx.textAlign = "left";
@@ -317,11 +317,11 @@ async function drawIslandPanel(ctx, id, x, y, w, h) {
   let by = y + 28;
   const right = x + w - 18;
   if (fight) {
-    pill(ctx, right, by, "ATTAQUE EN COURS", "#f87171", "right", 13);
+    islandPill(ctx, right, by, "ATTAQUE EN COURS", "#f87171", "right", 13);
     by += 30;
   }
   const wear = islandWear(isl);
-  if (wear > 0) pill(ctx, right, by, `USURE -${Math.round(wear * 100)} %`, "#fbbf24", "right", 12);
+  if (wear > 0) islandPill(ctx, right, by, `USURE -${Math.round(wear * 100)} %`, "#fbbf24", "right", 12);
   ctx.font = "13px CardText";
   ctx.fillStyle = "#64748b";
   ctx.textAlign = "right";

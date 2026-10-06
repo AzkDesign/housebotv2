@@ -7,7 +7,7 @@ const CARD_CHANNELS = [
   ["annonces", "🌟・annonces-cartes", "🌟 Carte de la semaine, grosses ouvertures, séries complétées, succès et nouvelles générations"],
   ["sauvages", "✋・cartes-sauvages", "✋ Des cartes sauvages apparaissent ici : le premier qui clique l'attrape !"],
   ["arene", "⚔️・arène", "⚔️ Défis, combats en direct (un fil par combat), défi de la semaine et fin de saison"],
-  ["echanges", "🔄・échanges", "🔄 Les propositions d'échange entre membres"],
+  ["echanges", "🔄・échanges", "🔄 Invitations et tables d'échange en direct : chacun pose ses cartes, puis les deux valident"],
   ["marche", "🏪・marché-des-cartes", "🏪 Les grosses ventes du marché (le marché s'ouvre avec /marche)"],
   ["iles", "🏝️・île", "🏝️ L'île de la Maison : gardez-la avec vos cartes (10 ✨ par heure)… et défendez-la contre les autres membres"],
   ["classements", "🏆・classements-cartes", "🏆 Classements en direct : collection, holos, shiny, arène et succès"],
