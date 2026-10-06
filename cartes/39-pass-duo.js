@@ -420,14 +420,25 @@ async function drawPassBoard() {
   ctx.textAlign = "left";
   ctx.fillText(`Fin de la saison dans ${days} jour${days > 1 ? "s" : ""} · 30 paliers · Premium et Pass Duo`, 64, 200);
   // classements
-  const players = Object.entries(st.pass ?? {})
-    .filter(([, p]) => p.season === season && p.xp > 0)
-    .sort((a, b) => b[1].xp - a[1].xp)
-    .slice(0, 6);
-  const duos = Object.entries(st.duoPass ?? {})
-    .filter(([id, d]) => d.season === season && d.xp > 0 && st.teams?.[id])
-    .sort((a, b) => b[1].xp - a[1].xp)
-    .slice(0, 4);
+  const ROWS = 6, TOP = 5;
+  const zero = { xp: 0, premium: false };
+  const playerIds = new Set([...Object.keys(st.inv ?? {}).filter((id) => /^\d+$/.test(id) && Object.values(st.inv[id]).some((n) => n > 0)), ...Object.keys(st.pass ?? {}).filter((id) => /^\d+$/.test(id))]);
+  const allPlayers = [...playerIds]
+    .map((id) => [id, st.pass?.[id]?.season === season ? st.pass[id] : zero])
+    .sort((a, b) => b[1].xp - a[1].xp || pseudo(a[0]).localeCompare(pseudo(b[0])));
+  const allDuos = Object.values(st.teams ?? {})
+    .filter((t) => t.members?.length === 2)
+    .map((t) => [t.id, st.duoPass?.[t.id]?.season === season ? st.duoPass[t.id] : zero])
+    .sort((a, b) => b[1].xp - a[1].xp || st.teams[a[0]].name.localeCompare(st.teams[b[0]].name));
+  const players = allPlayers.length > ROWS ? allPlayers.slice(0, TOP) : allPlayers;
+  const duos = allDuos.length > ROWS ? allDuos.slice(0, TOP) : allDuos;
+  const more = (n, list, x, y, word) => {
+    if (n <= list.length) return;
+    ctx.textAlign = "left";
+    ctx.font = "16px CardItalic";
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.fillText(`… et ${n - list.length} autre${n - list.length > 1 ? "s" : ""} ${word}${n - list.length > 1 ? "s" : ""}`, x, y);
+  };
   const panelBox = (x, y, w, h, title) => {
     roundRect(ctx, x, y, w, h, 18);
     ctx.fillStyle = "rgba(8,4,14,0.72)";
@@ -440,12 +451,13 @@ async function drawPassBoard() {
     ctx.textAlign = "left";
     spacedLeft(ctx, title, x + 24, y + 36, 3);
   };
-  panelBox(60, 236, 560, 360, "LES PLUS AVANCÉS");
+  panelBox(60, 236, 560, 372, allPlayers.length > ROWS ? "LE TOP 5" : "LE CLASSEMENT");
   if (!players.length) {
     ctx.font = "18px CardItalic";
     ctx.fillStyle = "rgba(255,255,255,0.6)";
     ctx.fillText("Personne n'a encore commencé… soyez le premier !", 84, 300);
   }
+  more(allPlayers.length, players, 124, 580, "joueur");
   players.forEach(([id, p], i) => {
     const y = 290 + i * 50, tier = passTier(p);
     ctx.font = "22px CardTitle";
@@ -467,27 +479,28 @@ async function drawPassBoard() {
     ctx.fillStyle = th ? "#ef4444" : "#a78bfa";
     ctx.fill();
   });
-  panelBox(660, 236, 560, 360, "PASS DUO : LES ÉQUIPES");
+  panelBox(660, 236, 560, 372, allDuos.length > ROWS ? "PASS DUO : LE TOP 5" : "PASS DUO : LES ÉQUIPES");
   if (!duos.length) {
     ctx.font = "18px CardItalic";
     ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fillText("Aucun duo en route pour l'instant.", 684, 300);
+    ctx.fillText("Aucune équipe de deux pour l'instant.", 684, 300);
   }
+  more(allDuos.length, duos, 756, 580, "équipe");
   for (const [i, [id, d]] of duos.entries()) {
-    const team = st.teams[id], y = 280 + i * 76;
-    ctx.drawImage(await drawTeamCrest(team.emblem), 680, y - 6, 62, 62);
+    const team = st.teams[id], y = 286 + i * 50;
+    ctx.drawImage(await drawTeamCrest(team.emblem), 684, y - 4, 46, 46);
     ctx.textAlign = "left";
-    ctx.font = `${fitText(ctx, team.name, 300, 22, "CardTitle")}px CardTitle`;
+    ctx.font = `${fitText(ctx, team.name, 280, 20, "CardTitle")}px CardTitle`;
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(team.name, 756, y + 18);
-    ctx.font = "14px CardText";
+    ctx.fillText(team.name, 744, y + 14);
+    ctx.font = "13px CardText";
     ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.fillText(team.members.map((m) => pseudo(m)).join(" & "), 756, y + 40);
+    ctx.fillText(team.members.map((m) => pseudo(m)).join(" & "), 744, y + 34);
     ctx.textAlign = "right";
     ctx.font = "20px CardTitle";
     ctx.fillStyle = emblemOf(team)[2];
-    ctx.fillText(`palier ${duoPassTier(d)}`, 1196, y + 22);
-    if (d.premium) star5(ctx, 1186, y + 40, 7, "#fbbf24");
+    ctx.fillText(`palier ${duoPassTier(d)}`, 1196, y + 18);
+    if (d.premium) star5(ctx, 1186, y + 34, 7, "#fbbf24");
   }
   return c;
 }
@@ -537,5 +550,5 @@ async function refreshPassBoard() {
 async function passBoardLoop() {
   // les classements bougent souvent : au plus toutes les 10 minutes, ou à minuit (nouvelle saison)
   const min = new Date().getMinutes();
-  if ((passBoardDirty && min % 10 === 6) || (min === 1 && new Date().getHours() === 0)) await refreshPassBoard().catch(() => null);
+  if ((passBoardDirty && min % 5 === 1) || (min === 1 && new Date().getHours() === 0)) await refreshPassBoard().catch(() => null);
 }
