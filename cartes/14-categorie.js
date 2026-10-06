@@ -5,17 +5,22 @@ const CARD_RULES_ROLE_ID = "1509975426179797012"; // membres ayant accepté le r
 const CARD_CHANNELS = [
   ["panel", "🃏・cartes-de-la-maison", "🃏 Le salon principal : boosters, booster gratuit du jour, inventaire, album, codex, quêtes…"],
   ["annonces", "🌟・annonces-cartes", "🌟 Carte de la semaine, grosses ouvertures, séries complétées, succès et nouvelles générations"],
-  ["sauvages", "✋・cartes-sauvages", "✋ Des cartes sauvages apparaissent ici : le premier qui clique l'attrape !"],
   ["arene", "⚔️・arène", "⚔️ Défis, combats en direct (un fil par combat), défi de la semaine et fin de saison"],
-  ["echanges", "🔄・échanges", "🔄 Invitations et tables d'échange en direct : chacun pose ses cartes, puis les deux valident"],
-  ["marche", "🏪・marché-des-cartes", "🏪 Les grosses ventes du marché (le marché s'ouvre avec /marche)"],
+  ["echanges", "🔄・échanges-et-marché", "🔄 Tables d'échange en direct (chacun pose ses cartes, puis les deux valident) et grosses ventes du marché"],
   ["iles", "🏝️・île", "🏝️ L'île de la Maison : gardez-la avec vos cartes (10 ✨ par heure)… et défendez-la contre les autres membres"],
   ["equipes", "🛡️・équipes", "🛡️ Les duos de joueurs : créez votre équipe, invitez un partenaire, montez de niveau ensemble"],
   ["classements", "🏆・classements-cartes", "🏆 Classements en direct : collection, holos, shiny, arène et succès"],
-  ["discussion", "💬・discussion-cartes", "💬 Parlez cartes, montrez vos plus belles prises et organisez vos échanges"],
+  ["discussion", "💬・discussion-cartes", "💬 Parlez cartes, montrez vos plus belles prises… et attrapez les cartes sauvages qui apparaissent ici !"],
 ];
 const cardChannels = {};
-const chan = (key) => cardChannels[key] ?? channelRef;
+// anciens salons regroupés : les cartes sauvages vont dans la discussion, les grosses ventes avec les échanges
+const CHANNEL_ALIASES = { sauvages: "discussion", marche: "echanges" };
+const chan = (key) => cardChannels[CHANNEL_ALIASES[key] ?? key] ?? channelRef;
+// efface les messages « X a commencé un fil » que Discord ajoute à chaque combat
+async function cleanThreadNotices(channel) {
+  const recent = await channel?.messages?.fetch({ limit: 50 }).catch(() => null);
+  for (const m of recent?.values() ?? []) if (m.type === 18) await m.delete().catch(() => null);
+}
 
 async function setupCardCategory(client, guild, annonces) {
   const { ChannelType } = require("discord.js");
@@ -35,6 +40,14 @@ async function setupCardCategory(client, guild, annonces) {
   // juste sous la catégorie des annonces
   const annCat = annonces?.parent;
   if (annCat && category.rawPosition !== annCat.rawPosition + 1) await category.setPosition(annCat.rawPosition + 1).catch(() => null);
+  // les salons regroupés sont supprimés (ils ne contenaient que des messages du bot)
+  for (const old of Object.keys(CHANNEL_ALIASES)) {
+    const id = st.cardChannels[old];
+    if (!id) continue;
+    const ch = await guild.channels.fetch(id).catch(() => null);
+    if (ch) await ch.delete("Salon des cartes regroupé").catch(() => null);
+    delete st.cardChannels[old];
+  }
   for (const [i, [key, name, topic]] of CARD_CHANNELS.entries()) {
     const overwrites = key === "discussion" ? open : readOnly;
     let ch = key === "panel" ? channelRef : await findOrCreateChannel(guild, { id: st.cardChannels[key], name, parent: category.id, permissionOverwrites: overwrites });
@@ -54,4 +67,5 @@ async function setupCardCategory(client, guild, annonces) {
     cardChannels[key] = ch;
   }
   save();
+  cleanThreadNotices(cardChannels.arene).catch(() => null);
 }
