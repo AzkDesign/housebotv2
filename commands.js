@@ -26,6 +26,10 @@ async function registerSlashCommands(client, token) {
       )
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("deposit")
+      .setDescription("Déposer de l'argent sur votre solde (ticket vérifié par l'IRF)")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("solde")
       .setDescription("Voir combien d'argent vous avez")
       .toJSON(),

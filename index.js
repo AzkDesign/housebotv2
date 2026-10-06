@@ -69,6 +69,7 @@ const {
 const { registerSlashCommands } = require("./commands");
 const { handleClearCommand } = require("./clear");
 const { setupCasino, handleCasinoInteraction } = require("./casino");
+const { setupDepot, handleDepotInteraction } = require("./depot");
 const { setupIrfPanel, handleIrfInteraction } = require("./irf");
 const { setupAirbnb, handleAirbnbInteraction } = require("./airbnb");
 const { setupEntreprises, handleEntreprisesInteraction } = require("./entreprises");
@@ -557,6 +558,7 @@ client.once(Events.ClientReady, async () => {
   await step("missions", () => setupMissionPanel(client));
   await step("casino", () => setupCasino(client));
   await step("IRF", () => setupIrfPanel(client));
+  await step("dépôts", () => setupDepot());
   await step("Airbnb", () => setupAirbnb(client));
   await step("Entreprises", () => setupEntreprises(client));
   await step("Impôts", () => setupImpots(client));
@@ -607,6 +609,7 @@ async function onInteraction(interaction) {
   if (await handleEspacesInteraction(interaction)) return;
   if (await handleCasinoInteraction(interaction, client)) return;
   if (await handleIrfInteraction(interaction, client)) return;
+  if (await handleDepotInteraction(interaction, client)) return;
   if (await handleAirbnbInteraction(interaction, client)) return;
   if (await handleEntreprisesInteraction(interaction, client)) return;
   if (await handleImpotsInteraction(interaction, client)) return;
