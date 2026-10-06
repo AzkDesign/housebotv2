@@ -24,6 +24,22 @@ const { pseudo } = require("./noms");
 
 const ANNOUNCE_CHANNEL_ID = "1509983723892903966";
 const MEMBER_CARD_ROLE_ID = "1509983439968010401"; // tous les membres avec ce rôle ont automatiquement leur carte // le salon des cartes est rangé à côté des annonces
+// Pseudos « stylés » (𝕽𝖞𝖚𝖐, 𝐀𝐳𝐤, Ⓛⓘⓝⓐ, ʀʏᴜᴋ…) : les polices des images n'ont pas ces caractères.
+// Tout texte écrit dans une image est d'abord ramené à des lettres normales.
+const SMALL_CAPS = { ᴀ: "a", ʙ: "b", ᴄ: "c", ᴅ: "d", ᴇ: "e", ꜰ: "f", ɢ: "g", ʜ: "h", ɪ: "i", ᴊ: "j", ᴋ: "k", ʟ: "l", ᴍ: "m", ɴ: "n", ᴏ: "o", ᴘ: "p", ǫ: "q", ʀ: "r", ꜱ: "s", ᴛ: "t", ᴜ: "u", ᴠ: "v", ᴡ: "w", ʏ: "y", ᴢ: "z" };
+const plainLetters = (text) => String(text).normalize("NFKC").replace(/[ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢ]/g, (c) => SMALL_CAPS[c] ?? c);
+{
+  const proto = Object.getPrototypeOf(createCanvas(1, 1).getContext("2d"));
+  if (!proto.__plainLetters) {
+    proto.__plainLetters = true;
+    for (const fn of ["fillText", "strokeText", "measureText"]) {
+      const orig = proto[fn];
+      proto[fn] = function (text, ...rest) {
+        return orig.call(this, plainLetters(text), ...rest);
+      };
+    }
+  }
+}
 const STATE_FILE = require("./data").dataFile("cartes-state.json");
 const PANEL_TITLE = "🃏 Les Cartes de la Maison";
 
