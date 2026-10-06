@@ -79,6 +79,10 @@ async function registerSlashCommands(client, token) {
       .addUserOption((o) => o.setName("membre").setDescription("Voir la vitrine d'un autre membre"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("pass")
+      .setDescription("Votre pass de combat : paliers, récompenses, pass Premium")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("tournoi")
       .setDescription("Le tournoi du week-end : inscription, votre prochain match, le tableau")
       .toJSON(),

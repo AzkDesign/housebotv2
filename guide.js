@@ -186,7 +186,7 @@ function planPayloads(guild) {
 
 // Commandes : lues directement sur Discord, donc toujours à jour
 const COMMAND_GROUPS = [
-  ["🃏 Cartes de la Maison", ["inventaire", "album", "codex", "histoire", "clash", "tournoi", "succes", "vitrine", "equipe", "iles", "quetes", "marche", "echange", "combat", "invite", "arene", "aide-cartes"]],
+  ["🃏 Cartes de la Maison", ["inventaire", "album", "codex", "histoire", "clash", "tournoi", "pass", "succes", "vitrine", "equipe", "iles", "quetes", "marche", "echange", "combat", "invite", "arene", "aide-cartes"]],
   ["💶 Économie", ["solde", "deposit", "crédit", "achat", "mission"]],
   ["🤝 Communauté", ["profil", "niveau", "report"]],
   ["🛡️ Staff", ["argent", "clear", "carte-offrir", "generation"]],

@@ -688,3 +688,44 @@ async function drawDuoCard(card, holo = false, t = 0.37) {
   ctx.restore();
   return c;
 }
+
+// --- Dans « Mon équipe » : voir sa carte DUO ---
+{
+  const panel = myTeamPayload, handle = handleTeamInteraction;
+  myTeamPayload = async (userId) => {
+    const p = await panel(userId), team = teamOf(userId);
+    if (team?.members.length === 2) {
+      const row = p.components.at(-1);
+      const btn = new ButtonBuilder().setCustomId("carte_eq_duo").setLabel("Notre carte DUO").setEmoji("🤝").setStyle(ButtonStyle.Primary);
+      if (row.components.length < 5) row.addComponents(btn);
+      else p.components.push(new ActionRowBuilder().addComponents(btn));
+    }
+    return p;
+  };
+  handleTeamInteraction = async (interaction, client) => {
+    if (interaction.customId !== "carte_eq_duo") return handle(interaction, client);
+    const team = teamOf(interaction.user.id);
+    if (!team || team.members.length < 2) {
+      await interaction.reply({ content: "🤝 La carte DUO existe dès que votre équipe a **deux membres**.", ephemeral: true });
+      return true;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const card = duoCardOf(duoSnapshot(team)), inv = load().inv[interaction.user.id] ?? {};
+    const owned = (inv[card.id] ?? 0) + (inv[`${card.id}*`] ?? 0), lvl = teamLevel(team);
+    const gif = await animatedCard(card, Boolean(inv[`${card.id}*`]));
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(parseInt(emblemOf(team)[2].slice(1), 16))
+          .setTitle(`🤝 ${card.name} — carte DUO ${card.rarity === "mythique" ? "mythique" : "légendaire"}`)
+          .setDescription(
+            `${owned ? `✅ Vous l'avez dans votre collection${owned > 1 ? ` (×${owned})` : ""}.` : lvl >= DUO_GRANT_LEVEL ? "Elle vous a été offerte : regardez votre collection." : `🔒 Pas encore à vous : elle est offerte aux deux membres au **niveau ${DUO_GRANT_LEVEL}** de l'équipe (vous êtes niveau ${lvl}), ou à tirer dans les boosters.`}\n` +
+              `⚔️ Attaque : **${duoInfo(team.emblem).attack}** · Coup de duo : **${duoInfo(team.emblem).duo}**`
+          )
+          .setImage("attachment://duo.gif"),
+      ],
+      files: [new AttachmentBuilder(gif, { name: "duo.gif" })],
+    });
+    return true;
+  };
+}
