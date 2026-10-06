@@ -1431,7 +1431,9 @@ const RULES_EMBED = () =>
         `**Énergie** : +1 ⚡ par manche (max ${MAX_ENERGY}). **Critique** et **esquive** dépendent de la CHANCE.\n` +
         "**Types** : 🗼 Paris bat 🏢 Entreprises, qui battent 🏡 La Maison, qui bat 🗼 Paris (×1,25). Membres et Événements sont neutres.\n" +
         `**K.O.** : la carte suivante entre automatiquement. Le premier joueur sans carte perd. Sans réponse en ${ROUND_SECONDS} s, la carte se met en garde.\n\n` +
-        `**Classement** : points Elo, rangs Bronze → Argent → Or → Diamant → Légende. **Paris** des spectateurs ouverts pendant les ${BET_ROUNDS} premières manches (commission de ${Math.round(ARENA_FEE * 100)} %).`
+        "**Parties classées** : depuis le menu de l'Arène, le bot vous associe à un joueur en ligne de votre niveau. Ce sont les seules qui changent vos points (Elo). Les défis entre membres sont **amicaux**.\n" +
+        "**Boss de la semaine** : un boss commun à tout le serveur ; 3 essais par jour, les dégâts s'additionnent, et tous les participants sont récompensés quand il tombe.\n" +
+        `**Rangs** : Bronze → Argent → Or → Diamant → Légende. **Paris** des spectateurs ouverts pendant les ${BET_ROUNDS} premières manches (commission de ${Math.round(ARENA_FEE * 100)} %).`
     );
 
 // --- Déroulement ---
@@ -1449,10 +1451,11 @@ function escrow(b) {
 }
 async function startBattle(client, a, bUser, opts) {
   const id = Date.now().toString(36);
-  const ai = bUser.isAI && !opts.island ? aiLevelFor(a.user.id) : null;
+  const ai = bUser.isAI && !opts.island && !opts.boss ? aiLevelFor(a.user.id) : null;
   const players = [playerOf(a.user, a.name), playerOf(bUser.user, ai ? `La Maison · ${ai.name}` : bUser.name, bUser.isAI)];
   if (opts.island) players[1].id = `ile:${opts.island}`; // l'IA joue pour le gardien, sans toucher à ses propres combats
-  const b = { id, ai, island: opts.island ?? null, aiLevel: opts.aiLevel ?? null, aiLabel: opts.aiLabel ?? null, players, round: 0, phase: "team", mise: opts.mise ?? 0, bets: [], lastLines: [], history: [[], []], deadline: Date.now() + TEAM_SECONDS * 1000, startedAt: Date.now() };
+  if (opts.boss) players[1].id = `boss:${opts.boss}`;
+  const b = { id, ai, island: opts.island ?? null, boss: opts.boss ?? null, aiLevel: opts.aiLevel ?? null, aiLabel: opts.aiLabel ?? null, players, round: 0, phase: "team", mise: opts.mise ?? 0, bets: [], lastLines: [], history: [[], []], deadline: Date.now() + TEAM_SECONDS * 1000, startedAt: Date.now() };
   if (players[1].isAI) {
     players[1].ready = true;
   }
@@ -1638,7 +1641,8 @@ async function finishBattle(client, b, winner, reason) {
   const lines = [];
   const pvp = !A.isAI && !B.isAI;
   // classement
-  if (pvp) {
+  if (pvp && !b.ranked) lines.push("🤝 Combat amical : pas de points de classement (seules les parties classées comptent).");
+  if (pvp && b.ranked) {
     const sa = arenaStats(A.id), sb = arenaStats(B.id);
     const score = winner === 0 ? 1 : winner === 1 ? 0 : 0.5;
     const da = eloChange(sa.elo, sb.elo, score), db = eloChange(sb.elo, sa.elo, 1 - score);
@@ -1653,7 +1657,7 @@ async function finishBattle(client, b, winner, reason) {
         s.streak = 0;
       } else s.d++;
     }
-    lines.push(`📊 Classement : ${A.name} ${da >= 0 ? "+" : ""}${da} (${sa.elo}) · ${B.name} ${db >= 0 ? "+" : ""}${db} (${sb.elo})`);
+    lines.push(`📊 Partie classée : ${A.name} ${da >= 0 ? "+" : ""}${da} (${sa.elo}) · ${B.name} ${db >= 0 ? "+" : ""}${db} (${sb.elo})`);
   }
   bump("battles");
   for (const [i, p] of b.players.entries()) {
