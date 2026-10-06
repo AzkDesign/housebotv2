@@ -243,7 +243,8 @@ async function checkArenaSeason(client) {
   }
   st.arenaSeason = { n: n + 1, month: monthKey() };
   save();
-  await chan("arene")
+  if (st.seasonMessageId) await chan("arene")?.messages.delete(st.seasonMessageId).catch(() => null);
+  const seasonMsg = await chan("arene")
     ?.send({
       embeds: [
         new EmbedBuilder()
@@ -254,6 +255,8 @@ async function checkArenaSeason(client) {
       allowedMentions: { parse: [] },
     })
     .catch(() => null);
+  st.seasonMessageId = seasonMsg?.id ?? null;
+  save();
 }
 
 // --- Guide des cartes (commande /aide-cartes et salon du guide) ---

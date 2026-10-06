@@ -1448,7 +1448,7 @@ async function finishBattle(client, b, winner, reason) {
       .then((m) => deleteLater(m, MINUTE))
       .catch(() => null);
     setTimeout(() => b.thread.delete("Combat terminé").catch(() => b.thread.setArchived(true).catch(() => null)), MINUTE);
-  }
+  } else deleteLater(b.message, MINUTE); // combat sans fil : le message du combat part aussi
   panelDirty = true;
 }
 async function cancelBattle(b, why) {
@@ -1462,6 +1462,7 @@ async function cancelBattle(b, why) {
   save();
   await b.message?.edit({ content: `🚫 Combat annulé : ${why}. Les mises et les paris sont remboursés.`, embeds: [], components: [], attachments: [] }).catch(() => null);
   if (b.thread) setTimeout(() => b.thread.delete("Combat annulé").catch(() => b.thread.setArchived(true).catch(() => null)), MINUTE);
+  else deleteLater(b.message, MINUTE);
 }
 // remboursement des combats interrompus par un redémarrage
 function refundInterruptedBattles() {

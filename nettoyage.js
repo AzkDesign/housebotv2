@@ -11,9 +11,41 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 
 // Supprime un message après un délai (sans erreur s'il a déjà disparu).
+// Les suppressions prévues sont enregistrées : un redémarrage du bot ne les fait plus oublier.
+let pendingDeletes = null;
+function pending() {
+  pendingDeletes ??= loadState().pendingDeletes ?? [];
+  return pendingDeletes;
+}
+function savePending() {
+  const state = loadState();
+  state.pendingDeletes = pending();
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+function doneDelete(entry) {
+  const i = pending().indexOf(entry);
+  if (i < 0) return;
+  pending().splice(i, 1);
+  savePending();
+}
 function deleteLater(message, ms) {
   if (!message?.delete) return;
-  setTimeout(() => message.delete().catch(() => null), ms).unref?.();
+  const entry = { c: message.channelId ?? message.channel?.id, m: message.id, at: Date.now() + ms };
+  if (entry.c && entry.m) {
+    pending().push(entry);
+    savePending();
+  }
+  setTimeout(() => message.delete().catch(() => null).finally(() => doneDelete(entry)), ms).unref?.();
+}
+// au démarrage : reprend les suppressions prévues avant le redémarrage
+function resumeDeletes(client) {
+  for (const entry of [...pending()]) {
+    setTimeout(async () => {
+      const channel = await client.channels.fetch(entry.c).catch(() => null);
+      await channel?.messages?.delete(entry.m).catch(() => null);
+      doneDelete(entry);
+    }, Math.max(1000, entry.at - Date.now())).unref?.();
+  }
 }
 
 // Pour un bouton : supprime le message qui le porte, sauf s'il est éphémère.
@@ -61,6 +93,7 @@ async function getDossiersChannel(client) {
   if (!channel) return irf; // à défaut, le salon IRF lui-même
   if (!channel.topic?.startsWith("privé:")) await channel.setTopic("privé: dossiers à traiter par l'IRF").catch(() => null);
   state.dossiersChannelId = channel.id;
+  state.pendingDeletes = pending();
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
   dossiersChannel = channel;
   return channel;
@@ -71,4 +104,4 @@ async function sendDossier(client, payload) {
   return channel?.isTextBased() ? channel.send(payload).catch(() => null) : null;
 }
 
-module.exports = { deleteLater, deleteInteractionMessageLater, getDossiersChannel, sendDossier, MINUTE, HOUR };
+module.exports = { deleteLater, resumeDeletes, deleteInteractionMessageLater, getDossiersChannel, sendDossier, MINUTE, HOUR };

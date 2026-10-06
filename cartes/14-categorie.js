@@ -22,6 +22,31 @@ async function cleanThreadNotices(channel) {
   for (const m of recent?.values() ?? []) if (m.type === 18) await m.delete().catch(() => null);
 }
 
+// Les messages temporaires du bot (avis, résultats, défis terminés…) n'ont rien à faire là au bout de quelques minutes.
+// On garde : les messages avec des boutons encore actifs, les tableaux en direct et les annonces avec image.
+async function sweepCardChannels(client) {
+  const st = load();
+  const keep = new Set([st.islandMessageId, st.teamsMessageId, st.ruleMessageId, st.seasonMessageId, st.weeklyCard?.messageId, st.boardMessageId].filter(Boolean));
+  const rules = {
+    arene: (m) => !m.components.length,
+    iles: (m) => !m.components.length,
+    equipes: (m) => !m.components.length,
+    echanges: (m) => !m.components.length,
+    discussion: (m) => !m.components.length,
+    annonces: (m) => !m.components.length && !m.embeds.length && !m.attachments.size, // les avis en texte seul
+  };
+  for (const [key, isTemporary] of Object.entries(rules)) {
+    const ch = cardChannels[key];
+    if (!ch || ch === channelRef) continue;
+    const recent = await ch.messages.fetch({ limit: 100 }).catch(() => null);
+    for (const m of recent?.values() ?? []) {
+      if (m.author?.id !== client.user.id || keep.has(m.id) || m.pinned) continue;
+      if (Date.now() - m.createdTimestamp < 3 * MINUTE) continue;
+      if (m.type === 18 || isTemporary(m)) await m.delete().catch(() => null);
+    }
+  }
+}
+
 async function setupCardCategory(client, guild, annonces) {
   const { ChannelType } = require("discord.js");
   const st = load();

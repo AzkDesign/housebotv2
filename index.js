@@ -558,6 +558,7 @@ client.once(Events.ClientReady, async () => {
   await step("missions", () => setupMissionPanel(client));
   await step("casino", () => setupCasino(client));
   await step("IRF", () => setupIrfPanel(client));
+  await step("suppressions en attente", () => require("./nettoyage").resumeDeletes(client));
   await step("dépôts", () => setupDepot());
   await step("Airbnb", () => setupAirbnb(client));
   await step("Entreprises", () => setupEntreprises(client));
