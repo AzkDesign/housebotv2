@@ -334,14 +334,6 @@ async function storyGo(userId, name, target, notes = [], opts = {}) {
   save();
   return storyScenePayload(userId, name, notes, opts);
 }
-// statistiques anonymes des grands choix
-function storyStat(sceneId, idx) {
-  const st = load();
-  const s = (st.storyStats[sceneId] ??= {});
-  s[idx] = (s[idx] ?? 0) + 1;
-  const total = Object.values(s).reduce((a, b) => a + b, 0);
-  return total < 5 ? "🔀 Vous êtes parmi les tout premiers à faire ce choix." : `🔀 **${Math.round((s[idx] / total) * 100)} %** des joueurs ont fait le même choix que vous.`;
-}
 
 // --- Épreuves : une de vos cartes vous aide ---
 function storyCardOptions(userId, by) {
@@ -457,8 +449,6 @@ async function refreshStoryPanel() {
   const ch = chan("histoire");
   if (!ch || ch === channelRef) return;
   const st = load();
-  const saves = Object.values(st.story ?? {});
-  const done = (n) => saves.filter((sv) => sv.chapters?.includes(n)).length;
   const last = Math.max(...Object.keys(STORY_CHAPTERS).map(Number));
   const file = new AttachmentBuilder(await (await drawStoryCover()).encode("jpeg", 86), { name: "histoire.jpg" });
   const payload = {
@@ -471,12 +461,11 @@ async function refreshStoryPanel() {
             "🔀 **Vos choix changent l'histoire** : alliés, ennemis, secrets, fins différentes.\n" +
             "🎲 **Épreuves** avec vos cartes · ⚔️ **Duels** · 🧩 **Énigmes** cachées dans le texte\n" +
             `🎟️ **${STORY_TICKETS} épisodes par jour** · 🃏 **${Object.keys(STORY_CARDS).length} cartes exclusives** à collectionner\n\n` +
-            Object.entries(STORY_CHAPTERS).map(([n, c]) => `**Chapitre ${ROMAN[n]}** — ${c.title} · ${done(Number(n))} enquêteur${done(Number(n)) > 1 ? "s l'ont" : " l'a"} terminé`).join("\n") +
+            Object.entries(STORY_CHAPTERS).map(([n, c]) => `**Chapitre ${ROMAN[n]}** — ${c.title}`).join("\n") +
             `\n*Chapitre ${ROMAN[last + 1]} : bientôt…*\n\n` +
             "Votre lecture est **privée** : vous seul voyez votre livre. *C'est une fiction : ses personnages sont inventés et vos choix ne changent rien aux vraies institutions de la Maison.*"
         )
-        .setImage("attachment://histoire.jpg")
-        .setFooter({ text: `👥 ${saves.filter((sv) => sv.scene).length} enquêteurs ont ouvert le livre` }),
+        .setImage("attachment://histoire.jpg"),
     ],
     files: [file],
     attachments: [],
@@ -607,7 +596,6 @@ async function handleStoryInteraction(interaction, client) {
       return true;
     }
     sv.choices++;
-    if (c.stat) notes.push(storyStat(scene.id, c.i));
     c.fx?.(S);
     await show(storyGo(userId, name, typeof c.to === "function" ? c.to(S) : c.to, notes));
     return true;
