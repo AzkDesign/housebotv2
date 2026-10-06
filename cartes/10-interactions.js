@@ -40,7 +40,7 @@ async function handleCartesInteraction(interaction, client) {
     await interaction.deferReply({ ephemeral: true });
     await grantEventCard(client, target.id, key, holo);
     await interaction.editReply({ content: `✅ **${EVENTS[key].name}**${holo ? " (holo)" : ""} offerte à ${target}. Le membre a été prévenu en message privé.` });
-    require("./logs").sendLogEmbed("staff", new EmbedBuilder().setColor(0xe9c46a).setTitle("🃏 Carte d'événement offerte").setDescription(`${interaction.user} offre **${EVENTS[key].name}**${holo ? " (holo)" : ""} à ${target}`).setTimestamp()).catch(() => null);
+    require("./logs").sendLogEmbed("staff", new EmbedBuilder().setColor(0xe9c46a).setTitle("🃏 Carte d'événement offerte").setDescription(`**${pseudo(interaction.user.id)}** offre **${EVENTS[key].name}**${holo ? " (holo)" : ""} à ${target}`).setTimestamp()).catch(() => null);
     return true;
   }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "generation") {
@@ -537,7 +537,7 @@ async function handleCartesInteraction(interaction, client) {
       .then((u) => u.send(`💰 Votre carte **${keyLabel(l.key)}** a été achetée par **${buyerName}** pour **${formatEuro(l.price)}**. Vous recevez **${formatEuro(net)}** après la commission de ${Math.round(MARKET_FEE * 100)} %.`))
       .catch(() => null);
     require("./logs")
-      .sendLogEmbed("achats", new EmbedBuilder().setColor(0xe9c46a).setTitle("🏪 Vente au marché des cartes").setDescription(`${keyLabel(l.key)} — ${formatEuro(l.price)}\nVendeur : <@${l.seller}> (reçoit ${formatEuro(net)})\nAcheteur : <@${userId}>`).setTimestamp())
+      .sendLogEmbed("achats", new EmbedBuilder().setColor(0xe9c46a).setTitle("🏪 Vente au marché des cartes").setDescription(`${keyLabel(l.key)} — ${formatEuro(l.price)}\nVendeur : **${pseudo(l.seller)}** (reçoit ${formatEuro(net)})\nAcheteur : **${pseudo(userId)}**`).setTimestamp())
       .catch(() => null);
     if (ORDER.indexOf(card.rarity) >= ORDER.indexOf("legendaire") || l.price >= 20000) {
       const msg = await chan("marche")?.send({ content: `🏪 **Grosse vente au marché !** ${RARITIES[card.rarity].emoji} **${keyLabel(l.key)}** vient de partir pour **${formatEuro(l.price)}**.`, allowedMentions: { parse: [] } }).catch(() => null);
@@ -800,10 +800,10 @@ async function handleCartesInteraction(interaction, client) {
     pairAlert(tr.from, tr.to, "échanges", `${tr.give.map(keyLabel).join(", ") || "rien"} contre ${tr.take.map(keyLabel).join(", ") || "rien"}`).catch(() => null);
     tr.doneAt = Date.now();
     save();
-    await interaction.editReply({ content: `🤝 Échange conclu entre <@${tr.from}> et <@${tr.to}> !`, embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [], allowedMentions: { parse: [] } });
+    await interaction.editReply({ content: `🤝 Échange conclu entre **${pseudo(tr.from)}** et **${pseudo(tr.to)}** !`, embeds: [tradeEmbed(tr)], files: [await tradeImage(tr)], components: [], allowedMentions: { parse: [] } });
     deleteLater(interaction.message, MINUTE);
     require("./logs")
-      .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`<@${tr.from}> donne : ${tr.give.map(keyLabel).join(", ") || "rien"}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n<@${tr.to}> donne : ${tr.take.map(keyLabel).join(", ") || "rien"}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
+      .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`**${pseudo(tr.from)}** donne : ${tr.give.map(keyLabel).join(", ") || "rien"}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n**${pseudo(tr.to)}** donne : ${tr.take.map(keyLabel).join(", ") || "rien"}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
       .catch(() => null);
     await checkSeriesRewards(client, tr.from);
     await checkSeriesRewards(client, tr.to);
@@ -1153,7 +1153,7 @@ async function handleCartesInteraction(interaction, client) {
     questProgress(userId, "wild");
     ustat(userId, "wild");
     await interaction.update({
-      embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setTitle("⚡ Carte attrapée !").setDescription(`${interaction.user} attrape **${card?.name}** !`)],
+      embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setTitle("⚡ Carte attrapée !").setDescription(`**${pseudo(interaction.user.id)}** attrape **${card?.name}** !`)],
       components: [],
     });
     deleteLater(interaction.message, MINUTE);

@@ -20,6 +20,7 @@ const { changeBalance, readBalance, formatEuro, refreshRichestLeaderboard, isGer
 const { lawActive, lawParam } = require("./politique");
 const { findOrCreateChannel, findOrCreateRole } = require("./salons");
 const { deleteLater, MINUTE } = require("./nettoyage");
+const { pseudo } = require("./noms");
 
 const ANNOUNCE_CHANNEL_ID = "1509983723892903966";
 const MEMBER_CARD_ROLE_ID = "1509983439968010401"; // tous les membres avec ce rôle ont automatiquement leur carte // le salon des cartes est rangé à côté des annonces

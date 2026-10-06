@@ -41,6 +41,7 @@ const CLOSE_HOUR = 21;
 const CHECKOUT_HOUR = 11;
 
 const { DATA_DIR, dataFile } = require("./data");
+const { pseudo } = require("./noms");
 const STATE_FILE = dataFile("airbnb-state.json");
 
 // Une seule copie en mémoire : la boucle automatique et les boutons
@@ -323,7 +324,7 @@ function listingLine(l) {
       : l.occupiedUntil
         ? `🔴 occupé jusqu'au ${ts(l.occupiedUntil, "d")}`
         : "🟢 libre";
-  return `🏠 **${l.name}** — ${l.location} · ${formatEuro(l.price)}/nuit · ${l.capacity} pers. · ${ratingText(l)} · <@${l.hostId}> · ${status}`;
+  return `🏠 **${l.name}** — ${l.location} · ${formatEuro(l.price)}/nuit · ${l.capacity} pers. · ${ratingText(l)} · **${pseudo(l.hostId)}** · ${status}`;
 }
 
 function buildPanelMessage() {
@@ -837,7 +838,7 @@ async function showAdmin(interaction) {
       { name: "Demandes en cours", value: String(Object.keys(state.requests).length), inline: true },
       { name: "Chiffre d'affaires total", value: formatEuro(round2(revenue)), inline: true },
       { name: `Part de la Maison (${Math.round((1 - hostShare()) * 100)} %)`, value: formatEuro(round2(revenue * (1 - hostShare()))), inline: true },
-      { name: "Hôtes en ligne", value: online.length ? online.map(([id]) => `<@${id}>`).join(", ").slice(0, 1024) : "Aucun" }
+      { name: "Hôtes en ligne", value: online.length ? online.map(([id]) => `**${pseudo(id)}**`).join(", ").slice(0, 1024) : "Aucun" }
     );
 
   await interaction.reply({

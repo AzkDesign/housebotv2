@@ -9,6 +9,7 @@ const REMINDER_PREFIX = "⏰ **Ticket inactif**";
 const MAX_MESSAGES = 2000;
 
 const logs = () => require("./logs");
+const { pseudo } = require("./noms");
 
 function stamp(ts) {
   return new Date(ts).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "short", timeStyle: "short" });
@@ -61,7 +62,7 @@ async function archiveChannel(channel, { reason = "Fermé", closedBy = null } = 
         { name: "Raison", value: reason.slice(0, 1024), inline: true },
         { name: "Fermé par", value: closedBy ? `${closedBy}` : "automatique", inline: true },
         { name: "Messages", value: String(messages.length), inline: true },
-        { name: "Participants", value: participants.map((id) => `<@${id}>`).join(", ").slice(0, 1024) || "—" }
+        { name: "Participants", value: participants.map((id) => `**${pseudo(id)}**`).join(", ").slice(0, 1024) || "—" }
       )
       .setTimestamp();
     await logs().sendLogFile("tickets", embed, file);

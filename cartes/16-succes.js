@@ -178,7 +178,7 @@ async function refreshLeaderboards() {
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
       .slice(0, n)
-      .map(([id, v], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} <@${id}> — ${fmt(v)}`)
+      .map(([id, v], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} **${pseudo(id)}** — ${fmt(v)}`)
       .join("\n") || "*Personne pour le moment.*";
   const holoCount = (id) => Object.entries(st.inv[id] ?? {}).filter(([k, n]) => k.endsWith("*") && n > 0).length;
   const shinyCount = (id) => Object.values(SHINIES).filter((c) => (st.inv[id]?.[c.id] ?? 0) + (st.inv[id]?.[`${c.id}*`] ?? 0) > 0).length;
@@ -186,7 +186,7 @@ async function refreshLeaderboards() {
     .filter(([, x]) => x.w + x.l + x.d > 0)
     .sort((a, b) => b[1].elo - a[1].elo)
     .slice(0, 5)
-    .map(([id, x], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} <@${id}> — **${x.elo}** · ${tierOf(x.elo)[1]} · ${x.w} V`)
+    .map(([id, x], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} **${pseudo(id)}** — **${x.elo}** · ${tierOf(x.elo)[1]} · ${x.w} V`)
     .join("\n") || "*Aucun combat cette saison.*";
   const embed = new EmbedBuilder()
     .setColor(0xfbbf24)
@@ -196,8 +196,8 @@ async function refreshLeaderboards() {
       { name: "✦ Holographiques", value: top(holoCount, 5, (v) => `**${v}** holo${v > 1 ? "s" : ""}`), inline: true },
       { name: "🍀 Chasseurs de Shiny", value: top(shinyCount, 5, (v) => `**${v}** shiny`), inline: true },
       { name: `⚔️ Arène — saison ${st.arenaSeason?.n ?? 1}`, value: arena, inline: false },
-      { name: "🛡️ Équipes", value: Object.values(teamsState()).sort((a, b) => b.xp - a.xp).slice(0, 5).map((t, i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} ${t.emblem} **${t.name}** — niveau ${teamLevel(t)} · ${t.members.map((m) => `<@${m}>`).join(" & ")}`).join("\n") || "*Aucune équipe.*", inline: false },
-      { name: "🏝️ Gardien de l'île", value: islandsState().lagon.holder ? `<@${islandsState().lagon.holder}> depuis ${fmtHeld(Date.now() - islandsState().lagon.since)}` : "*L'île est libre !*", inline: true },
+      { name: "🛡️ Équipes", value: Object.values(teamsState()).sort((a, b) => b.xp - a.xp).slice(0, 5).map((t, i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} ${t.emblem} **${t.name}** — niveau ${teamLevel(t)} · ${t.members.map((m) => `**${pseudo(m)}**`).join(" & ")}`).join("\n") || "*Aucune équipe.*", inline: false },
+      { name: "🏝️ Gardien de l'île", value: islandsState().lagon.holder ? `**${pseudo(islandsState().lagon.holder)}** depuis ${fmtHeld(Date.now() - islandsState().lagon.since)}` : "*L'île est libre !*", inline: true },
       { name: "🏅 Succès", value: top((id) => Object.keys(st.achievements[id]?.unlocked ?? {}).length, 5, (v) => `**${v}** / ${ACHIEVEMENTS.length}`), inline: true }
     )
     .setFooter({ text: "Mis à jour automatiquement toutes les 10 minutes" });

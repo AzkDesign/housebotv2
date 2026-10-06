@@ -21,6 +21,7 @@ const RESPONSABLE_ROLE_ID = "1509984877120847963";
 const GERANTS_ROLE_ID = "1509985135565475850";
 
 const STATE_FILE = require("./data").dataFile("budget-state.json");
+const { pseudo } = require("./noms");
 const DEFAULT_BUDGET = 3700;
 const ACHAT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -276,7 +277,7 @@ function buildHistoryLogEmbed(expense, validator, approved, state) {
     .addFields(
       {
         name: "Demandeur",
-        value: `<@${expense.authorId}> (\`${expense.authorTag}\`)`,
+        value: `**${pseudo(expense.authorId)}** (\`${expense.authorTag}\`)`,
         inline: true,
       },
       {
@@ -391,7 +392,7 @@ function buildApprovedEmbed(expense, validator, state) {
     .setTitle(isAchat ? "✅ Achat validé" : "✅ Dépense validée")
     .addFields(
       { name: "Montant", value: formatEuro(expense.amount), inline: true },
-      { name: "Demandeur", value: `<@${expense.authorId}>`, inline: true },
+      { name: "Demandeur", value: `**${pseudo(expense.authorId)}**`, inline: true },
       { name: "Validé par", value: `${validator}`, inline: true },
       {
         name: isAchat ? "Article" : "Libellé",
@@ -418,7 +419,7 @@ function buildRejectedEmbed(expense, validator) {
     .setTitle(isAchat ? "❌ Achat refusé" : "❌ Dépense refusée")
     .addFields(
       { name: "Montant", value: formatEuro(expense.amount), inline: true },
-      { name: "Demandeur", value: `<@${expense.authorId}>`, inline: true },
+      { name: "Demandeur", value: `**${pseudo(expense.authorId)}**`, inline: true },
       { name: "Refusé par", value: `${validator}`, inline: true },
       {
         name: isAchat ? "Article" : "Libellé",
@@ -443,7 +444,7 @@ function buildExpenseTableEmbed(state) {
           const tag = e.type === "achat" ? "🛒" : "💶";
           return (
             `**${i + 1}.** ${tag} ${formatEuro(e.amount)} — ${e.label}\n` +
-            `   *<@${e.authorId}>*`
+            `   ***${pseudo(e.authorId)}***`
           );
         })
         .join("\n")

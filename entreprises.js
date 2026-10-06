@@ -41,6 +41,7 @@ const TRANSACTIONS_KEPT = 50;
 const AUTO_SHIFT_MS = 8 * 60 * 60 * 1000; // à relancer toutes les 8 h
 const AUTO_SHARE = 0.7; // un client servi en automatique rapporte 70 % du prix
 const feed = () => require("./feed");
+const { pseudo } = require("./noms");
 
 const REGISTRY_TITLE = "📜 Registre du commerce";
 const POSTES = { patron: "👑 Patron", manager: "🧭 Manager", employe: "👷 Employé" };
@@ -329,7 +330,7 @@ function registryEmbed() {
   const lines = companies.map(
     (c, i) =>
       `${medals[i] ?? `**${i + 1}.**`} **${c.name}** — ${SECTORS[c.sector].label}${c.status === "frozen" ? " 🔒" : ""}\n` +
-      `└ <@${c.ownerId}> · ${Object.keys(c.members).length} membre(s) · CA semaine **${formatEuro(c.weekRevenue)}**`
+      `└ **${pseudo(c.ownerId)}** · ${Object.keys(c.members).length} membre(s) · CA semaine **${formatEuro(c.weekRevenue)}**`
   );
   let body = "";
   for (const line of lines) {
@@ -489,7 +490,7 @@ async function submitCreation(interaction, sector, client) {
         .setColor(0xd4af37)
         .setTitle("🏛️ Demande d'immatriculation")
         .setThumbnail(company.logo)
-        .setDescription(`**${name}** — ${SECTORS[sector].label}\nPatron : <@${userId}>\n\n${description}`)
+        .setDescription(`**${name}** — ${SECTORS[sector].label}\nPatron : **${pseudo(userId)}**\n\n${description}`)
         .addFields({ name: "Versé", value: `${formatEuro(fee)} de frais + ${formatEuro(START_CAPITAL)} de capital (remboursés en cas de refus)` })
         .setTimestamp(),
     ],
@@ -614,7 +615,7 @@ function companyEmbed(company) {
   const onDuty = Object.keys(company.onDuty);
   const staff = Object.entries(company.members)
     .sort((a, b) => ["patron", "manager", "employe"].indexOf(a[1].role) - ["patron", "manager", "employe"].indexOf(b[1].role))
-    .map(([id, m]) => `${POSTES[m.role]} <@${id}>${m.role !== "patron" ? ` — ${formatEuro(m.salary)}/sem.` : ""}${company.onDuty[id] ? (company.autoDuty?.[id] ? " 🤖" : " 🟢") : ""}`)
+    .map(([id, m]) => `${POSTES[m.role]} **${pseudo(id)}**${m.role !== "patron" ? ` — ${formatEuro(m.salary)}/sem.` : ""}${company.onDuty[id] ? (company.autoDuty?.[id] ? " 🤖" : " 🟢") : ""}`)
     .join("\n");
   return new EmbedBuilder()
     .setColor(company.status === "frozen" ? 0x95a5a6 : 0x8b0000)
@@ -1130,7 +1131,7 @@ async function removeMember(client, company, userId, reason) {
   dirtyPanels.add(company.id);
   registryDirty = true;
   await updateChannelAccess(client, company);
-  await send(client, company.channelId, { content: `🚪 <@${userId}> ${reason}.` });
+  await send(client, company.channelId, { content: `🚪 **${pseudo(userId)}** ${reason}.` });
 }
 
 // --- Offres d'emploi ---
@@ -1220,7 +1221,7 @@ async function apply(interaction, offerId, client) {
         .setColor(0x3498db)
         .setTitle(`🙋 Candidature — ${offer.title}`)
         .setThumbnail(interaction.user.displayAvatarURL({ size: 128 }))
-        .setDescription(`${interaction.user} postule pour **${offer.title}** (${POSTES[offer.role]}, ${formatEuro(offer.salary)}/semaine).`),
+        .setDescription(`**${pseudo(interaction.user.id)}** postule pour **${offer.title}** (${POSTES[offer.role]}, ${formatEuro(offer.salary)}/semaine).`),
     ],
     components: [
       new ActionRowBuilder().addComponents(
@@ -1263,8 +1264,8 @@ async function createInvoice(interaction, company, targetId, client) {
         .setDescription(`**Objet :** ${label}`)
         .addFields(
           { name: "Montant", value: `**${formatEuro(amount)}**`, inline: true },
-          { name: "Émise par", value: `${interaction.user}`, inline: true },
-          { name: "Destinataire", value: `<@${targetId}>`, inline: true }
+          { name: "Émise par", value: `**${pseudo(interaction.user.id)}**`, inline: true },
+          { name: "Destinataire", value: `**${pseudo(targetId)}**`, inline: true }
         )
         .setTimestamp(),
     ],
@@ -1287,7 +1288,7 @@ async function payInvoice(interaction, id, mode, client) {
     deleteInteractionMessageLater(interaction, 2 * MINUTE);
     await sendDossier(client, {
       allowedMentions: { roles: [IRF_ROLE_ID] },
-      content: `<@&${IRF_ROLE_ID}> ⚠️ <@${invoice.to}> conteste la facture n°${id.slice(1)} de **${company?.name ?? "?"}** (${formatEuro(invoice.amount)} — ${invoice.label}).`,
+      content: `<@&${IRF_ROLE_ID}> ⚠️ **${pseudo(invoice.to)}** conteste la facture n°${id.slice(1)} de **${company?.name ?? "?"}** (${formatEuro(invoice.amount)} — ${invoice.label}).`,
     });
     return;
   }
@@ -1341,7 +1342,7 @@ async function showReport(interaction, company) {
           { name: "Impôt dimanche", value: formatEuro(tax), inline: true },
           { name: "Salaires dimanche", value: formatEuro(payroll), inline: true },
           { name: "Après dimanche", value: formatEuro(round2(company.balance - tax - payroll)), inline: true },
-          { name: "🏅 Meilleur employé", value: best ? `<@${best[0]}> — ${best[1]} client(s)` : "—" }
+          { name: "🏅 Meilleur employé", value: best ? `**${pseudo(best[0])}** — ${best[1]} client(s)` : "—" }
         )
         .setFooter({ text: company.unpaidWeeks ? `⚠️ ${company.unpaidWeeks} semaine(s) de salaires impayés` : "Comptes à jour" }),
     ],
@@ -1387,7 +1388,7 @@ async function weeklyClose(client) {
           .setDescription(
             `Chiffre d'affaires : **${formatEuro(company.weekRevenue)}**\n` +
               `Impôt (${Math.round(P().corporateTax * 100)} %) : **${formatEuro(tax)}**\n${salaryText}\n` +
-              (best ? `🏅 Employé de la semaine : <@${best[0]}> (${best[1]} client(s))\n` : "") +
+              (best ? `🏅 Employé de la semaine : **${pseudo(best[0])}** (${best[1]} client(s))\n` : "") +
               `\nCompte : **${formatEuro(company.balance)}**`
           )
           .setTimestamp(),
@@ -1404,7 +1405,7 @@ async function weeklyClose(client) {
           new EmbedBuilder()
             .setColor(0xe74c3c)
             .setTitle(`⚠️ Cessation de paiements — ${company.name}`)
-            .setDescription(`${company.unpaidWeeks} semaines de salaires impayés. Patron : <@${company.ownerId}>.\nCompte : ${formatEuro(company.balance)}.`),
+            .setDescription(`${company.unpaidWeeks} semaines de salaires impayés. Patron : **${pseudo(company.ownerId)}**.\nCompte : ${formatEuro(company.balance)}.`),
         ],
         components: [
           new ActionRowBuilder().addComponents(
@@ -1455,7 +1456,7 @@ async function showIrfCompanies(interaction) {
     .setTitle(`🏢 Entreprises (${companies.length})`)
     .setDescription(
       companies
-        .map((c) => `${statusIcon[c.status]} **${c.name}** — <@${c.ownerId}> · ${formatEuro(c.balance)} · CA sem. ${formatEuro(c.weekRevenue)} · ${Object.keys(c.members).length} membre(s)`)
+        .map((c) => `${statusIcon[c.status]} **${c.name}** — **${pseudo(c.ownerId)}** · ${formatEuro(c.balance)} · CA sem. ${formatEuro(c.weekRevenue)} · ${Object.keys(c.members).length} membre(s)`)
         .join("\n")
         .slice(0, 4000) || "*Aucune entreprise.*"
     );
@@ -1484,7 +1485,7 @@ async function showIrfCompany(interaction, company) {
         .setColor(0x3498db)
         .setTitle(`🔎 Audit — ${company.name}`)
         .setDescription(
-          `Patron : <@${company.ownerId}> · Statut : **${company.status}** · Compte : **${formatEuro(company.balance)}**\n\n` +
+          `Patron : **${pseudo(company.ownerId)}** · Statut : **${company.status}** · Compte : **${formatEuro(company.balance)}**\n\n` +
             (list.map((t) => `${ts(t.at, "d")} **${t.delta >= 0 ? "+" : ""}${formatEuro(t.delta)}** — ${t.label}`).join("\n").slice(0, 3500) || "*Aucune opération.*")
         ),
     ],
@@ -1652,7 +1653,7 @@ async function handleEntreprisesInteraction(interaction, client) {
         Object.assign(m, contract);
         save();
         dirtyPanels.add(company.id);
-        await interaction.reply({ content: `✏️ Contrat de <@${parts[3]}> : ${POSTES[m.role]}, ${formatEuro(m.salary)}/semaine.`, ephemeral: true });
+        await interaction.reply({ content: `✏️ Contrat de **${pseudo(parts[3])}** : ${POSTES[m.role]}, ${formatEuro(m.salary)}/semaine.`, ephemeral: true });
       }
       break;
     }
@@ -1660,7 +1661,7 @@ async function handleEntreprisesInteraction(interaction, client) {
       if (!manager || company.members[parts[3]]?.role === "patron") await denied();
       else if (company.members[parts[3]]?.role === "manager" && !patron) await denied("❌ Seul le patron licencie un manager.");
       else {
-        await removeMember(client, company, parts[3], `a été licencié(e) par ${interaction.user}`);
+        await removeMember(client, company, parts[3], `a été licencié(e) par **${pseudo(interaction.user.id)}**`);
         await interaction.update({ content: "🚪 Employé licencié.", components: [] });
       }
       break;

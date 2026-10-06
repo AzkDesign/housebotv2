@@ -51,6 +51,7 @@ const CLOSE_AT = 2 * 60;
 const SCHEDULE_TEXT = "du **vendredi 20h** au **lundi 2h** (heure de Paris)";
 
 const { DATA_DIR, dataFile } = require("./data");
+const { pseudo } = require("./noms");
 const STATE_FILE = dataFile("casino-state.json");
 
 function loadState() {
@@ -181,7 +182,7 @@ function pay(userId, amount, game) {
     changeBalance(userId, paid, `Casino — ${game} (gain)`, { force: true });
     addToTreasury("casinoGains", paid);
     markBalancesDirty();
-    if (paid >= 2000) require("./feed").post(`🎰 <@${userId}> remporte **${formatEuro(paid)}** au ${game} !`, { stat: "casino" });
+    if (paid >= 2000) require("./feed").post(`🎰 **${pseudo(userId)}** remporte **${formatEuro(paid)}** au ${game} !`, { stat: "casino" });
   }
   return paid;
 }
@@ -443,13 +444,13 @@ async function handleAccessRequest(interaction, client) {
     .setTitle("🎟️ Demande d'accès au casino")
     .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
     .setDescription(
-      `Bonjour ${member},\n\n` +
+      `Bonjour **${pseudo(member.id)}**,\n\n` +
         "L'**IRF** (Institut de Régulation Financière) va étudier votre demande : " +
         "absence de **fraude** et de signes de **dépendance au jeu**.\n" +
         "Répondez à leurs questions dans ce salon."
     )
     .addFields(
-      { name: "Membre", value: `${member} (\`${member.user.tag}\`)` },
+      { name: "Membre", value: `**${pseudo(member.id)}** (\`${member.user.tag}\`)` },
       { name: "Profil", value: profil, inline: true },
       { name: "Solde", value: formatEuro(readBalance(member.id)), inline: true }
     )
@@ -496,8 +497,8 @@ async function handleAccessDecision(interaction, accepted, userId, client) {
   await interaction.channel
     .send(
       (accepted
-        ? `✅ Accès au casino **accordé** à <@${userId}>. Il est ouvert ${SCHEDULE_TEXT}.`
-        : `❌ Accès au casino **refusé** à <@${userId}>.`) +
+        ? `✅ Accès au casino **accordé** à **${pseudo(userId)}**. Il est ouvert ${SCHEDULE_TEXT}.`
+        : `❌ Accès au casino **refusé** à **${pseudo(userId)}**.`) +
         "\n*Ce ticket sera fermé dans 1 minute.*"
     )
     .catch(() => null);
@@ -930,9 +931,9 @@ async function playSlots(interaction, spins, bet, client) {
 
   if (jackpotWon) {
     const channel = await client.channels.fetch(CASINO_CHANNEL_ID).catch(() => null);
-    require("./feed").post(`💰 **JACKPOT !** ${interaction.user} décroche le jackpot de la machine à sous !`, { stat: "casino" });
+    require("./feed").post(`💰 **JACKPOT !** **${pseudo(interaction.user.id)}** décroche le jackpot de la machine à sous !`, { stat: "casino" });
     const announce = await channel
-      ?.send(`💰🎰 **JACKPOT !** ${interaction.user} vient de remporter le **JACKPOT** à la machine à sous !`)
+      ?.send(`💰🎰 **JACKPOT !** **${pseudo(interaction.user.id)}** vient de remporter le **JACKPOT** à la machine à sous !`)
       .catch(() => null);
     deleteLater(announce, HOUR);
     await require("./cartes").grantEventCard(client, interaction.user.id, "ev_jackpot").catch(() => null);
@@ -1086,7 +1087,7 @@ async function handleDuelResponse(interaction, accepted, id) {
     .setColor(0xd4af37)
     .setTitle("⚔️ Défi — Résultat")
     .setDescription(
-      `🪙 La pièce est lancée…\n\n🏆 <@${winnerId}> remporte **${formatEuro(won)}** face à <@${loserId}> !${capNote(won, paidDuel)}\n` +
+      `🪙 La pièce est lancée…\n\n🏆 **${pseudo(winnerId)}** remporte **${formatEuro(won)}** face à **${pseudo(loserId)}** !${capNote(won, paidDuel)}\n` +
         `*Taxe de la maison : ${formatEuro(tax)} (versée au jackpot)*`
     )
     .setTimestamp();

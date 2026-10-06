@@ -19,6 +19,7 @@ const FONDATION_ROLE_ID = "1509974377267990659";
 const GERANT_BANCAIRE_ROLE_ID = "1509985135565475850";
 
 const STATE_FILE = require("./data").dataFile("missions-state.json");
+const { pseudo } = require("./noms");
 
 const MODAL_MISSION = "mission_create_modal";
 const SELECT_MISSION = "mission_select";
@@ -135,7 +136,7 @@ function buildPanelEmbed(state) {
           .map(
             (m) =>
               `📌 • **${m.title}** — **${m.price}**\n` +
-              `   └ *par <@${m.posterId}>*${m.deadline ? ` • ${m.deadline}` : ""}`
+              `   └ *par **${pseudo(m.posterId)}***${m.deadline ? ` • ${m.deadline}` : ""}`
           )
           .join("\n\n")
       : "*Aucune mission disponible pour le moment.*";
@@ -204,7 +205,7 @@ function buildMissionDetailEmbed(mission, guild) {
       { name: "💶 Rémunération", value: `**${mission.price}**`, inline: true },
       {
         name: "👤 Publié par",
-        value: `<@${mission.posterId}>`,
+        value: `**${pseudo(mission.posterId)}**`,
         inline: true,
       }
     )
@@ -235,12 +236,12 @@ function buildTicketIntroEmbed(mission) {
     .addFields(
       {
         name: "Donneur",
-        value: `<@${mission.posterId}>`,
+        value: `**${pseudo(mission.posterId)}**`,
         inline: true,
       },
       {
         name: "Intervenant",
-        value: `<@${mission.takerId}>`,
+        value: `**${pseudo(mission.takerId)}**`,
         inline: true,
       }
     )
@@ -582,7 +583,7 @@ async function handleMissionInteraction(interaction, client) {
       if (poster) {
         await poster
           .send(
-            `✋ <@${interaction.user.id}> a pris votre mission **${mission.title}**.\n` +
+            `✋ **${pseudo(interaction.user.id)}** a pris votre mission **${mission.title}**.\n` +
               `Ticket : ${ticketChannel}`
           )
           .catch(() => null);

@@ -71,6 +71,7 @@ function round2(n) {
 // --- Données ---
 
 const { DATA_DIR, dataFile } = require("./data");
+const { pseudo } = require("./noms");
 const STATE_FILE = dataFile("impots-state.json");
 let state = null;
 
@@ -321,7 +322,7 @@ async function collectTaxes(client) {
         new EmbedBuilder()
           .setColor(0xe74c3c)
           .setTitle("⚠️ Dette fiscale persistante")
-          .setDescription(`<@${userId}> doit **${formatEuro(debt.amount)}** depuis **${debt.weeks} semaines**.${isFrozen(userId) ? "\n🔒 Compte déjà gelé." : ""}`),
+          .setDescription(`**${pseudo(userId)}** doit **${formatEuro(debt.amount)}** depuis **${debt.weeks} semaines**.${isFrozen(userId) ? "\n🔒 Compte déjà gelé." : ""}`),
       ],
       components: isFrozen(userId)
         ? []
@@ -397,7 +398,7 @@ async function runControls(client, guild) {
             .setColor(0xf39c12)
             .setTitle(`🔎 Contrôle fiscal n°${s.counter}`)
             .setDescription(
-              `<@${userId}> — solde **${formatEuro(eco.balances[userId] ?? 0)}**\n\n**Motifs :**\n${reasons.join("\n")}\n\n**Dernières opérations :**\n` +
+              `**${pseudo(userId)}** — solde **${formatEuro(eco.balances[userId] ?? 0)}**\n\n**Motifs :**\n${reasons.join("\n")}\n\n**Dernières opérations :**\n` +
                 (recent.map((t) => `<t:${Math.floor(t.at / 1000)}:d> ${t.delta >= 0 ? "+" : ""}${formatEuro(t.delta)} — ${t.label}`).join("\n").slice(0, 2500) || "*Aucune*")
             ),
         ],
@@ -469,7 +470,7 @@ async function showIrfTaxes(interaction) {
             name: `⚠️ Débiteurs (${debts.length})`,
             value:
               debts
-                .map(([id, d]) => `<@${id}> — ${formatEuro(d.amount)} (${d.weeks} sem.)${eco.frozen[id] ? " 🔒" : ""}`)
+                .map(([id, d]) => `**${pseudo(id)}** — ${formatEuro(d.amount)} (${d.weeks} sem.)${eco.frozen[id] ? " 🔒" : ""}`)
                 .join("\n")
                 .slice(0, 1024) || "Aucun",
           }

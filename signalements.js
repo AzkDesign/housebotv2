@@ -19,6 +19,7 @@ const SIGNALEMENT_LOG_CHANNEL_ID = "1510690066194763786";
 const SIGNALEMENT_ADMIN_ROLE_ID = "1509979964651343993";
 
 const STATE_FILE = require("./data").dataFile("signalements-state.json");
+const { pseudo } = require("./noms");
 
 const BTN = {
   ADD: "sig_add",
@@ -244,7 +245,7 @@ function buildTableEmbed(state) {
   }
 
   const lines = sorted.map((r, i) => {
-    const target = r.targetId ? `<@${r.targetId}>` : `**${r.targetName}**`;
+    const target = r.targetId ? `**${pseudo(r.targetId)}**` : `**${r.targetName}**`;
     const count = r.entries?.length || 0;
     const latest = r.entries?.[r.entries.length - 1];
     return (
@@ -266,7 +267,7 @@ function buildTableEmbed(state) {
 
 function buildLogEmbed(report, entry, merged) {
   const target = report.targetId
-    ? `<@${report.targetId}> (\`${report.targetName}\`)`
+    ? `**${pseudo(report.targetId)}** (\`${report.targetName}\`)`
     : `**${report.targetName}**`;
   const count = report.entries?.length || 1;
 

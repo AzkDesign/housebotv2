@@ -1478,7 +1478,7 @@ function arenaLeaderboard() {
     .filter(([, s]) => s.w + s.l + s.d > 0)
     .sort((a, b) => b[1].elo - a[1].elo)
     .slice(0, 10)
-    .map(([id, s], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} <@${id}> — **${s.elo}** · ${tierOf(s.elo)[1]} · ${s.w} V / ${s.l} D${s.streak >= 3 ? ` · 🔥 ${s.streak}` : ""}`)
+    .map(([id, s], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} **${pseudo(id)}** — **${s.elo}** · ${tierOf(s.elo)[1]} · ${s.w} V / ${s.l} D${s.streak >= 3 ? ` · 🔥 ${s.streak}` : ""}`)
     .join("\n");
 }
 function arenaMenuPayload(userId) {

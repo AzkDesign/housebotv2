@@ -46,7 +46,7 @@ async function pairAlert(a, b, kind, detail) {
       new EmbedBuilder()
         .setColor(0xf59e0b)
         .setTitle("🕵️ Activité répétée entre deux membres")
-        .setDescription(`<@${a}> et <@${b}> : **${list.length}** ${kind} en 7 jours.\nDernier : ${detail}\n*Possible double compte ou transfert déguisé — à vérifier.*`)
+        .setDescription(`**${pseudo(a)}** et **${pseudo(b)}** : **${list.length}** ${kind} en 7 jours.\nDernier : ${detail}\n*Possible double compte ou transfert déguisé — à vérifier.*`)
         .setTimestamp()
     )
     .catch(() => null);
@@ -59,7 +59,7 @@ async function cheapSaleAlert(l, buyerId, cote) {
       new EmbedBuilder()
         .setColor(0xf59e0b)
         .setTitle("🕵️ Vente bradée au marché")
-        .setDescription(`**${keyLabel(l.key)}** vendue **${formatEuro(l.price)}** (cote ${formatEuro(cote)}, soit ${Math.round((l.price / cote) * 100)} %).\nVendeur : <@${l.seller}> · Acheteur : <@${buyerId}>`)
+        .setDescription(`**${keyLabel(l.key)}** vendue **${formatEuro(l.price)}** (cote ${formatEuro(cote)}, soit ${Math.round((l.price / cote) * 100)} %).\nVendeur : **${pseudo(l.seller)}** · Acheteur : **${pseudo(buyerId)}**`)
         .setTimestamp()
     )
     .catch(() => null);
@@ -232,7 +232,7 @@ async function checkArenaSeason(client) {
       st.dust[id] = (st.dust[id] ?? 0) + dust;
       await grantEventCard(client, id, i === 0 ? "ev_champion" : "ev_podium");
       if (i === 0 && role) await (await guild.members.fetch(id).catch(() => null))?.roles.add(role).catch(() => null);
-      lines.push(`${["🥇", "🥈", "🥉"][i]} <@${id}> — **${x.elo}** pts · ${x.w} V / ${x.l} D · +${dust} ✨ et la carte **${i === 0 ? "Champion de l'Arène" : "Podium de l'Arène"}**`);
+      lines.push(`${["🥇", "🥈", "🥉"][i]} **${pseudo(id)}** — **${x.elo}** pts · ${x.w} V / ${x.l} D · +${dust} ✨ et la carte **${i === 0 ? "Champion de l'Arène" : "Podium de l'Arène"}**`);
     }
   }
   // nouvelle saison : classement resserré vers 1000, bilan remis à zéro

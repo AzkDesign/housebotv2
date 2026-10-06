@@ -16,6 +16,7 @@ const CREDIT_LOG_CHANNEL_ID = "1510687492896981102";
 const GERANTS_ROLE_ID = "1509985135565475850";
 
 const STATE_FILE = require("./data").dataFile("credit-state.json");
+const { pseudo } = require("./noms");
 
 const SELECT_DURATION = "credit_select_duration";
 const MODAL_CREDIT = "credit_modal";
@@ -177,7 +178,7 @@ function buildPendingCreditEmbed(credit, member) {
     .setColor(0xf39c12)
     .setTitle("⏳ Demande de crédit en attente")
     .setDescription(
-      `${member ? `${member} (\`${member.user.tag}\`)` : `<@${credit.userId}>`} demande un crédit.\n\n` +
+      `${member ? `**${pseudo(member.id)}** (\`${member.user.tag}\`)` : `**${pseudo(credit.userId)}**`} demande un crédit.\n\n` +
         `Un **Gérant** <@&${GERANTS_ROLE_ID}> doit **accepter** ou **refuser**.`
     )
     .addFields(buildCreditDetailFields(credit))
@@ -226,7 +227,7 @@ function buildRemoveConfirmEmbed(credit) {
     .setColor(0xe74c3c)
     .setTitle("🗑️ Confirmer la suppression")
     .setDescription(
-      `Supprimer le crédit de <@${credit.userId}> du tableau ?\n\n` +
+      `Supprimer le crédit de **${pseudo(credit.userId)}** du tableau ?\n\n` +
         `Cette action est **définitive** (crédit marqué comme remboursé / clos).`
     )
     .addFields(
@@ -260,7 +261,7 @@ function buildApprovedCreditEmbed(credit, validator) {
     .addFields(
       {
         name: "Membre",
-        value: `<@${credit.userId}>`,
+        value: `**${pseudo(credit.userId)}**`,
         inline: true,
       },
       {
@@ -286,7 +287,7 @@ function buildClosedCreditEmbed(credit, validator) {
     .addFields(
       {
         name: "Membre",
-        value: `<@${credit.userId}>`,
+        value: `**${pseudo(credit.userId)}**`,
         inline: true,
       },
       {
@@ -312,7 +313,7 @@ function buildRejectedCreditEmbed(credit, validator) {
     .addFields(
       {
         name: "Membre",
-        value: `<@${credit.userId}>`,
+        value: `**${pseudo(credit.userId)}**`,
         inline: true,
       },
       {
@@ -358,7 +359,7 @@ function buildTableEmbed(state) {
     const total = calcTotalDue(c.amount, c.interestRate);
     const since = getCreditStartDate(c);
     return (
-      `**${i + 1}.** <@${c.userId}>\n` +
+      `**${i + 1}.** **${pseudo(c.userId)}**\n` +
       `└ Montant : **${formatEuro(c.amount)}** → Total dû : **${formatEuro(total)}** (${dur.rateLabel})\n` +
       `└ Remboursement : **${dur.label}** — échéance ~${formatDateTime(getDueDate(c))}\n` +
       `└ Depuis : ${formatDateTime(since)}\n` +
@@ -552,7 +553,7 @@ async function removeCredit(interaction, client, creditId) {
 
   await interaction.update({
     content:
-      `✅ Crédit supprimé du tableau — <@${credit.userId}> · **${formatEuro(credit.amount)}**.`,
+      `✅ Crédit supprimé du tableau — **${pseudo(credit.userId)}** · **${formatEuro(credit.amount)}**.`,
     embeds: [],
     components: [],
   });

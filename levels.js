@@ -16,6 +16,7 @@ const MESSAGE_LEVELS = [
 ];
 
 const STATE_FILE = require("./data").dataFile("levels-state.json");
+const { pseudo } = require("./noms");
 
 const INSULT_PATTERNS = [
   /\bconnard\b/i,
@@ -137,7 +138,7 @@ function buildProgressEmbed(member, userData, guild) {
     .setTitle("📊 Votre progression")
     .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
     .setDescription(
-      `${member}\n💬 **${userData.messages}** messages envoyés` +
+      `**${pseudo(member.id)}**\n💬 **${userData.messages}** messages envoyés` +
         (next
           ? `\n🎯 Prochain palier : encore **${next.count - userData.messages}** message(s)`
           : "\n🎉 *Tous les paliers sont débloqués !*")
@@ -163,7 +164,7 @@ async function announceLevelUp(guild, member, level) {
     .setColor(0x9b59b6)
     .setTitle("🎉 Nouveau niveau !")
     .setDescription(
-      `${member} vient de passer **${level.label}** !\n\n` +
+      `**${pseudo(member.id)}** vient de passer **${level.label}** !\n\n` +
         `💬 **${level.count} messages** atteints sur le serveur.\n` +
         `Félicitations ! 🦋`
     )

@@ -69,6 +69,7 @@ const {
 const { registerSlashCommands } = require("./commands");
 const { handleClearCommand } = require("./clear");
 const { setupCasino, handleCasinoInteraction } = require("./casino");
+const { pseudo } = require("./noms");
 const { setupDepot, handleDepotInteraction } = require("./depot");
 const { setupIrfPanel, handleIrfInteraction } = require("./irf");
 const { setupAirbnb, handleAirbnbInteraction } = require("./airbnb");
@@ -139,7 +140,7 @@ function buildWelcomeEmbed(member) {
     .setColor(0x2b2d31)
     .setTitle("🏠 Bienvenue dans la maison")
     .setDescription(
-      `Bonjour ${member}, nous sommes ravis de vous accueillir parmi nous.\n\n` +
+      `Bonjour **${pseudo(member.id)}**, nous sommes ravis de vous accueillir parmi nous.\n\n` +
         `Vous faites désormais partie de notre communauté — prenez le temps de vous installer, de découvrir les salons et de faire connaissance avec les autres membres.\n\n` +
         `Pour rejoindre officiellement la maison, ouvrez un **ticket** afin de vous recruter, vous identifier ou poser vos questions au staff.\n\n` +
         `*Merci de respecter le règlement. Bon séjour parmi nous.*`
@@ -367,7 +368,7 @@ async function createTicketChannel(member, ticketType) {
       .setColor(0x8b0000)
       .setTitle(`🦋 Ticket — ${config.label}`)
       .setDescription(
-        `Bonjour ${member},\n\n` +
+        `Bonjour **${pseudo(member.id)}**,\n\n` +
           `Votre ticket **${config.label}** a été ouvert.\n` +
           `Décrivez votre demande en détail — un membre du staff vous répondra dès que possible.\n\n` +
           `*Merci de rester patient et respectueux.*`
@@ -531,6 +532,7 @@ client.once(Events.ClientReady, async () => {
   // Les commandes slash en premier, pour qu'elles soient toujours disponibles.
   await step("commandes slash", () => registerSlashCommands(client, TOKEN));
   await step("logs", () => setupLogs(client));
+  await step("pseudos", () => require("./noms").setupNoms(client));
   await step("la Maison au quotidien", () => setupFeed(client));
   await step("tickets inactifs", () => startInactivityWatcher(client));
   await step("règlement", () => setupRulesMessage(client));
@@ -655,7 +657,7 @@ async function onInteraction(interaction) {
           .setColor(0x2ecc71)
           .setTitle("✅ Règlement accepté")
           .setDescription(
-            `${member} (\`${member.user.tag}\`) a accepté le règlement officiel.`
+            `**${pseudo(member.id)}** (\`${member.user.tag}\`) a accepté le règlement officiel.`
           )
           .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
           .setTimestamp();

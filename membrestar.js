@@ -19,6 +19,7 @@ const ANNOUNCE_CHANNEL_ID = "1509983723892903966"; // le salon étoile est rang�
 const PRIME = 1000;
 const PANEL_TITLE = "⭐ Membre Star de la semaine";
 const STATE_FILE = require("./data").dataFile("membrestar-state.json");
+const { pseudo } = require("./noms");
 
 // Grades selon le nombre d'élections (du plus haut au plus bas)
 const GRADES = [
@@ -79,7 +80,7 @@ function panelMessage() {
   const hall = Object.entries(s.counts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([id, n], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} <@${id}> — ${gradeFor(n).name} · **${n}** fois`)
+    .map(([id, n], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} **${pseudo(id)}** — ${gradeFor(n).name} · **${n}** fois`)
     .join("\n");
   return {
     embeds: [
@@ -91,7 +92,7 @@ function panelMessage() {
             `**${formatEuro(PRIME)}** et un titre sur sa carte d'identité (\`/profil\`).\n\n` +
             "**Grades** (selon le nombre d'élections)\n" +
             "⭐ Membre Star · 🌟 Officiel à **10** · 💫 Digne à **20** · 👑 Royal à **50** · 🦸 Héro à **100**\n\n" +
-            (current ? `🏆 **Star de cette semaine** : <@${current.userId}>` : "🏆 *La star de cette semaine n'a pas encore été élue.*")
+            (current ? `🏆 **Star de cette semaine** : **${pseudo(current.userId)}**` : "🏆 *La star de cette semaine n'a pas encore été élue.*")
         )
         .addFields({ name: "🏛️ Tableau d'honneur", value: hall || "*Aucune élection pour le moment.*" })
         .setTimestamp(),
@@ -125,7 +126,7 @@ async function refreshPanel(client) {
 async function electStar(interaction, client) {
   const guild = interaction.guild;
   if (thisWeekStar()) {
-    return interaction.update({ content: `⭐ La star de cette semaine est déjà élue : <@${thisWeekStar().userId}>.`, components: [] });
+    return interaction.update({ content: `⭐ La star de cette semaine est déjà élue : **${pseudo(thisWeekStar().userId)}**.`, components: [] });
   }
   const target = await guild.members.fetch(interaction.values[0]).catch(() => null);
   if (!target || target.user.bot) return interaction.update({ content: "❌ Membre introuvable.", components: [] });
@@ -188,7 +189,7 @@ async function handleStarInteraction(interaction, client) {
   if (id === "star_elect") {
     const current = thisWeekStar();
     if (current) {
-      await interaction.reply({ content: `⭐ La star de cette semaine est déjà élue : <@${current.userId}>. Rendez-vous lundi !`, ephemeral: true });
+      await interaction.reply({ content: `⭐ La star de cette semaine est déjà élue : **${pseudo(current.userId)}**. Rendez-vous lundi !`, ephemeral: true });
       return true;
     }
     await interaction.reply({

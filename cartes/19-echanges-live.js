@@ -139,7 +139,7 @@ async function executeLiveTrade(client, tr) {
   pairAlert(tr.from, tr.to, "échanges", `${tr.give.map(keyLabel).join(", ") || "rien"} contre ${tr.take.map(keyLabel).join(", ") || "rien"}`).catch(() => null);
   save();
   require("./logs")
-    .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`<@${tr.from}> donne : ${tr.give.map(keyLabel).join(", ") || "rien"}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n<@${tr.to}> donne : ${tr.take.map(keyLabel).join(", ") || "rien"}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
+    .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`**${pseudo(tr.from)}** donne : ${tr.give.map(keyLabel).join(", ") || "rien"}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n**${pseudo(tr.to)}** donne : ${tr.take.map(keyLabel).join(", ") || "rien"}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
     .catch(() => null);
   await checkSeriesRewards(client, tr.from);
   await checkSeriesRewards(client, tr.to);
@@ -312,7 +312,7 @@ async function handleLiveTradeInteraction(interaction, client) {
     clearTimeout(tr.timer);
     for (const u of [tr.from, tr.to]) if (userLiveTrade.get(u) === tr.id) userLiveTrade.delete(u);
     tr.status = "done";
-    await tr.message?.edit({ ...(await livePayloadTrade(tr)), content: `🤝 Échange conclu entre <@${tr.from}> et <@${tr.to}> !`, allowedMentions: { parse: [] } }).catch(() => null);
+    await tr.message?.edit({ ...(await livePayloadTrade(tr)), content: `🤝 Échange conclu entre **${pseudo(tr.from)}** et **${pseudo(tr.to)}** !`, allowedMentions: { parse: [] } }).catch(() => null);
     deleteLater(tr.message, MINUTE);
     return true;
   }

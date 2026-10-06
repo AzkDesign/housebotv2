@@ -17,6 +17,7 @@ const { findOrCreateChannel } = require("./salons");
 
 const mairie = () => require("./mairie");
 const STATE_FILE = require("./data").dataFile("lois-state.json");
+const { pseudo } = require("./noms");
 const VOTE_MS = 48 * 60 * 60 * 1000;
 const PETITION_MS = 72 * 60 * 60 * 1000;
 const QUORUM = 5;
@@ -173,7 +174,7 @@ const HOW_TITLES = {
 
 async function applyLaw(client, { key, action, param, motifs, how, byUserId }) {
   const law = LAWS[key];
-  const signature = how === "decret" ? "— *Le Régime*" : how === "edit" ? `— Sa Majesté <@${byUserId}>` : `— ${how === "initiative" ? "Le peuple de la Maison" : "Les citoyens de la Maison"}`;
+  const signature = how === "decret" ? "— *Le Régime*" : how === "edit" ? `— Sa Majesté **${pseudo(byUserId)}**` : `— ${how === "initiative" ? "Le peuple de la Maison" : "Les citoyens de la Maison"}`;
   let title;
   let text;
   if (action === "enact") {
@@ -204,7 +205,7 @@ function billEmbed(bill, closed = null) {
     .setColor(closed ? (closed === "adoptée" ? 0x2ecc71 : 0xe74c3c) : 0x3498db)
     .setTitle(`${bill.action === "enact" ? law.emoji : "🗑️"} ${bill.action === "enact" ? "Projet de loi" : "Projet d'abrogation"} : ${law.name}`)
     .setDescription(
-      `${origin}, proposé par <@${bill.by}>\n\n` +
+      `${origin}, proposé par **${pseudo(bill.by)}**\n\n` +
         `**${bill.action === "enact" ? lawEffect(bill.key, bill.param) : `Supprimer la loi : ${lawEffect(bill.key)}`}**` +
         (bill.motifs ? `\n\n**Exposé des motifs**\n*« ${bill.motifs} »*` : "") +
         (closed
@@ -281,7 +282,7 @@ function petitionEmbed(p, needed, status = null) {
     .setColor(status ? (status === "réussie" ? 0x2ecc71 : 0x95a5a6) : 0x9b59b6)
     .setTitle(`✍️ Initiative citoyenne : ${p.action === "enact" ? law.name : `abroger « ${law.name} »`}`)
     .setDescription(
-      `Lancée par <@${p.by}>\n\n**${p.action === "enact" ? lawEffect(p.key, p.param) : `Supprimer : ${lawEffect(p.key)}`}**` +
+      `Lancée par **${pseudo(p.by)}**\n\n**${p.action === "enact" ? lawEffect(p.key, p.param) : `Supprimer : ${lawEffect(p.key)}`}**` +
         (p.motifs ? `\n\n*« ${p.motifs} »*` : "") +
         `\n\n✍️ **${p.signatures.length} / ${needed}** signatures` +
         (status ? `\n\n**Pétition ${status}**` : ` · fin ${ts(p.until, "R")}`) +

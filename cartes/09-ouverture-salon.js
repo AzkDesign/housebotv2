@@ -216,7 +216,7 @@ function leaderboard() {
     .filter(([, sc]) => sc > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([id, sc], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} <@${id}> — ${sc} pts`)
+    .map(([id, sc], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} **${pseudo(id)}** — ${sc} pts`)
     .join("\n");
 }
 

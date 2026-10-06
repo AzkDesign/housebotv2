@@ -14,6 +14,7 @@ const { changeBalance, readBalance, formatEuro, isGerant, isFrozen, setFrozen } 
 const { IRF_ROLE_ID, TICKET_CATEGORY_ID } = require("./casino");
 const { MINUTE } = require("./nettoyage");
 const { dataFile } = require("./data");
+const { pseudo } = require("./noms");
 
 // --- Dépôts : un membre ajoute de l'argent à son solde, l'IRF vérifie ensuite ---
 // 1. /deposit : montant et provenance → un ticket s'ouvre avec le membre et l'IRF.
@@ -60,7 +61,7 @@ function depositEmbed(d, member, extra = {}) {
     .setThumbnail(member?.user?.displayAvatarURL({ size: 128 }) ?? null)
     .setDescription(extra.description ?? null)
     .addFields(
-      { name: "Membre", value: `<@${d.userId}>`, inline: true },
+      { name: "Membre", value: `**${pseudo(d.userId)}**`, inline: true },
       { name: "Montant", value: `**${formatEuro(d.amount)}**`, inline: true },
       { name: "Statut", value: status, inline: true },
       { name: "Provenance", value: d.source || "*Non précisée*", inline: false },
@@ -132,7 +133,7 @@ async function openDeposit(interaction) {
       embeds: [
         depositEmbed(d, member, {
           description:
-            `Bonjour ${member},\n\n` +
+            `Bonjour **${pseudo(member.id)}**,\n\n` +
             `**1.** Envoyez **${formatEuro(amount)}**.\n` +
             "**2.** Cliquez sur **📤 J'ai envoyé l'argent** : le dépôt est traité puis crédité sur votre solde.\n" +
             "**3.** L'**IRF** vérifie ensuite l'opération. Un faux dépôt est repris et peut entraîner le gel du compte.\n\n" +
@@ -173,14 +174,14 @@ async function processDeposit(interaction, d, client) {
     .catch(() => null);
   await interaction.channel
     .send({
-      content: `<@&${IRF_ROLE_ID}> — vérification demandée : <@${dep.userId}> déclare avoir envoyé **${formatEuro(dep.amount)}**, déjà crédités sur son solde.`,
+      content: `<@&${IRF_ROLE_ID}> — vérification demandée : **${pseudo(dep.userId)}** déclare avoir envoyé **${formatEuro(dep.amount)}**, déjà crédités sur son solde.`,
       allowedMentions: { roles: [IRF_ROLE_ID] },
       embeds: [depositEmbed(dep, member, { description: "Vérifiez que l'argent a bien été reçu. En cas de faux dépôt, la somme est reprise sur le solde du membre (et son compte est gelé si elle a déjà été dépensée)." })],
       components: [irfButtons(dep.id)],
     })
     .catch(() => null);
   require("./logs")
-    .sendLogEmbed("achats", new EmbedBuilder().setColor(0xf59e0b).setTitle("💳 Dépôt crédité (en attente de vérification)").setDescription(`<@${dep.userId}> : **+${formatEuro(dep.amount)}**\nProvenance : ${dep.source || "non précisée"}\nTicket : <#${dep.channelId}>`).setTimestamp())
+    .sendLogEmbed("achats", new EmbedBuilder().setColor(0xf59e0b).setTitle("💳 Dépôt crédité (en attente de vérification)").setDescription(`**${pseudo(dep.userId)}** : **+${formatEuro(dep.amount)}**\nProvenance : ${dep.source || "non précisée"}\nTicket : <#${dep.channelId}>`).setTimestamp())
     .catch(() => null);
   void client;
 }
@@ -202,7 +203,7 @@ async function decideDeposit(interaction, d, ok) {
   let note;
   if (ok) {
     d.status = "confirmed";
-    note = `✅ Dépôt de **${formatEuro(d.amount)}** confirmé par ${interaction.user}.`;
+    note = `✅ Dépôt de **${formatEuro(d.amount)}** confirmé par **${pseudo(interaction.user.id)}**.`;
   } else {
     d.status = "refused";
     const balance = readBalance(d.userId);
@@ -211,14 +212,14 @@ async function decideDeposit(interaction, d, ok) {
     const missing = Math.round((d.amount - taken) * 100) / 100;
     if (missing > 0) setFrozen(d.userId, { by: interaction.user.id, reason: `Faux dépôt n° ${d.id} : ${formatEuro(missing)} déjà dépensés`, at: Date.now() });
     d.taken = taken;
-    note = `❌ Faux dépôt : **${formatEuro(taken)}** repris par ${interaction.user}.` + (missing > 0 ? `\n🔒 ${formatEuro(missing)} avaient déjà été dépensés : le compte de <@${d.userId}> est **gelé**.` : "");
+    note = `❌ Faux dépôt : **${formatEuro(taken)}** repris par **${pseudo(interaction.user.id)}**.` + (missing > 0 ? `\n🔒 ${formatEuro(missing)} avaient déjà été dépensés : le compte de **${pseudo(d.userId)}** est **gelé**.` : "");
   }
   saveState(state);
   const member = await interaction.guild.members.fetch(d.userId).catch(() => null);
   await interaction.update({ embeds: [depositEmbed(d, member, { description: note })], components: [] });
   await interaction.channel.send(`${note}\n*Ce ticket sera fermé dans 1 minute.*`).catch(() => null);
   require("./logs")
-    .sendLogEmbed("achats", new EmbedBuilder().setColor(ok ? 0x22c55e : 0xef4444).setTitle(ok ? "✅ Dépôt confirmé" : "❌ Faux dépôt repris").setDescription(`<@${d.userId}> · ${formatEuro(d.amount)}\n${note}`).setTimestamp())
+    .sendLogEmbed("achats", new EmbedBuilder().setColor(ok ? 0x22c55e : 0xef4444).setTitle(ok ? "✅ Dépôt confirmé" : "❌ Faux dépôt repris").setDescription(`**${pseudo(d.userId)}** · ${formatEuro(d.amount)}\n${note}`).setTimestamp())
     .catch(() => null);
   member?.send(ok ? `✅ Votre dépôt de **${formatEuro(d.amount)}** a été vérifié et confirmé par l'IRF.` : `❌ L'IRF n'a pas trouvé votre dépôt de **${formatEuro(d.amount)}** : la somme a été reprise sur votre solde.`).catch(() => null);
   closeLater(interaction.channel, `Dépôt ${ok ? "confirmé" : "refusé"}`, interaction.user);

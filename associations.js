@@ -25,6 +25,7 @@ const LIST_TITLE = "🤝 Vie associative";
 
 // La mairie est chargée à la demande (elle utilise elle-même ce module).
 const mairie = () => require("./mairie");
+const { pseudo } = require("./noms");
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -77,7 +78,7 @@ function assoPanel(asso) {
     .setDescription(
       `${asso.description}\n\n` +
         (banned ? "⛔ **Association interdite par le régime.** Plus aucune activité possible.\n\n" : "") +
-        `👤 Président(e) : <@${asso.presidentId}>\n` +
+        `👤 Président(e) : **${pseudo(asso.presidentId)}**\n` +
         `👥 Adhérents : **${asso.members.length}**\n` +
         `💰 Caisse : **${formatEuro(asso.balance)}**\n` +
         `${asso.private ? "🔒 Association privée : salons réservés aux adhérents" : "🌍 Association ouverte : salons visibles par tous"}`
@@ -130,7 +131,7 @@ function listMessage() {
                   .map(
                     (a) =>
                       `${a.status === "banned" ? "⛔" : "🤝"} **${a.name}** — <#${a.panelChannelId}>\n` +
-                      `└ Président(e) <@${a.presidentId}> · ${a.members.length} adhérent(s) · caisse ${formatEuro(a.balance)}`
+                      `└ Président(e) **${pseudo(a.presidentId)}** · ${a.members.length} adhérent(s) · caisse ${formatEuro(a.balance)}`
                   )
                   .join("\n")
                   .slice(0, 3800)
@@ -342,7 +343,7 @@ async function showMayorActions(interaction) {
     new ButtonBuilder().setCustomId(`asso_dissolve_${asso.id}`).setLabel("Dissoudre").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
   );
   return interaction.update({
-    content: `🤝 **${asso.name}** — président(e) <@${asso.presidentId}>, ${asso.members.length} adhérent(s), caisse ${formatEuro(asso.balance)}.${regime() !== "dictature" ? "\n*L'interdiction n'est possible que sous la dictature.*" : ""}`,
+    content: `🤝 **${asso.name}** — président(e) **${pseudo(asso.presidentId)}**, ${asso.members.length} adhérent(s), caisse ${formatEuro(asso.balance)}.${regime() !== "dictature" ? "\n*L'interdiction n'est possible que sous la dictature.*" : ""}`,
     components: [row],
   });
 }
@@ -579,8 +580,8 @@ async function handleAssociationsInteraction(interaction, client) {
       save();
       await refreshAssoPanel(client, asso);
       const panelChannel = await client.channels.fetch(asso.panelChannelId).catch(() => null);
-      await panelChannel?.send(`🏆 <@${extra}> reçoit **${formatEuro(value)}** de l'association !`).catch(() => null);
-      await interaction.reply({ content: `🏆 ${formatEuro(value)} versés à <@${extra}>.`, ephemeral: true });
+      await panelChannel?.send(`🏆 **${pseudo(extra)}** reçoit **${formatEuro(value)}** de l'association !`).catch(() => null);
+      await interaction.reply({ content: `🏆 ${formatEuro(value)} versés à **${pseudo(extra)}**.`, ephemeral: true });
       break;
     }
     case "handover":
@@ -605,7 +606,7 @@ async function handleAssociationsInteraction(interaction, client) {
       await applyPermissions(client, asso);
       await refreshAssoPanel(client, asso);
       await refreshList(client);
-      await interaction.update({ content: `🔁 <@${next}> est la nouvelle présidence de ${asso.name}.`, components: [] });
+      await interaction.update({ content: `🔁 **${pseudo(next)}** est la nouvelle présidence de ${asso.name}.`, components: [] });
       break;
     }
     default:
@@ -622,7 +623,7 @@ function activityMessage(asso, activity) {
         .setTitle(`📅 ${activity.title}`)
         .setDescription(
           `🗓️ **${activity.when}**\n\n${activity.details}\n\n` +
-            `👥 Participants (${activity.participants.length}) : ${activity.participants.map((p) => `<@${p}>`).join(", ") || "*personne pour l'instant*"}`
+            `👥 Participants (${activity.participants.length}) : ${activity.participants.map((p) => `**${pseudo(p)}**`).join(", ") || "*personne pour l'instant*"}`
         )
         .setFooter({ text: asso.name }),
     ],

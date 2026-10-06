@@ -13,6 +13,7 @@ const OLD_LEADERBOARD_TITLE = "🏆 Classement — Plus actifs";
 // DATA_DIR permet de stocker les soldes sur un volume Railway (ex. /data)
 // pour qu'ils ne soient pas effacés à chaque redéploiement.
 const { DATA_DIR, dataFile } = require("./data");
+const { pseudo } = require("./noms");
 const STATE_FILE = dataFile("economie-state.json");
 
 const TRANSACTIONS_KEPT = 30;
@@ -153,7 +154,7 @@ function buildRichestEmbed(state) {
     ? ranked
         .map(([userId, amount], i) => {
           const rank = RANK_MEDALS[i] ?? `**${i + 1}.**`;
-          return `${rank} <@${userId}> — **${formatEuro(amount)}**`;
+          return `${rank} **${pseudo(userId)}** — **${formatEuro(amount)}**`;
         })
         .join("\n")
     : "*Aucune fortune enregistrée pour le moment.*";
@@ -242,7 +243,7 @@ async function handleSolde(interaction) {
     .setTitle("💰 Votre solde")
     .setThumbnail(interaction.user.displayAvatarURL({ size: 128 }))
     .setDescription(
-      `${interaction.user}\n\n💶 **${formatEuro(balance)}**` +
+      `**${pseudo(interaction.user.id)}**\n\n💶 **${formatEuro(balance)}**` +
         (position >= 0 ? `\n🏆 Classement : **${position + 1}ᵉ** fortune de la Maison` : "")
     )
     .setTimestamp();
@@ -304,7 +305,7 @@ async function handleArgent(interaction, client) {
       { name: actionLabel, value: formatEuro(amount), inline: true },
       { name: "Solde", value: `${formatEuro(before)} → **${formatEuro(after)}**`, inline: true },
       { name: "Raison", value: reason },
-      { name: "Par", value: `${interaction.user}` }
+      { name: "Par", value: `**${pseudo(interaction.user.id)}**` }
     )
     .setTimestamp();
 

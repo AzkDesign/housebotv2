@@ -11,6 +11,7 @@ const {
   ENTREPRENEUR_ROLE_ID,
   SITUATION_DELICATE_ROLE_ID,
 } = require("./casino");
+const { pseudo } = require("./noms");
 
 const CANDIDATURE_CATEGORY_ID = "1509979339649843200";
 const CANDIDATURE_LOG_CHANNEL_ID = "1509980081764700271";
@@ -246,7 +247,7 @@ function buildCandidatureResultEmbed(member, answers) {
     .setTitle(`📋 Candidature — ${member.user.tag}`)
     .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
     .setDescription(
-      `${member}\n*Candidature complète — votes anonymes (2 requis)*`
+      `**${pseudo(member.id)}**\n*Candidature complète — votes anonymes (2 requis)*`
     )
     .addFields(
       {
@@ -488,7 +489,7 @@ async function requestChefDecision(channel, guild, stats, member) {
   if (logChannel?.isTextBased()) {
     await logChannel
       .send(
-        `👑 **Décision cheffe requise** — égalité sur la candidature de ${member} (<#${channel.id}>).`
+        `👑 **Décision cheffe requise** — égalité sur la candidature de **${pseudo(member.id)}** (<#${channel.id}>).`
       )
       .catch(() => null);
   }

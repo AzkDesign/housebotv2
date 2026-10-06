@@ -6,6 +6,7 @@ const { onTransaction, formatEuro, ECONOMIE_LOG_CHANNEL_ID } = require("./econom
 const { findOrCreateChannel } = require("./salons");
 
 const STATE_FILE = require("./data").dataFile("logs-state.json");
+const { pseudo } = require("./noms");
 const FLUSH_MS = 60 * 1000; // les lignes sont regroupées par minute
 
 const CHANNELS = {
@@ -43,7 +44,7 @@ function queueTransaction(t) {
   const key = categoryOf(t.label);
   const sign = t.delta >= 0 ? "+" : "−";
   queues[key].push(
-    `\`${hhmm(t.at)}\` <@${t.userId}> **${sign}${formatEuro(Math.abs(t.delta))}** — ${t.label} → ${formatEuro(t.after)}`
+    `\`${hhmm(t.at)}\` **${pseudo(t.userId)}** **${sign}${formatEuro(Math.abs(t.delta))}** — ${t.label} → ${formatEuro(t.after)}`
   );
 }
 

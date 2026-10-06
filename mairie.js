@@ -42,6 +42,7 @@ const {
   setCurfew,
 } = require("./politique");
 const { findOrCreateChannel, findOrCreateRole } = require("./salons");
+const { pseudo } = require("./noms");
 
 const IRF_CHANNEL_ID = "1527524719094534185";
 
@@ -236,7 +237,7 @@ async function channel(client, key) {
 function sign(userId, withRole = false) {
   if (regime() === "dictature") return "— *Le Régime*";
   const role = isMayor(userId) ? REGIMES[regime()].title.toLowerCase() : "adjoint au maire";
-  return `— <@${userId}>${withRole ? `, ${role}` : ""}`;
+  return `— **${pseudo(userId)}**${withRole ? `, ${role}` : ""}`;
 }
 
 async function journal(client, title, description, color = 0xf1c40f) {
@@ -312,7 +313,7 @@ function electionPanel() {
     .setDescription(
       `**${PHASE_LABELS[phase]}** — prochaine étape ${ts(until, "R")} (${ts(until, "F")})\n\n` +
         (mayor
-          ? `👑 **Maire** : <@${mayor.userId}>${mayor.adjointId ? ` · 🎖️ Adjoint : <@${mayor.adjointId}>` : ""}${mayor.interim ? " *(intérim)*" : ""}\n`
+          ? `👑 **Maire** : **${pseudo(mayor.userId)}**${mayor.adjointId ? ` · 🎖️ Adjoint : **${pseudo(mayor.adjointId)}**` : ""}${mayor.interim ? " *(intérim)*" : ""}\n`
           : "👑 **Maire** : *aucun pour le moment*\n") +
         `${REGIMES[regime()].emoji} Régime : **${REGIMES[regime()].name}**${curfew() ? " · 🌙 couvre-feu" : ""}\n` +
         `💰 Budget municipal : **${formatEuro(s.budget)}**\n\n` +
@@ -326,7 +327,7 @@ function electionPanel() {
     embed.addFields({
       name: `Candidats (${candidates.length})`,
       value: candidates
-        .map(([id, c]) => `• <@${id}>${c.adjointId ? ` & <@${c.adjointId}>` : ""} — *« ${c.slogan} »*`)
+        .map(([id, c]) => `• **${pseudo(id)}**${c.adjointId ? ` & **${pseudo(c.adjointId)}**` : ""} — *« ${c.slogan} »*`)
         .join("\n")
         .slice(0, 1024),
     });
@@ -360,7 +361,7 @@ function candidateCard(userId, c) {
   return new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(`🗳️ Candidature — « ${c.slogan} »`)
-    .setDescription(`Tête de liste : <@${userId}>${c.adjointId ? `\nAdjoint : <@${c.adjointId}>` : "\n*Candidature seule*"}\n\n**Programme**\n${c.programme}`)
+    .setDescription(`Tête de liste : **${pseudo(userId)}**${c.adjointId ? `\nAdjoint : **${pseudo(c.adjointId)}**` : "\n*Candidature seule*"}\n\n**Programme**\n${c.programme}`)
     .setTimestamp(c.at);
 }
 
@@ -389,7 +390,7 @@ function bureauPanel() {
     .setColor(0xf1c40f)
     .setTitle(BUREAU_TITLE)
     .setDescription(
-      (s.mayor ? `👑 <@${s.mayor.userId}>${s.mayor.adjointId ? ` · 🎖️ <@${s.mayor.adjointId}>` : ""}\n\n` : "*Aucun maire en fonction.*\n\n") +
+      (s.mayor ? `👑 **${pseudo(s.mayor.userId)}**${s.mayor.adjointId ? ` · 🎖️ **${pseudo(s.mayor.adjointId)}**` : ""}\n\n` : "*Aucun maire en fonction.*\n\n") +
         `${REGIMES[regime()].emoji} **Régime : ${REGIMES[regime()].name}**${curfew() ? " · 🌙 couvre-feu en cours" : ""}\n*${REGIMES[regime()].description}*\n\n` +
         `💰 **Budget : ${formatEuro(s.budget)}**\n` +
         `Chaque dimanche : ${Math.round(BUDGET_SHARE * 100)} % des recettes de la Maison, moins le salaire du maire (${formatEuro(MAYOR_SALARY)}) et les allocations.\n\n` +
@@ -488,7 +489,7 @@ async function chooseAdjoint(interaction, client) {
   save();
   await refreshCandidateCard(client, interaction.user.id);
   await refreshPanels(client);
-  await adjoint.send(`🎖️ ${interaction.user} vous a choisi(e) comme **adjoint** pour les élections municipales.`).catch(() => null);
+  await adjoint.send(`🎖️ **${pseudo(interaction.user.id)}** vous a choisi(e) comme **adjoint** pour les élections municipales.`).catch(() => null);
   await interaction.update({ content: `🎖️ ${adjoint} est votre adjoint.`, components: [] });
 }
 
@@ -517,7 +518,7 @@ async function showVote(interaction) {
   if (!candidates.length) return interaction.reply({ content: "Aucun candidat.", ephemeral: true });
   const current = election.votes[interaction.user.id];
   await interaction.reply({
-    content: current ? `🗳️ Vous avez voté pour <@${current}>. Vous pouvez changer :` : "🗳️ Pour qui votez-vous ?",
+    content: current ? `🗳️ Vous avez voté pour **${pseudo(current)}**. Vous pouvez changer :` : "🗳️ Pour qui votez-vous ?",
     ephemeral: true,
     components: [
       new ActionRowBuilder().addComponents(
@@ -546,7 +547,7 @@ async function castVote(interaction, client) {
   }
   election.votes[interaction.user.id] = interaction.values[0];
   save();
-  await interaction.update({ content: `✅ Vote enregistré pour <@${interaction.values[0]}>. Il reste anonyme et modifiable jusqu'à la clôture.`, components: [] });
+  await interaction.update({ content: `✅ Vote enregistré pour **${pseudo(interaction.values[0])}**. Il reste anonyme et modifiable jusqu'à la clôture.`, components: [] });
   await upsertPanel(client, "electionsChannelId", "electionPanelId", ELECTION_TITLE, electionPanel());
 }
 
@@ -570,7 +571,7 @@ async function setRoles(client, mayorId, adjointId) {
 
 function mandateReport(mayor) {
   return (
-    `👑 <@${mayor.userId}> — en fonction depuis ${ts(mayor.since, "D")}\n` +
+    `👑 **${pseudo(mayor.userId)}** — en fonction depuis ${ts(mayor.since, "D")}\n` +
     `💸 Dépenses : **${formatEuro(mayor.spent ?? 0)}**\n` +
     `📜 Arrêtés : **${mayor.decrees ?? 0}** · ⚖️ Changements de taux : **${mayor.taxChanges ?? 0}**\n` +
     `🏢 Subventions : **${mayor.subsidies ?? 0}** · 🎁 Primes : **${mayor.bonuses ?? 0}**`
@@ -630,7 +631,7 @@ async function publishResults(client) {
 
   const results = candidates
     .sort((a, b) => counts[b] - counts[a])
-    .map((id) => `${id === winner ? "👑" : "•"} <@${id}> — **${counts[id]}** voix (${total ? Math.round((counts[id] / total) * 1000) / 10 : 0} %)`)
+    .map((id) => `${id === winner ? "👑" : "•"} **${pseudo(id)}** — **${counts[id]}** voix (${total ? Math.round((counts[id] / total) * 1000) / 10 : 0} %)`)
     .join("\n");
 
   if (s.mayor) await journal(client, "📊 Bilan de fin de mandat", mandateReport(s.mayor), 0x95a5a6);
@@ -640,11 +641,11 @@ async function publishResults(client) {
   const text =
     `**${total}** votant(s)\n\n${results}` +
     (tied.length > 1 ? "\n\n⚖️ Égalité : le vainqueur a été **tiré au sort**." : "") +
-    `\n\n👑 <@${winner}> est élu(e) maire${adjointId ? `, avec <@${adjointId}> comme adjoint` : ""} !`;
+    `\n\n👑 **${pseudo(winner)}** est élu(e) maire${adjointId ? `, avec **${pseudo(adjointId)}** comme adjoint` : ""} !`;
   await ch?.send({ content: `<@${winner}>`, embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(`🏆 Résultats — ${election.key}`).setDescription(text)] }).catch(() => null);
   await journal(client, "👑 Nouveau maire", text);
   await require("./cartes").grantEventCard(client, winner, "ev_maire").catch(() => null);
-  require("./feed").post(`👑 <@${winner}> est élu(e) maire de la Maison !`);
+  require("./feed").post(`👑 **${pseudo(winner)}** est élu(e) maire de la Maison !`);
   await refreshPanels(client);
   await refreshRichestLeaderboard(client).catch(() => null);
 }
@@ -677,7 +678,7 @@ async function signPetition(interaction, client) {
           new EmbedBuilder()
             .setColor(0xe74c3c)
             .setTitle("⚖️ Référendum de destitution")
-            .setDescription(`La pétition a réuni ${s.petition.signatures.length} signatures. Faut-il **destituer** <@${s.mayor.userId}> ?\nFin du vote ${ts(s.petition.referendum.until, "R")}.`),
+            .setDescription(`La pétition a réuni ${s.petition.signatures.length} signatures. Faut-il **destituer** **${pseudo(s.mayor.userId)}** ?\nFin du vote ${ts(s.petition.referendum.until, "R")}.`),
         ],
         components: [
           new ActionRowBuilder().addComponents(
@@ -718,7 +719,7 @@ async function closeReferendum(client) {
     const old = s.mayor;
     await journal(client, "📊 Bilan de fin de mandat (destitution)", mandateReport(old), 0x95a5a6);
     await installMayor(client, old.adjointId ?? null, null, true);
-    const text = `**${yes}** pour, **${no}** contre : <@${old.userId}> est **destitué(e)**.\n` + (old.adjointId ? `🎖️ <@${old.adjointId}> assure l'intérim jusqu'à la prochaine élection.` : "La Maison est sans maire jusqu'à la prochaine élection.");
+    const text = `**${yes}** pour, **${no}** contre : **${pseudo(old.userId)}** est **destitué(e)**.\n` + (old.adjointId ? `🎖️ **${pseudo(old.adjointId)}** assure l'intérim jusqu'à la prochaine élection.` : "La Maison est sans maire jusqu'à la prochaine élection.");
     await ch?.send({ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle("⚖️ Maire destitué").setDescription(text)] }).catch(() => null);
     await journal(client, "⚖️ Maire destitué", text, 0xe74c3c);
   } else {
@@ -1003,7 +1004,7 @@ async function applyLever(interaction, key, client) {
   await journal(
     client,
     "⚖️ Arrêté fiscal",
-    `${regime() === "dictature" ? "Le Régime" : `Le maire <@${interaction.user.id}>`} fixe **${lever.label}** à **${formatLever(key, after)}** (avant : ${formatLever(key, before)}).`,
+    `${regime() === "dictature" ? "Le Régime" : `Le maire **${pseudo(interaction.user.id)}**`} fixe **${lever.label}** à **${formatLever(key, after)}** (avant : ${formatLever(key, before)}).`,
     after > before ? 0xe74c3c : 0x2ecc71
   );
   await refreshPanels(client);
@@ -1059,7 +1060,7 @@ async function handleMairieInteraction(interaction, client) {
   } else if (id === "mairie_staff_revoke" || id === "mairie_staff_cancel") {
     if (!isGerant(interaction.member)) { await interaction.reply({ content: "❌ Réservé aux gérants.", ephemeral: true }); return true; }
     if (id === "mairie_staff_revoke" && s.mayor) {
-      await journal(client, "🛠️ Maire révoqué par le staff", `<@${s.mayor.userId}> a été révoqué(e) par ${interaction.user}.\n\n${mandateReport(s.mayor)}`, 0xe74c3c);
+      await journal(client, "🛠️ Maire révoqué par le staff", `**${pseudo(s.mayor.userId)}** a été révoqué(e) par **${pseudo(interaction.user.id)}**.\n\n${mandateReport(s.mayor)}`, 0xe74c3c);
       await installMayor(client, null, null);
     } else if (id === "mairie_staff_cancel") {
       const election = currentElection();
@@ -1070,7 +1071,7 @@ async function handleMairieInteraction(interaction, client) {
         election.done = true;
         save();
       }
-      await journal(client, "🛠️ Élection annulée par le staff", `Décision de ${interaction.user}. Les cautions ont été remboursées.`, 0xe74c3c);
+      await journal(client, "🛠️ Élection annulée par le staff", `Décision de **${pseudo(interaction.user.id)}**. Les cautions ont été remboursées.`, 0xe74c3c);
     }
     await refreshPanels(client);
     await interaction.update({ content: "✅ Fait.", components: [] });
@@ -1129,10 +1130,10 @@ async function handleMairieInteraction(interaction, client) {
     if (!budgetMove(-value, `Prime à ${target}`)) { await interaction.reply({ content: `❌ Budget insuffisant (${formatEuro(s.budget)}).`, ephemeral: true }); return true; }
     changeBalance(target, value, `Prime de la Mairie — ${motif}`.slice(0, 120));
     count("bonuses");
-    await journal(client, "🎁 Prime", `**${formatEuro(value)}** versés à <@${target}>.\nMotif : ${motif}\n\n${sign(userId)}`);
+    await journal(client, "🎁 Prime", `**${formatEuro(value)}** versés à **${pseudo(target)}**.\nMotif : ${motif}\n\n${sign(userId)}`);
     await refreshPanels(client);
     await refreshRichestLeaderboard(client).catch(() => null);
-    await interaction.reply({ content: `🎁 Prime de ${formatEuro(value)} versée à <@${target}>.`, ephemeral: true });
+    await interaction.reply({ content: `🎁 Prime de ${formatEuro(value)} versée à **${pseudo(target)}**.`, ephemeral: true });
   } else if (id === "mairie_m_allowances") {
     const before = { ...s.allowances };
     for (const k of ["social", "universal", "welcome"]) s.allowances[k] = Math.min(5000, amount(interaction, k));
@@ -1149,9 +1150,9 @@ async function handleMairieInteraction(interaction, client) {
   } else if (id === "mairie_amnesty") {
     const target = interaction.values[0];
     const debt = getTaxDebt(target);
-    if (!debt) { await interaction.update({ content: `<@${target}> n'a pas de dette fiscale.`, components: [] }); return true; }
+    if (!debt) { await interaction.update({ content: `**${pseudo(target)}** n'a pas de dette fiscale.`, components: [] }); return true; }
     setTaxDebt(target, null);
-    await journal(client, "🕊️ Amnistie fiscale", `La dette fiscale de <@${target}> (**${formatEuro(debt.amount)}**) est annulée.\n${sign(userId)}`);
+    await journal(client, "🕊️ Amnistie fiscale", `La dette fiscale de **${pseudo(target)}** (**${formatEuro(debt.amount)}**) est annulée.\n${sign(userId)}`);
     await interaction.update({ content: `🕊️ Dette de ${formatEuro(debt.amount)} annulée.`, components: [] });
   } else if (id === "mairie_amnesty_all") {
     const debts = Object.entries(loadEconomie().taxDebts);
@@ -1211,9 +1212,9 @@ async function handleMairieInteraction(interaction, client) {
     e.remaining = round2(e.remaining - value);
     save();
     changeBalance(target, value, `Gain — ${e.title}`.slice(0, 120));
-    await journal(client, `🏆 ${e.title}`, `<@${target}> remporte **${formatEuro(value)}** !`, 0x9b59b6);
+    await journal(client, `🏆 ${e.title}`, `**${pseudo(target)}** remporte **${formatEuro(value)}** !`, 0x9b59b6);
     await refreshRichestLeaderboard(client).catch(() => null);
-    await interaction.reply({ content: `🏆 ${formatEuro(value)} versés à <@${target}>. Reste : ${formatEuro(e.remaining)}.`, ephemeral: true });
+    await interaction.reply({ content: `🏆 ${formatEuro(value)} versés à **${pseudo(target)}**. Reste : ${formatEuro(e.remaining)}.`, ephemeral: true });
   } else if (id.startsWith("mairie_event_close_")) {
     const e = s.events[id.slice("mairie_event_close_".length)];
     if (!e) { await interaction.update({ content: "❌ Événement introuvable.", components: [] }); return true; }
@@ -1244,7 +1245,7 @@ async function showRegimePowers(interaction, mayor) {
     const nobles = Object.entries(s.nobles ?? {});
     text =
       "👑 **Monarchie** : distribuez des titres de noblesse.\n\n" +
-      (nobles.length ? nobles.map(([uid, t]) => `${NOBLE_TITLES[t]} — <@${uid}>`).join("\n") : "*Aucun noble pour le moment.*");
+      (nobles.length ? nobles.map(([uid, t]) => `${NOBLE_TITLES[t]} — **${pseudo(uid)}**`).join("\n") : "*Aucun noble pour le moment.*");
     row.addComponents(
       new ButtonBuilder().setCustomId("mairie_r_title").setLabel("Anoblir un membre").setEmoji("🎖️").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("mairie_r_untitle").setLabel("Retirer un titre").setEmoji("✖️").setStyle(ButtonStyle.Secondary).setDisabled(!nobles.length)
@@ -1304,7 +1305,7 @@ async function changeRegime(interaction, client) {
   await journal(
     client,
     `${r.emoji} Changement de régime : ${r.name}`,
-    `${REGIMES[before].emoji} ${REGIMES[before].name} → **${r.emoji} ${r.name}**\n\n*${r.description}*\n\n${next === "dictature" ? "— *Le Régime*" : `— <@${interaction.user.id}>, ${r.title.toLowerCase()}`}`,
+    `${REGIMES[before].emoji} ${REGIMES[before].name} → **${r.emoji} ${r.name}**\n\n*${r.description}*\n\n${next === "dictature" ? "— *Le Régime*" : `— **${pseudo(interaction.user.id)}**, ${r.title.toLowerCase()}`}`,
     next === "dictature" ? 0x2c2c2c : next === "anarchie" ? 0x7f8c8d : 0xf1c40f
   );
   const elections = await channel(client, "electionsChannelId");
@@ -1341,7 +1342,7 @@ async function handleRegimeInteraction(interaction, client) {
           new EmbedBuilder()
             .setColor(0x3498db)
             .setTitle("🗳️ Vote citoyen")
-            .setDescription(`**${question}**\n\nProposé par <@${userId}>. Fin du vote ${ts(until, "R")}. Vote anonyme, modifiable.`),
+            .setDescription(`**${question}**\n\nProposé par **${pseudo(userId)}**. Fin du vote ${ts(until, "R")}. Vote anonyme, modifiable.`),
         ],
         components: [
           new ActionRowBuilder().addComponents(
@@ -1431,7 +1432,7 @@ async function handleRegimeInteraction(interaction, client) {
     if (role && target) await target.roles.remove(role).catch(() => null);
     delete s.nobles[uid];
     save();
-    await journal(client, "✖️ Titre retiré", `<@${uid}> perd son titre de noblesse.\n\n${sign(userId, true)}`, 0x95a5a6);
+    await journal(client, "✖️ Titre retiré", `**${pseudo(uid)}** perd son titre de noblesse.\n\n${sign(userId, true)}`, 0x95a5a6);
     return interaction.update({ content: "✖️ Titre retiré.", components: [] });
   }
 
@@ -1462,7 +1463,7 @@ async function handleRegimeInteraction(interaction, client) {
     const target = interaction.values[0];
     const last = load().confiscations?.[target] ?? 0;
     if (Date.now() - last < CONFISCATION_COOLDOWN_MS) {
-      return interaction.update({ content: `⏳ <@${target}> a déjà subi une confiscation. Prochaine possible ${ts(last + CONFISCATION_COOLDOWN_MS, "R")}.`, components: [] });
+      return interaction.update({ content: `⏳ **${pseudo(target)}** a déjà subi une confiscation. Prochaine possible ${ts(last + CONFISCATION_COOLDOWN_MS, "R")}.`, components: [] });
     }
     return interaction.showModal(
       modal(`mairie_r_mconfisc_${target}`, "💰 Confiscation", [
@@ -1485,7 +1486,7 @@ async function handleRegimeInteraction(interaction, client) {
     budgetMove(taken, `Confiscation (${pct} %)`);
     s.confiscations = { ...(s.confiscations ?? {}), [target]: Date.now() };
     save();
-    await journal(client, "💰 Confiscation", `**${formatEuro(taken)}** (${pct} % du solde) confisqués à <@${target}> au profit de la ville.\nMotif : ${motif}\n\n— *Le Régime*`, 0x2c2c2c);
+    await journal(client, "💰 Confiscation", `**${formatEuro(taken)}** (${pct} % du solde) confisqués à **${pseudo(target)}** au profit de la ville.\nMotif : ${motif}\n\n— *Le Régime*`, 0x2c2c2c);
     const user = await client.users.fetch(target).catch(() => null);
     await user?.send(`💰 Le régime vous a confisqué **${formatEuro(taken)}** (${pct} % de votre solde).\nMotif : ${motif}`).catch(() => null);
     await refreshPanels(client);

@@ -32,6 +32,7 @@ const {
 } = require("./casino");
 const { showIrfCompanies } = require("./entreprises");
 const { showIrfTaxes } = require("./impots");
+const { pseudo } = require("./noms");
 
 const IRF_PANEL_CHANNEL_ID = "1527524719094534185";
 const PANEL_TITLE = "🏛️ IRF — Institut de Régulation Financière";
@@ -139,7 +140,7 @@ async function showComptes(interaction) {
   const total = ranked.reduce((s, [, v]) => s + v, 0);
 
   const lines = ranked.map(
-    ([id, amount], i) => `**${i + 1}.** <@${id}> — ${formatEuro(amount)}${eco.frozen[id] ? " 🔒" : ""}`
+    ([id, amount], i) => `**${i + 1}.** **${pseudo(id)}** — ${formatEuro(amount)}${eco.frozen[id] ? " 🔒" : ""}`
   );
   let body = "";
   let shown = 0;
@@ -170,7 +171,7 @@ async function showTransactions(interaction, userId) {
     .setColor(0x3498db)
     .setTitle("📋 Transactions")
     .setDescription(
-      `<@${userId}> — solde **${formatEuro(eco.balances[userId] ?? 0)}**${eco.frozen[userId] ? " 🔒 gelé" : ""}\n\n` +
+      `**${pseudo(userId)}** — solde **${formatEuro(eco.balances[userId] ?? 0)}**${eco.frozen[userId] ? " 🔒 gelé" : ""}\n\n` +
         (list.length
           ? list
               .map(
@@ -278,7 +279,7 @@ function reasonInput(label = "Raison", required = true) {
 
 async function freezeAccount(interaction, userId, reason, client) {
   if (isFrozen(userId)) {
-    await interaction.reply({ content: `🔒 Le compte de <@${userId}> est déjà gelé.`, ephemeral: true });
+    await interaction.reply({ content: `🔒 Le compte de **${pseudo(userId)}** est déjà gelé.`, ephemeral: true });
     return;
   }
   setFrozen(userId, { by: interaction.user.id, reason, at: Date.now() });
@@ -287,10 +288,10 @@ async function freezeAccount(interaction, userId, reason, client) {
     .setColor(0xe74c3c)
     .setTitle("🔒 Compte gelé")
     .addFields(
-      { name: "Membre", value: `<@${userId}>`, inline: true },
+      { name: "Membre", value: `**${pseudo(userId)}**`, inline: true },
       { name: "Solde", value: formatEuro(readBalance(userId)), inline: true },
       { name: "Raison", value: reason },
-      { name: "Par", value: `${interaction.user}` }
+      { name: "Par", value: `**${pseudo(interaction.user.id)}**` }
     )
     .setTimestamp();
   await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -304,7 +305,7 @@ async function freezeAccount(interaction, userId, reason, client) {
 
 async function unfreezeAccount(interaction, userId, client) {
   if (!isFrozen(userId)) {
-    await interaction.update({ content: `🔓 Le compte de <@${userId}> n'est pas gelé.`, components: [] });
+    await interaction.update({ content: `🔓 Le compte de **${pseudo(userId)}** n'est pas gelé.`, components: [] });
     return;
   }
   setFrozen(userId, null);
@@ -313,8 +314,8 @@ async function unfreezeAccount(interaction, userId, client) {
     .setColor(0x2ecc71)
     .setTitle("🔓 Compte dégelé")
     .addFields(
-      { name: "Membre", value: `<@${userId}>`, inline: true },
-      { name: "Par", value: `${interaction.user}`, inline: true }
+      { name: "Membre", value: `**${pseudo(userId)}**`, inline: true },
+      { name: "Par", value: `**${pseudo(interaction.user.id)}**`, inline: true }
     )
     .setTimestamp();
   await interaction.update({ content: "", embeds: [embed], components: [] });
@@ -334,7 +335,7 @@ async function fineMember(interaction, userId, rawAmount, reason, client) {
   const after = changeBalance(userId, -amount, `Amende IRF — ${reason}`.slice(0, 120), { force: true });
   if (after === null) {
     await interaction.reply({
-      content: `❌ <@${userId}> n'a que **${formatEuro(before)}** : amende de ${formatEuro(amount)} impossible.`,
+      content: `❌ **${pseudo(userId)}** n'a que **${formatEuro(before)}** : amende de ${formatEuro(amount)} impossible.`,
       ephemeral: true,
     });
     return;
@@ -345,11 +346,11 @@ async function fineMember(interaction, userId, rawAmount, reason, client) {
     .setColor(0xe67e22)
     .setTitle("💸 Amende infligée")
     .addFields(
-      { name: "Membre", value: `<@${userId}>`, inline: true },
+      { name: "Membre", value: `**${pseudo(userId)}**`, inline: true },
       { name: "Montant", value: formatEuro(amount), inline: true },
       { name: "Solde", value: `${formatEuro(before)} → **${formatEuro(after)}**`, inline: true },
       { name: "Raison", value: reason },
-      { name: "Par", value: `${interaction.user}` }
+      { name: "Par", value: `**${pseudo(interaction.user.id)}**` }
     )
     .setTimestamp();
   await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -496,7 +497,7 @@ async function handleIrfInteraction(interaction, client) {
       case "irf_enquete_close": {
         const channel = interaction.channel;
         if (!channel?.topic?.startsWith("irf-enquete:")) return true;
-        await interaction.reply(`🔒 Enquête clôturée par ${interaction.user}. Suppression du salon dans 5 secondes…`);
+        await interaction.reply(`🔒 Enquête clôturée par **${pseudo(interaction.user.id)}**. Suppression du salon dans 5 secondes…`);
         setTimeout(() => require("./tickets").closeTicket(channel, { reason: "Enquête IRF clôturée", closedBy: interaction.user }), 5000);
         break;
       }

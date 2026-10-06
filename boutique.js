@@ -20,6 +20,7 @@ const MIDDLEMAN_ROLE_ID = "1510773230154289222";
 const SHOP_LOG_CHANNEL_ID = "1510687492896981102";
 
 const STATE_FILE = require("./data").dataFile("boutique-state.json");
+const { pseudo } = require("./noms");
 
 const BTN = {
   SELL: "shop_sell",
@@ -92,7 +93,7 @@ function buildShopEmbed(state) {
           .map(
             (item) =>
               `💋 • **${item.name}** — ${item.price} €\n` +
-              `   └ *par <@${item.sellerId}>*`
+              `   └ *par **${pseudo(item.sellerId)}***`
           )
           .join("\n\n")
       : "*Aucun article en vente pour le moment.*";
@@ -202,7 +203,7 @@ function buildItemDetailEmbed(item, guild) {
       { name: "💶 Prix", value: `**${item.price} €**`, inline: true },
       {
         name: "👤 Vendeur",
-        value: seller ? `${seller}` : `<@${item.sellerId}>`,
+        value: seller ? `${seller}` : `**${pseudo(item.sellerId)}**`,
         inline: true,
       }
     )
@@ -264,7 +265,7 @@ function buildTradeIntroEmbed(trade) {
     .setColor(0x8b0000)
     .setTitle("🦋 Transaction Middleman")
     .setDescription(
-      `<@${trade.buyerId}> ↔ <@${trade.sellerId}>\n\n` +
+      `**${pseudo(trade.buyerId)}** ↔ **${pseudo(trade.sellerId)}**\n\n` +
         `**Article :** ${trade.item.name}\n` +
         `**Prix :** ${trade.item.price} €\n` +
         `**Description :** ${trade.item.description}\n\n` +
@@ -305,12 +306,12 @@ function buildTradeLogEmbed(trade, guild) {
       { name: "Prix", value: `${trade.item.price} €`, inline: true },
       {
         name: "Acheteur",
-        value: `<@${trade.buyerId}>`,
+        value: `**${pseudo(trade.buyerId)}**`,
         inline: true,
       },
       {
         name: "Vendeur",
-        value: `<@${trade.sellerId}>`,
+        value: `**${pseudo(trade.sellerId)}**`,
         inline: true,
       },
       {

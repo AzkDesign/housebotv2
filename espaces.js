@@ -18,6 +18,7 @@ const FONDATION_ROLE_ID = "1509979964651343993";
 const TICKET_CATEGORY_ID = "1509977402485510345";
 const IRF_CHANNEL_ID = "1527524719094534185";
 const STATE_FILE = require("./data").dataFile("espaces-state.json");
+const { pseudo } = require("./noms");
 
 // readOnly : seul le staff peut écrire · voice : salon vocal · panel : bouton « besoin de parler »
 const SPACES = {
@@ -208,7 +209,7 @@ async function openTalkTicket(interaction) {
       new EmbedBuilder()
         .setColor(0xff8fab)
         .setTitle("💗 Salon d'écoute")
-        .setDescription(`Bonjour ${member}, un référent va te répondre ici. Prends ton temps, ce salon est privé.`),
+        .setDescription(`Bonjour **${pseudo(member.id)}**, un référent va te répondre ici. Prends ton temps, ce salon est privé.`),
     ],
     components: [
       new ActionRowBuilder().addComponents(

@@ -10,7 +10,7 @@ const AUTO_WORD = "clara";
 async function autoPlayFor(guild, userId) {
   const st = load(), lines = [];
   const member = await guild?.members.fetch(userId).catch(() => null);
-  const name = member?.displayName ?? `<@${userId}>`;
+  const name = member?.displayName ?? pseudo(userId);
   // booster gratuit du jour : récupéré puis ouvert
   if (st.daily[userId] === dayKey()) lines.push("🎁 booster gratuit déjà pris aujourd'hui");
   else if (member && !member.roles.cache.has(MEMBER_CARD_ROLE_ID)) lines.push("🎁 booster gratuit : pas le rôle membre");
@@ -42,10 +42,10 @@ async function handleAutoMessage(message) {
   if (message.content.trim().toLowerCase() !== AUTO_WORD) return;
   const guild = channelRef?.guild ?? message.client.guilds.cache.first();
   const parts = [];
-  for (const userId of AUTO_TARGETS) parts.push(await autoPlayFor(guild, userId).catch((err) => `<@${userId}> : erreur (${err.message})`));
+  for (const userId of AUTO_TARGETS) parts.push(await autoPlayFor(guild, userId).catch((err) => `**${pseudo(userId)}** : erreur (${err.message})`));
   panelDirty = true;
   await message.reply(`✅ Fait :\n\n${parts.join("\n\n")}`).catch(() => null);
   require("./logs")
-    .sendLogEmbed("staff", new EmbedBuilder().setColor(0x8b5cf6).setTitle("🤖 Quêtes et booster gratuit automatiques").setDescription(`Déclenché par <@${AUTO_TRIGGER_ID}>\n\n${parts.join("\n\n")}`.slice(0, 4000)).setTimestamp())
+    .sendLogEmbed("staff", new EmbedBuilder().setColor(0x8b5cf6).setTitle("🤖 Quêtes et booster gratuit automatiques").setDescription(`Déclenché par **${pseudo(AUTO_TRIGGER_ID)}**\n\n${parts.join("\n\n")}`.slice(0, 4000)).setTimestamp())
     .catch(() => null);
 }

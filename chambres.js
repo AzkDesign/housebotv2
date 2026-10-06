@@ -30,6 +30,7 @@ const CHAMBRE_SELECT_REMOVE_ROOM_ID = "chambre_select_remove_room";
 const CHAMBRE_SELECT_USER_PREFIX = "chambre_select_user:";
 const CHAMBRE_REMOVE_USER_PREFIX = "chambre_remove_user:";
 const STATE_FILE = require("./data").dataFile("chambres-state.json");
+const { pseudo } = require("./noms");
 const PANEL_TITLE = "🛏️ Tableau des chambres";
 
 /** La Fondation : ce rôle gère les chambres et les déménagements */
@@ -177,7 +178,7 @@ function stars(n) {
 
 function formatOccupants(guild, userIds) {
   if (!userIds?.length) return "*Libre*";
-  return userIds.map((id) => guild.members.cache.get(id)?.toString() ?? `<@${id}>`).join(", ");
+  return userIds.map((id) => `**${pseudo(id)}**`).join(", ");
 }
 
 // --- Tableau ---
@@ -291,11 +292,11 @@ async function announceMove(client, userId, fromRoom, toRoom) {
   const to = QUARTIERS[toRoom.quartier];
   let text;
   if (!fromRoom) {
-    text = `🔑 <@${userId}> emménage à **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
+    text = `🔑 **${pseudo(userId)}** emménage à **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
   } else {
     const from = QUARTIERS[fromRoom.quartier];
     const arrow = to.stars > from.stars ? "⬆️" : to.stars < from.stars ? "⬇️" : "📦";
-    text = `${arrow} <@${userId}> quitte **${from.emoji} ${from.name}** (${roomLabel(fromRoom)}) pour **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
+    text = `${arrow} **${pseudo(userId)}** quitte **${from.emoji} ${from.name}** (${roomLabel(fromRoom)}) pour **${to.emoji} ${to.name}** (${roomLabel(toRoom)}).`;
   }
   const message = await channel.send({ content: text, allowedMentions: { users: [] } }).catch(() => null);
   require("./feed").post(text, { stat: "demenagements" });
@@ -391,7 +392,7 @@ async function openMoveTicket(interaction) {
         .setColor(0x57f287)
         .setTitle("📦 Demande de déménagement")
         .addFields(
-          { name: "Membre", value: `${member}` },
+          { name: "Membre", value: `**${pseudo(member.id)}**` },
           { name: "Actuellement", value: current ? `${current.quartier.emoji} ${current.quartier.name} — ${roomLabel(current.room)}` : "Sans chambre", inline: true },
           { name: "Souhaite aller", value: `${q.emoji} ${q.name} — ${roomLabel(room)}`, inline: true },
           { name: "Frais", value: `${formatEuro(moveFee(q))} (solde : ${formatEuro(readBalance(member.id))})` }
@@ -439,7 +440,7 @@ async function answerMove(interaction, decision, userId) {
     const from = getResidence(userId)?.room ?? null;
     removeMemberFromAllRooms(state, userId);
     state.rooms[room.id].push(userId);
-    result = `✅ Déménagement **accepté** par ${interaction.user} : bienvenue à ${q.emoji} **${q.name}** (${roomLabel(room)}) ! ${formatEuro(moveFee(q))} prélevés.`;
+    result = `✅ Déménagement **accepté** par **${pseudo(interaction.user.id)}** : bienvenue à ${q.emoji} **${q.name}** (${roomLabel(room)}) ! ${formatEuro(moveFee(q))} prélevés.`;
     delete state.moves[userId];
     saveState(state);
     await announceMove(interaction.client, userId, from, room);
@@ -447,7 +448,7 @@ async function answerMove(interaction, decision, userId) {
   } else {
     delete state.moves[userId];
     saveState(state);
-    result = decision === "cancel" ? "↩️ Demande annulée par le membre." : `❌ Déménagement **refusé** par ${interaction.user}.`;
+    result = decision === "cancel" ? "↩️ Demande annulée par le membre." : `❌ Déménagement **refusé** par **${pseudo(interaction.user.id)}**.`;
   }
 
   await interaction.update({ components: [] });
@@ -471,7 +472,7 @@ async function showResidence(interaction) {
         .setDescription(
           `Vous dormez dans **${r.room.name}** (${r.maison.name}).\n\n*${r.quartier.description}*\n\n` +
             `**Autour de vous :**\n${r.quartier.amenities.map((a) => `· ${a}`).join("\n")}\n\n` +
-            `👥 Colocataire(s) : ${r.roommates.length ? r.roommates.map((id) => `<@${id}>`).join(", ") : "aucun"}\n` +
+            `👥 Colocataire(s) : ${r.roommates.length ? r.roommates.map((id) => `**${pseudo(id)}**`).join(", ") : "aucun"}\n` +
             `🧾 Taxe d'habitation : **${formatEuro(r.quartier.tax)}**/semaine`
         ),
     ],
@@ -603,7 +604,7 @@ async function handleChambreInteraction(interaction) {
     }
     const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
     if (!allowedIn(targetMember, room)) {
-      await interaction.update({ content: `❌ ${maisonOf(room).name} est réservée aux Entrepreneurs : <@${targetId}> n'a pas ce rôle.`, components: [] });
+      await interaction.update({ content: `❌ ${maisonOf(room).name} est réservée aux Entrepreneurs : **${pseudo(targetId)}** n'a pas ce rôle.`, components: [] });
       return true;
     }
     if (occupants.length >= room.capacity) {
@@ -618,7 +619,7 @@ async function handleChambreInteraction(interaction) {
     await announceMove(interaction.client, targetId, from, room);
     await updateChambresPanel(interaction.guild, interaction.client);
     await interaction.update({
-      content: `✅ <@${targetId}> est maintenant dans **${room.name}** (${QUARTIERS[room.quartier].name}).`,
+      content: `✅ **${pseudo(targetId)}** est maintenant dans **${room.name}** (${QUARTIERS[room.quartier].name}).`,
       components: [],
     });
     return true;
@@ -635,7 +636,7 @@ async function handleChambreInteraction(interaction) {
     state.rooms[room.id] = state.rooms[room.id].filter((uid) => uid !== targetId);
     saveState(state);
     await updateChambresPanel(interaction.guild, interaction.client);
-    await interaction.update({ content: `✅ <@${targetId}> a été retiré(e) de **${room.name}**.`, components: [] });
+    await interaction.update({ content: `✅ **${pseudo(targetId)}** a été retiré(e) de **${room.name}**.`, components: [] });
     return true;
   }
 
