@@ -76,7 +76,7 @@ async function registerSlashCommands(client, token) {
       .toJSON(),
     new SlashCommandBuilder()
       .setName("iles")
-      .setDescription("L'archipel des cartes : gardez une île avec vos cartes, ou attaquez celle d'un membre")
+      .setDescription("L'île des cartes : gardez-la avec vos cartes, ou attaquez son gardien")
       .toJSON(),
     new SlashCommandBuilder()
       .setName("codex")

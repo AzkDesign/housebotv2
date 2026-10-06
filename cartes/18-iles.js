@@ -16,9 +16,6 @@ const ISLAND_WEAR_RATE = 0.02, ISLAND_WEAR_MAX = 0.4; // PV max perdus par heure
 const ISLAND_AI = { name: "Gardien", offset: 0, boost: 1, smart: 0.75 };
 const ISLANDS = {
   lagon: { name: "Île du Lagon", short: "Lagon", emoji: "🏝️", fluent: "Desert island", series: "paris", color: "#22d3ee" },
-  volcan: { name: "Île du Volcan", short: "Volcan", emoji: "🌋", fluent: "Volcano", series: "entreprises", color: "#f97316" },
-  geants: { name: "Île des Géants", short: "Géants", emoji: "🗿", fluent: "Moai", series: "maison", color: "#a78bfa" },
-  pic: { name: "Île du Pic Gelé", short: "Pic Gelé", emoji: "🗻", fluent: "Mount fuji", series: "voyage", color: "#93c5fd" },
 };
 const islandFights = new Map(); // île -> id du combat en cours
 let islandsDirty = true;
@@ -297,7 +294,7 @@ async function drawIslandPanel(ctx, id, x, y, w, h) {
     if (f.hp <= 0) ctx.globalAlpha = 0.35;
     ctx.shadowColor = "rgba(0,0,0,0.6)";
     ctx.shadowBlur = 10;
-    ctx.drawImage(await cardThumb(f.card, isHoloKey(f.key), tw, th), tx, ty, tw, th);
+    ctx.drawImage(await cardThumb(f.card, isHoloKey(f.key), tw * 2, th * 2), tx, ty, tw, th);
     ctx.restore();
     if (f.series === def.series) {
       disc(ctx, tx + tw - 4, ty + 6, 9, def.color);
@@ -318,11 +315,11 @@ async function drawIslandPanel(ctx, id, x, y, w, h) {
   let by = y + 28;
   const right = x + w - 18;
   if (fight) {
-    pill(ctx, x + 16, by, "ATTAQUE EN COURS", "#f87171", "left", 13);
+    pill(ctx, right, by, "ATTAQUE EN COURS", "#f87171", "right", 13);
     by += 30;
   }
   const wear = islandWear(isl);
-  if (wear > 0) pill(ctx, x + 16, by, `USURE -${Math.round(wear * 100)} %`, "#fbbf24", "left", 12);
+  if (wear > 0) pill(ctx, right, by, `USURE -${Math.round(wear * 100)} %`, "#fbbf24", "right", 12);
   ctx.font = "13px CardText";
   ctx.fillStyle = "#64748b";
   ctx.textAlign = "right";
@@ -330,7 +327,7 @@ async function drawIslandPanel(ctx, id, x, y, w, h) {
   ctx.textAlign = "left";
 }
 async function drawArchipelago() {
-  const W = 1200, H = 820;
+  const W = 1200, H = 760;
   const c = createCanvas(W, H);
   const ctx = c.getContext("2d");
   ctx.imageSmoothingQuality = "high";
@@ -340,17 +337,21 @@ async function drawArchipelago() {
   ctx.fillStyle = "#fde68a";
   ctx.shadowColor = "rgba(0,0,0,0.7)";
   ctx.shadowBlur = 10;
-  spaced(ctx, "L'ARCHIPEL DE LA MAISON", W / 2, 62, 5);
+  spaced(ctx, "L'ÎLE DE LA MAISON", W / 2, 62, 5);
   ctx.shadowBlur = 0;
   ctx.font = "19px CardItalic";
   ctx.fillStyle = "#bae6fd";
-  ctx.fillText(`Gardez une île avec vos cartes : ${ISLAND_DUST} poussières d'étoile par heure… tant que personne ne vous la prend.`, W / 2, 96);
-  const ids = Object.keys(ISLANDS);
-  for (const [i, id] of ids.entries()) await drawIslandPanel(ctx, id, 40 + (i % 2) * 580, 126 + Math.floor(i / 2) * 330, 540, 310);
+  ctx.fillText(`Gardez l'île avec vos cartes : ${ISLAND_DUST} poussières d'étoile par heure… tant que personne ne vous la prend.`, W / 2, 96);
+  // une seule île, dessinée en grand
+  ctx.save();
+  ctx.translate(120, 126);
+  ctx.scale(1.6, 1.6);
+  await drawIslandPanel(ctx, Object.keys(ISLANDS)[0], 0, 0, 600, 340);
+  ctx.restore();
   ctx.textAlign = "center";
   ctx.font = "13px CardEngrave";
   ctx.fillStyle = "rgba(186,230,253,0.55)";
-  spaced(ctx, "LES CARTES QUI DÉFENDENT UNE ÎLE NE PEUVENT ÊTRE NI VENDUES NI ÉCHANGÉES", W / 2, H - 26, 2);
+  spaced(ctx, "LES CARTES QUI DÉFENDENT L'ÎLE NE PEUVENT ÊTRE NI VENDUES NI ÉCHANGÉES", W / 2, H - 26, 2);
   ctx.textAlign = "left";
   return c;
 }
@@ -370,7 +371,7 @@ function islandButtons() {
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("carte_ile_me").setLabel("Mon île").setEmoji("🛡️").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("carte_ile_rules").setLabel("Règles des îles").setEmoji("📖").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("carte_ile_rules").setLabel("Règles de l'île").setEmoji("📖").setStyle(ButtonStyle.Secondary)
     ),
   ];
 }
@@ -381,13 +382,13 @@ async function islandsPayload() {
     embeds: [
       new EmbedBuilder()
         .setColor(0x0ea5e9)
-        .setTitle("🏝️ L'Archipel de la Maison")
+        .setTitle(`${ISLANDS.lagon.emoji} ${ISLANDS.lagon.name}`)
         .setDescription(
-          `Placez **jusqu'à 3 cartes** sur une île libre pour la garder : elle vous rapporte **${ISLAND_DUST} ✨ par heure**.\n` +
-            "Pour prendre une île déjà gardée, battez sa défense : c'est une **IA qui joue les cartes du gardien**. Mettez toutes ses cartes K.O. et l'île est à vous !"
+          `Si l'île est libre, placez **jusqu'à 3 cartes** pour la garder : elle vous rapporte **${ISLAND_DUST} ✨ par heure**.\n` +
+            "Si elle est gardée, battez sa défense : c'est une **IA qui joue les cartes du gardien**. Mettez toutes ses cartes K.O. et l'île est à vous !"
         )
         .setImage("attachment://archipel.jpg")
-        .setFooter({ text: `${held} / ${Object.keys(ISLANDS).length} îles gardées · une seule île par membre · les dégâts restent d'un combat à l'autre` }),
+        .setFooter({ text: `${held ? "L'île est gardée" : "L'île est libre"} · les dégâts restent d'un combat à l'autre` }),
     ],
     files: [file],
     components: islandButtons(),
@@ -396,15 +397,15 @@ async function islandsPayload() {
 const ISLAND_RULES = () =>
   new EmbedBuilder()
     .setColor(0x0ea5e9)
-    .setTitle("📖 Les règles des îles")
+    .setTitle("📖 Les règles de l'île")
     .setDescription(
-      `🏝️ **Prendre une île libre** : choisissez jusqu'à 3 cartes, elles deviennent la défense de l'île.\n` +
-        `✨ **Gains** : le gardien reçoit **${ISLAND_DUST} ✨ par heure**, +${ISLAND_DEFENSE_DUST} ✨ à chaque attaque repoussée. Le conquérant d'une île gagne **${ISLAND_CAPTURE_DUST} ✨**.\n` +
+      `🏝️ **Prendre l'île quand elle est libre** : choisissez jusqu'à 3 cartes, elles deviennent sa défense.\n` +
+        `✨ **Gains** : le gardien reçoit **${ISLAND_DUST} ✨ par heure**, +${ISLAND_DEFENSE_DUST} ✨ à chaque attaque repoussée. Celui qui conquiert l'île gagne **${ISLAND_CAPTURE_DUST} ✨**.\n` +
         "⚔️ **Attaquer** : combat normal de l'Arène, mais contre une **IA qui joue la défense du gardien**. Le gardien n'a rien à faire. Mettez toutes ses cartes K.O. : votre équipe devient la nouvelle défense.\n" +
         `🩹 **Dégâts** : les PV perdus par la défense restent d'un combat à l'autre et reviennent de ${Math.round(ISLAND_REGEN * 100)} % par heure. Le gardien peut tout soigner pour ${ISLAND_HEAL_COST} ✨.\n` +
-        `⭐ **Bonus** : chaque île favorise une série ; ses cartes y ont **+10 %** de PV et d'attaque en défense.\n` +
-        `⏳ **Usure** : après ${ISLAND_WEAR_AFTER} h de garde, la défense perd ${Math.round(ISLAND_WEAR_RATE * 100)} % de PV max par heure (jusqu'à -${Math.round(ISLAND_WEAR_MAX * 100)} %). Les îles finissent toujours par tomber !\n` +
-        `🔒 Une seule île par membre. Les cartes qui défendent ne peuvent être ni vendues ni échangées. Après une défaite, attendez ${ISLAND_COOLDOWN / MINUTE} min avant de réattaquer la même île.\n` +
+        `⭐ **Bonus** : l'île favorise la série **${SERIES_LABELS[ISLANDS.lagon.series].replace(/^\S+ /, "")}** ; ses cartes y ont **+10 %** de PV et d'attaque en défense.\n` +
+        `⏳ **Usure** : après ${ISLAND_WEAR_AFTER} h de garde, la défense perd ${Math.round(ISLAND_WEAR_RATE * 100)} % de PV max par heure (jusqu'à -${Math.round(ISLAND_WEAR_MAX * 100)} %). L'île finit toujours par changer de mains !\n` +
+        `🔒 Les cartes qui défendent ne peuvent être ni vendues ni échangées. Après une défaite, attendez ${ISLAND_COOLDOWN / MINUTE} min avant de réattaquer l'île.\n` +
         "🔁 Le gardien peut changer sa défense (les cartes ajoutées arrivent au niveau de PV le plus bas de l'équipe) ou quitter l'île : ses cartes redeviennent libres."
     );
 function placeOptions(userId, id) {
@@ -431,7 +432,7 @@ function placeRow(userId, id, placeholder) {
 }
 function myIslandPayload(userId) {
   const id = islandOf(userId);
-  if (!id) return { ephemeral: true, content: "🏝️ Vous ne gardez aucune île pour le moment. Prenez une île libre ou attaquez-en une depuis la carte de l'archipel.", embeds: [], components: [] };
+  if (!id) return { ephemeral: true, content: "🏝️ Vous ne gardez aucune île pour le moment. Prenez-la si elle est libre, ou attaquez son gardien.", embeds: [], components: [] };
   const def = ISLANDS[id], isl = islandsState()[id];
   const lines = islandDefenders(id).map((f) => `${RARITIES[f.card.rarity].emoji} **${keyLabel(f.key)}** — ${f.hp > 0 ? `${f.hp} / ${f.maxHp} PV` : "**K.O.** (se soigne)"}${f.series === def.series ? " ⭐" : ""}`);
   const next = HOUR - ((Date.now() - isl.paidAt) % HOUR);
@@ -559,7 +560,7 @@ async function islandBattleOver(client, b, winner) {
   // succès des îles
   const facts = playerFacts;
   playerFacts = (userId) => ({ ...facts(userId), islands: load().userStats[userId]?.islands ?? 0 });
-  ACHIEVEMENTS.push(["ile1", "🏝️", "Conquérant", "Prendre une île", "islands", 1, 50], ["ile10", "🗺️", "Seigneur de l'archipel", "Prendre 10 îles", "islands", 10, 300]);
+  ACHIEVEMENTS.push(["ile1", "🏝️", "Conquérant", "Prendre l'île", "islands", 1, 50], ["ile10", "🗺️", "Seigneur de l'île", "Prendre l'île 10 fois", "islands", 10, 300]);
 }
 
 // --- Interactions des îles ---

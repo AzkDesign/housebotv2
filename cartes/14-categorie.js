@@ -9,7 +9,7 @@ const CARD_CHANNELS = [
   ["arene", "⚔️・arène", "⚔️ Défis, combats en direct (un fil par combat), défi de la semaine et fin de saison"],
   ["echanges", "🔄・échanges", "🔄 Les propositions d'échange entre membres"],
   ["marche", "🏪・marché-des-cartes", "🏪 Les grosses ventes du marché (le marché s'ouvre avec /marche)"],
-  ["iles", "🏝️・îles", "🏝️ L'archipel : gardez une île avec vos cartes (10 ✨ par heure)… et défendez-la contre les autres membres"],
+  ["iles", "🏝️・île", "🏝️ L'île de la Maison : gardez-la avec vos cartes (10 ✨ par heure)… et défendez-la contre les autres membres"],
   ["classements", "🏆・classements-cartes", "🏆 Classements en direct : collection, holos, shiny, arène et succès"],
   ["discussion", "💬・discussion-cartes", "💬 Parlez cartes, montrez vos plus belles prises et organisez vos échanges"],
 ];
@@ -46,6 +46,7 @@ async function setupCardCategory(client, guild, annonces) {
       for (const p of o.deny ?? []) perms[Object.keys(P).find((k) => P[k] === p)] = false;
       await ch.permissionOverwrites.edit(o.id, perms).catch(() => null);
     }
+    if (key !== "panel" && ch.name !== name) await ch.setName(name).catch(() => null);
     if (ch.topic !== topic) await ch.setTopic(topic).catch(() => null);
     if (ch.position !== i) await ch.setPosition(i).catch(() => null);
     st.cardChannels[key] = ch.id;
