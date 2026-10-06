@@ -9,6 +9,7 @@ const CARD_CHANNELS = [
   ["arene", "⚔️・arène", "⚔️ Défis, combats en direct (un fil par combat), défi de la semaine et fin de saison"],
   ["echanges", "🔄・échanges", "🔄 Les propositions d'échange entre membres"],
   ["marche", "🏪・marché-des-cartes", "🏪 Les grosses ventes du marché (le marché s'ouvre avec /marche)"],
+  ["iles", "🏝️・îles", "🏝️ L'archipel : gardez une île avec vos cartes (10 ✨ par heure)… et défendez-la contre les autres membres"],
   ["classements", "🏆・classements-cartes", "🏆 Classements en direct : collection, holos, shiny, arène et succès"],
   ["discussion", "💬・discussion-cartes", "💬 Parlez cartes, montrez vos plus belles prises et organisez vos échanges"],
 ];

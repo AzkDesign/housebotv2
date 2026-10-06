@@ -1,5 +1,6 @@
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
+  if (await handleIslandInteraction(interaction, client)) return true;
   if (interaction.isChatInputCommand?.() && interaction.commandName === "succes") {
     await interaction.reply(achievementsPayload(interaction.user.id));
     return true;
@@ -576,7 +577,7 @@ async function handleCartesInteraction(interaction, client) {
       return true;
     }
     if (!moveKey(userId, null, key)) {
-      await interaction.reply({ content: "❌ Vous n'avez plus cette carte.", ephemeral: true });
+      await interaction.reply({ content: "❌ Vous n'avez plus cette carte (ou elle défend votre île).", ephemeral: true });
       return true;
     }
     const listing = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), seller: userId, sellerName: interaction.member?.displayName ?? interaction.user.username, key, price, at: Date.now() };

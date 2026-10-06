@@ -286,7 +286,7 @@ async function drawFighterSide(ctx, b, i, W, opts = {}) {
   ctx.font = `${fitText(ctx, p.name, 300, 28, "CardTitle")}px CardTitle`;
   ctx.fillStyle = "#ffffff";
   ctx.fillText(p.name, nx, 56);
-  const [, tierName, tierColor] = p.isAI ? [0, `Niveau ${b.ai?.name ?? "Confirmé"}`, "#f472b6"] : tierOf(arenaStats(p.id).elo);
+  const [, tierName, tierColor] = p.isAI ? [0, b.aiLabel ?? `Niveau ${b.ai?.name ?? "Confirmé"}`, "#f472b6"] : tierOf(arenaStats(p.id).elo);
   ctx.font = "13px CardBold";
   ctx.fillStyle = tierColor;
   ctx.fillText(p.isAI ? tierName : `${tierName} · ${arenaStats(p.id).elo} pts`, nx, 78);
@@ -1171,9 +1171,10 @@ function escrow(b) {
 }
 async function startBattle(client, a, bUser, opts) {
   const id = Date.now().toString(36);
-  const ai = bUser.isAI ? aiLevelFor(a.user.id) : null;
+  const ai = bUser.isAI && !opts.island ? aiLevelFor(a.user.id) : null;
   const players = [playerOf(a.user, a.name), playerOf(bUser.user, ai ? `La Maison · ${ai.name}` : bUser.name, bUser.isAI)];
-  const b = { id, ai, players, round: 0, phase: "team", mise: opts.mise ?? 0, bets: [], lastLines: [], history: [[], []], deadline: Date.now() + TEAM_SECONDS * 1000, startedAt: Date.now() };
+  if (opts.island) players[1].id = `ile:${opts.island}`; // l'IA joue pour le gardien, sans toucher à ses propres combats
+  const b = { id, ai, island: opts.island ?? null, aiLevel: opts.aiLevel ?? null, aiLabel: opts.aiLabel ?? null, players, round: 0, phase: "team", mise: opts.mise ?? 0, bets: [], lastLines: [], history: [[], []], deadline: Date.now() + TEAM_SECONDS * 1000, startedAt: Date.now() };
   if (players[1].isAI) {
     players[1].ready = true;
   }
@@ -1201,6 +1202,7 @@ const AI_LEVELS = [
 // le niveau monte toutes les 3 victoires contre la Maison
 const aiLevelFor = (userId) => AI_LEVELS[Math.min(AI_LEVELS.length - 1, Math.floor((arenaStats(userId).aiW ?? 0) / 3))];
 function aiTeam(b) {
+  if (b.island) return islandDefenders(b.island);
   const lvl = b.ai ?? AI_LEVELS[1];
   const ranks = b.players[0].team.map((f) => ORDER.indexOf(f.card.rarity));
   const avg = ranks.length ? Math.round(ranks.reduce((x, y) => x + y, 0) / ranks.length) : 1;
@@ -1249,7 +1251,7 @@ async function beginRounds(client, b) {
   await nextRound(client, b);
 }
 function aiChoice(b) {
-  const lvl = b.ai ?? AI_LEVELS[1];
+  const lvl = b.ai ?? b.aiLevel ?? AI_LEVELS[1];
   const me = b.players[1], foe = b.players[0], f = activeOf(me), o = activeOf(foe);
   const canSpecial = me.energy >= SPECIAL_COST;
   if (Math.random() > lvl.smart) {

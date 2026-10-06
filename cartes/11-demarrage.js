@@ -32,6 +32,7 @@ async function setupCartes(client) {
   await pickWeeklyCard().catch(() => null);
   await announceWeeklyRule().catch(() => null);
   await refreshLeaderboards().catch(() => null);
+  await refreshIslands().catch((err) => console.error("Îles:", err.message));
   publishCardsAnnouncement().catch((err) => console.error("Annonce des cartes:", err.message));
   // prépare les animations des boosters en arrière-plan : le premier acheteur n'attend pas
   setTimeout(async () => {
@@ -54,6 +55,8 @@ async function setupCartes(client) {
       await checkScheduledGeneration();
       await dailyBackup().catch((err) => console.error("Sauvegarde des cartes:", err.message));
       if (new Date().getMinutes() % 10 === 0) await refreshLeaderboards().catch(() => null);
+      payIslands();
+      if (islandsDirty || new Date().getMinutes() % 10 === 5) await refreshIslands().catch(() => null);
       await pickWeeklyCard();
       await checkArenaSeason(client);
       const st = load();

@@ -196,6 +196,7 @@ async function refreshLeaderboards() {
       { name: "✦ Holographiques", value: top(holoCount, 5, (v) => `**${v}** holo${v > 1 ? "s" : ""}`), inline: true },
       { name: "🍀 Chasseurs de Shiny", value: top(shinyCount, 5, (v) => `**${v}** shiny`), inline: true },
       { name: `⚔️ Arène — saison ${st.arenaSeason?.n ?? 1}`, value: arena, inline: false },
+      { name: "🏝️ Gardiens des îles", value: Object.entries(ISLANDS).map(([id, d]) => `${d.emoji} ${d.short} — ${islandsState()[id].holder ? `<@${islandsState()[id].holder}>` : "*libre*"}`).join("\n"), inline: true },
       { name: "🏅 Succès", value: top((id) => Object.keys(st.achievements[id]?.unlocked ?? {}).length, 5, (v) => `**${v}** / ${ACHIEVEMENTS.length}`), inline: true }
     )
     .setFooter({ text: "Mis à jour automatiquement toutes les 10 minutes" });
