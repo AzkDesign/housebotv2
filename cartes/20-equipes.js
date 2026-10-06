@@ -201,24 +201,9 @@ async function drawTeamCard(team) {
   ctx.strokeStyle = metalGradient(ctx, W, H, METAL.legendaire);
   roundRect(ctx, 8, 8, W - 16, H - 16, 22);
   ctx.stroke();
-  // médaillon
-  glow(ctx, 250, 250, 210, color, 0.35);
-  disc(ctx, 250, 250, 150, metalGradient(ctx, W, H, METAL.legendaire));
-  const inner = ctx.createRadialGradient(250, 220, 10, 250, 250, 140);
-  inner.addColorStop(0, rgba(color, 0.55));
-  inner.addColorStop(1, "#0b0716");
-  disc(ctx, 250, 250, 138, inner);
-  for (let k = 0; k < 24; k++) {
-    const a = (k / 24) * TAU;
-    disc(ctx, 250 + Math.cos(a) * 144, 250 + Math.sin(a) * 144, 2.5, "rgba(255,240,200,0.7)");
-  }
-  const art = await emblemImage(team.emblem);
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.6)";
-  ctx.shadowBlur = 20;
-  ctx.shadowOffsetY = 8;
-  if (art) ctx.drawImage(art, 250 - 105, 250 - 112, 210, 210);
-  ctx.restore();
+  // blason
+  glow(ctx, 250, 240, 230, color, 0.3);
+  ctx.drawImage(await drawTeamCrest(team.emblem), 250 - 190, 240 - 186, 380, 380);
   // ruban du niveau
   ctx.save();
   ctx.translate(250, 412);
@@ -405,8 +390,7 @@ async function drawTeamsBoard() {
     ctx.font = "26px CardTitle";
     ctx.fillStyle = ["#fbbf24", "#e2e8f0", "#d97706"][i] ?? "#94a3b8";
     ctx.fillText(String(i + 1), 82, y + 42);
-    const art = await emblemImage(team.emblem);
-    if (art) ctx.drawImage(art, 116, y + 6, 50, 50);
+    ctx.drawImage(await drawTeamCrest(team.emblem), 106, y - 6, 72, 72);
     ctx.textAlign = "left";
     ctx.font = `${fitText(ctx, team.name, 380, 28, "CardTitle")}px CardTitle`;
     ctx.fillStyle = "#ffffff";
@@ -527,9 +511,10 @@ async function myTeamPayload(userId) {
         .setColor(parseInt(emblemOf(team)[2].slice(1), 16))
         .setTitle(`${team.emblem} ${team.name} — niveau ${teamLevel(team)} (${TEAM_RANKS[teamLevel(team) - 1]})`)
         .setDescription(`🎯 Objectif de la semaine : **${goalText(w)}** — ${w.done ? "✅ réussi !" : `${w.progress} / ${w.goal}`}\n💰 Coffre : **${team.vault} ✨**${alone ? "\n📨 Il reste une place : invitez un partenaire !" : ""}`)
+        .setThumbnail("attachment://blason.png")
         .setImage("attachment://equipe.jpg"),
     ],
-    files: [file],
+    files: [file, await crestFile(team.emblem)],
     attachments: [],
     components: rows,
   };

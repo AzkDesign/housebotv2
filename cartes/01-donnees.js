@@ -35,6 +35,8 @@ for (const [file, family] of [
   ["inter-500.ttf", "CardText"],
   ["cinzel-700.ttf", "CardEngrave"],
   ["playfair-display-700-italic.ttf", "CardItalic"],
+  ["yuji-syuku-kanji.ttf", "CardBrush"], // kanji au pinceau des blasons d'équipe
+  ["zen-antique-kanji.ttf", "CardKanji"],
 ]) {
   try {
     GlobalFonts.registerFromPath(path.join(FONT_DIR, file), family);
