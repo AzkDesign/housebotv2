@@ -24,6 +24,51 @@ function anAstreOf(f) {
   return AN_PAL[a] ? a : "etoile";
 }
 const anPalOf = (f) => AN_PAL[anAstreOf(f)];
+// Encodeur du GIF : un « worker » encode chaque scène pendant que le bot dessine la suivante (deux fois plus
+// rapide) ; s'il ne démarre pas, l'encodage se fait sur place, comme avant.
+const AN_GIF = require(path.join(__dirname, "gif-encodeur.js"));
+function anEncoder(w, h) {
+  let worker = null;
+  try {
+    worker = new (require("worker_threads").Worker)(path.join(__dirname, "gif-encodeur.js"));
+  } catch (err) {
+    console.error("Encodeur GIF (worker) :", err.message);
+  }
+  if (!worker) {
+    const enc = GIFEncoder();
+    return {
+      scene: (frames) => AN_GIF.encodeScene(enc, frames, w, h),
+      finish: async () => (enc.finish(), Buffer.from(enc.bytes())),
+      stop: () => {},
+    };
+  }
+  // garde-fou : un worker oublié (animation qui plante en route) s'arrête tout seul
+  const kill = setTimeout(() => worker.terminate().catch(() => null), 120000);
+  kill.unref?.();
+  worker.unref?.();
+  let failure = null;
+  const done = new Promise((resolve, reject) => {
+    worker.on("message", (m) => (m.type === "done" ? resolve(Buffer.from(m.bytes)) : m.type === "error" ? reject((failure = new Error(m.message))) : null));
+    worker.on("error", (err) => reject((failure = err)));
+  });
+  done.catch(() => null);
+  return {
+    scene(frames) {
+      if (failure) throw failure;
+      worker.postMessage({ type: "scene", frames, w, h });
+    },
+    async finish() {
+      worker.postMessage({ type: "finish" });
+      try {
+        return await done;
+      } finally {
+        clearTimeout(kill);
+        worker.terminate().catch(() => null);
+      }
+    },
+    stop: () => worker.terminate().catch(() => null),
+  };
+}
 
 // ---------- petits outils ----------
 const anClamp = (q) => (q < 0 ? 0 : q > 1 ? 1 : q);
@@ -1628,7 +1673,7 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
   const W = AN_W, H = AN_H, OW = Math.round(W * scale), OH = Math.round(H * scale), CW = AN_CW, CH = AN_CH, home = AN_HOME, baseY = AN_BASE;
   const thumbs = new Map();
   for (const p of b.players) for (const f of p.team) if (!thumbs.has(f.key)) thumbs.set(f.key, await cardThumb(f.card, isHoloKey(f.key), CW, CH));
-  const enc = GIFEncoder();
+  const encoder = anEncoder(OW, OH);
   let scene = [], wrote = 0, duration = 0, frameNo = 0;
   const CAM0 = { x: W / 2, y: H / 2, z: 1, r: 0 };
   const S = { cam: { ...CAM0 }, shake: 0, flash: 0, flashColor: "#ffffff", dark: 0, gray: 0, letter: 0, hud: 1, realm: null, realmA: 0, realmClip: null, impact: null, impactAt: null, zoomBlur: 0, zoomAt: null, aberr: 0, redPulse: 0, under: [], world: [], screen: [], floats: [] };
@@ -1656,37 +1701,11 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
   };
 
   // --- encodage scène par scène : une palette par scène ---
-  // Les pixels identiques à l'image précédente deviennent transparents (index 255) : le GIF s'allège
-  // beaucoup dès que la caméra ne bouge pas.
+  // chaque scène part à l'encodeur (une palette par scène)
   const flush = () => {
     if (!scene.length) return;
-    const budget = 110000, px = OW * OH, step = Math.max(3, Math.ceil((px * scene.length) / budget)), n = Math.floor(px / step), sample = new Uint8Array(n * 4 * scene.length);
-    let o = 0;
-    scene.forEach((sh, f) => {
-      const d = sh.data;
-      for (let k = 0, j = ((f * 13) % step) * 4; k < n; k++, j += step * 4) {
-        sample[o++] = d[j];
-        sample[o++] = d[j + 1];
-        sample[o++] = d[j + 2];
-        sample[o++] = 255;
-      }
-    });
-    const real = quantize(sample.subarray(0, o), 255), palette = [...real];
-    while (palette.length < 256) palette.push([255, 0, 255]); // l'index 255 reste libre pour la transparence
-    let prev = null;
-    for (const sh of scene) {
-      const idx = applyPalette(sh.data, real);
-      if (prev) {
-        const raw = idx.slice();
-        for (let k = 0; k < idx.length; k++) if (idx[k] === prev[k]) idx[k] = 255;
-        prev = raw;
-        enc.writeFrame(idx, OW, OH, { palette, delay: sh.delay, transparent: true, transparentIndex: 255, dispose: 1 });
-      } else {
-        prev = idx.slice();
-        enc.writeFrame(idx, OW, OH, { palette, delay: sh.delay, repeat: -1, dispose: 1 });
-      }
-      wrote++;
-    }
+    encoder.scene(scene);
+    wrote += scene.length;
     scene = [];
   };
   const cut = flush;
@@ -2822,8 +2841,7 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
     await run(4, () => {}, [60, 60, 60, 200]);
   }
   flush();
-  enc.finish();
-  return { buffer: Buffer.from(enc.bytes()), duration: duration - (finisher ? 1500 : 200), frames: wrote };
+  return { buffer: await encoder.finish(), duration: duration - (finisher ? 1500 : 200), frames: wrote };
 }
 
 // la manche animée ; trop lourde pour Discord, elle est refaite plus petite ; en cas de pépin, l'ancienne animation
