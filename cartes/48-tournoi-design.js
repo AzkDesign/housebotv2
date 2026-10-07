@@ -827,3 +827,87 @@ async function tdChampionGif(t) {
   }
   return encodeFrames(shots);
 }
+
+// --- La carte de membre d'un champion du tournoi : cadre doré et sceau au trophée ---
+const tdTourneyWins = (id) => (id ? load().userStats?.[id]?.tourneyWins ?? 0 : 0);
+function tourneySeal(ctx, x, y, n) {
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  for (let k = 0; k < 28; k++) {
+    const a = (k / 28) * TAU - Math.PI / 2, r = k % 2 ? 35 : 41;
+    k ? ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r) : ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.fillStyle = metalGradient(ctx, 600, 840, METAL.legendaire);
+  ctx.fill();
+  ctx.restore();
+  disc(ctx, x, y, 29, "#7c2d12");
+  disc(ctx, x, y, 27, "#1c1206");
+  iconTrophy(ctx, x, y - 2, 13);
+  ctx.textAlign = "center";
+  ctx.font = "12px CardTitle";
+  ctx.fillStyle = "#fde68a";
+  ctx.fillText(`×${n}`, x, y + 22);
+}
+function tourneyStyle(c, card, t) {
+  const wins = tdTourneyWins(card.memberId);
+  if (!wins) return;
+  const ctx = c.getContext("2d"), W = c.width, H = c.height;
+  const framePath = new Path2D();
+  rrPath(framePath, 0, 0, W, H, 28);
+  rrPath(framePath, 16, 16, W - 32, H - 32, 18);
+  ctx.save();
+  roundRect(ctx, 0, 0, W, H, 28);
+  ctx.clip();
+  // le cadre devient tout en or (les éditions spéciales gardent le leur)
+  if (!card.variant) {
+    ctx.globalCompositeOperation = "color";
+    ctx.fillStyle = "#f59e0b";
+    ctx.fill(framePath, "evenodd");
+    ctx.globalCompositeOperation = "soft-light";
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#fbbf24";
+    ctx.fill(framePath, "evenodd");
+    ctx.globalAlpha = 1;
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.lineWidth = 9;
+  ctx.strokeStyle = metalGradient(ctx, W, H, METAL.legendaire, Math.sin(TAU * t) * 0.25);
+  roundRect(ctx, 7, 7, W - 14, H - 14, 24);
+  ctx.stroke();
+  // paillettes d'or
+  ctx.globalCompositeOperation = "screen";
+  const R = seeded(hashOf(card.id) + 77);
+  for (let i = 0; i < 22 + wins * 6; i++) {
+    const tw = Math.max(0, Math.sin(TAU * (t * 2 + R())));
+    sparkle(ctx, 30 + R() * (W - 60), 30 + R() * (H - 60), 0.8 + tw * 3.4, `rgba(253,230,138,${0.3 + tw * 0.7})`);
+  }
+  ctx.restore();
+  // le sceau du champion, en haut à gauche (le sceau Membre Star est à droite)
+  tourneySeal(ctx, 74, 132, wins);
+  ctx.save();
+  ctx.font = "11px CardEngrave";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fde68a";
+  ctx.shadowColor = "rgba(0,0,0,0.9)";
+  ctx.shadowBlur = 6;
+  ctx.fillText("CHAMPION", 74, 190);
+  ctx.fillText(wins > 1 ? `DU TOURNOI ×${wins}` : "DU TOURNOI", 74, 204);
+  ctx.restore();
+}
+{
+  const style = memberStyle, finish = tourFinish;
+  memberStyle = (c, card, t) => {
+    style(c, card, t);
+    tourneyStyle(c, card, t);
+  };
+  // dès le sacre, la carte du champion est redessinée (on oublie ses images en cache)
+  tourFinish = async (client, t) => {
+    await finish(client, t);
+    const prefix = t.champion ? `mb_${t.champion}` : null;
+    if (!prefix) return;
+    for (const cache of [gifCache, thumbCache]) for (const key of [...cache.keys()]) if (String(key).startsWith(prefix)) cache.delete(key);
+  };
+}
