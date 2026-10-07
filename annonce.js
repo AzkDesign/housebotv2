@@ -332,7 +332,53 @@ async function publishSecurityAlert(client) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+// --- Fin d'alerte : fin du confinement, retour à la normale (publiée une seule fois) ---
+
+const FIN_ALERTE_TITLE = "✅ FIN DU CONFINEMENT — LA MAISON";
+
+async function publishSecurityEnd(client) {
+  const state = loadAnnonces();
+  if (state.finAlerteMessageId) return;
+
+  const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const existing = recent?.find((m) => m.author.id === client.user.id && m.embeds[0]?.title === FIN_ALERTE_TITLE);
+  if (existing) {
+    state.finAlerteMessageId = existing.id;
+  } else {
+    const message = await channel.send({
+      content: "@everyone",
+      allowedMentions: { parse: ["everyone"] },
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x16a34a)
+          .setTitle(FIN_ALERTE_TITLE)
+          .setDescription(
+            "**À tous les résidents,**\n\n" +
+              "**La Maison est de nouveau pleinement opérationnelle.** L'attaque informatique (DDoS) qui avait visé nos systèmes est maîtrisée, et **l'électricité est rétablie** dans l'ensemble des logements.\n\n" +
+              "⚡ **Le courant est revenu à la normale.** Les générateurs de secours ont été mis à l'arrêt : chauffage, éclairage, ascenseurs et appareils électriques fonctionnent de nouveau sans restriction.\n\n" +
+              "🚪 **FIN DU CONFINEMENT**\n" +
+              "• **Vous pouvez de nouveau sortir à l'extérieur.** Les accès principaux sont rouverts.\n" +
+              "• **Les espaces communs** retrouvent leurs horaires habituels.\n" +
+              "• **Restez toutefois vigilants :** continuez à signaler tout comportement suspect ou toute panne au personnel.\n\n" +
+              "🛠️ **Nos équipes techniques ont renforcé la sécurité de nos systèmes** pour qu'une telle situation ne se reproduise pas. L'enquête sur l'origine de l'attaque se poursuit.\n\n" +
+              "Merci à toutes et à tous pour votre calme et votre patience pendant cette période. Vous avez fait honneur à la Maison.\n\n" +
+              "**La Maison veille sur vous.** 🏠\n\n" +
+              "*— Chloé & la Direction de La Maison*"
+          )
+          .setTimestamp(),
+      ],
+    });
+    state.finAlerteMessageId = message.id;
+    console.log("Annonce de fin du confinement publiée avec @everyone");
+  }
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
 module.exports = {
+  publishSecurityEnd,
   publishSecurityAlert,
   publishRecruitmentAnnouncement,
   setupReopeningAnnouncement,

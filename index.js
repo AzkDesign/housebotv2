@@ -79,7 +79,7 @@ const { setupMairie, handleMairieInteraction } = require("./mairie");
 const { setupAssociations, handleAssociationsInteraction } = require("./associations");
 const { handleProfilCommand } = require("./profil");
 const { setupEspaces, handleEspacesInteraction, isProtectedChannel, publishMixiteAnnouncement } = require("./espaces");
-const { publishV3Announcement, publishV3Video, publishRecruitmentAnnouncement, publishSecurityAlert } = require("./annonce");
+const { publishV3Announcement, publishV3Video, publishRecruitmentAnnouncement, publishSecurityAlert, publishSecurityEnd } = require("./annonce");
 const { setupLogs } = require("./logs");
 const { handleRelayMessage, handleRelayInteraction } = require("./relais");
 const { startInactivityWatcher } = require("./tickets");
@@ -577,6 +577,7 @@ client.once(Events.ClientReady, async () => {
   await step("annonce recrutement", () => publishRecruitmentAnnouncement(client));
   await step("annonce mixité Maison 2", () => publishMixiteAnnouncement(client));
   await step("alerte sécurité DDoS", () => publishSecurityAlert(client));
+  await step("fin du confinement", () => publishSecurityEnd(client));
 });
 
 client.on(Events.MessageCreate, async (message) => {
