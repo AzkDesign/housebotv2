@@ -83,6 +83,10 @@ async function registerSlashCommands(client, token) {
       .setDescription("(Gérants) Télécharger les cartes DUO de l'équipe Fondation")
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("boutique")
+      .setDescription("La boutique de styles : dos de cartes, effets d'ouverture, décors d'Arène")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("pass")
       .setDescription("Votre pass de combat : paliers, récompenses, pass Premium")
       .toJSON(),

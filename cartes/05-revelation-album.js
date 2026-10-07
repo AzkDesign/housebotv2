@@ -39,7 +39,7 @@ async function revealGif(p, index, total) {
   const r = card.shiny ? ORDER.indexOf("legendaire") : ORDER.indexOf(card.rarity), m = METAL[card.rarity], rc = card.shiny ? "#34d399" : m[4];
   const RW = 480, RH = 720, FW = 330, FH = 462, cx = RW / 2, cy = 318;
   const N = REVEAL.frames[r], pre = REVEAL.pre[r], flipLen = 6, fr0 = pre + 3;
-  const back = drawBack("legendaire");
+  const back = p.back ? await drawCardBack(p.back) : drawBack("legendaire");
   const mode = animMode(card, holo);
   const R0 = seeded(hashOf(card.id) + index * 31 + 7);
   const sparks = Array.from({ length: REVEAL.burst[r] }, () => ({ a: R0() * TAU, v: 9 + R0() * 16, s: 1.5 + R0() * 3.5, c: R0() }));
@@ -209,6 +209,7 @@ async function revealGif(p, index, total) {
       }
     }
     ctx.textAlign = "left";
+    if (p.fx) openingFx(ctx, p.fx, f, fr0, RW, RH, cx, cy);
     shots.push({ data: ditherData(c).data, width: RW, height: RH, delay: f === N - 1 ? 60000 : 55, once: true });
   }
   return encodeFrames(shots);

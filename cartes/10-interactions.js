@@ -10,6 +10,7 @@ async function handleCartesInteraction(interaction, client) {
   if (await handleTournamentInteraction(interaction, client)) return true;
   if (await handlePassInteraction(interaction)) return true;
   if (await handleDuoPassInteraction(interaction)) return true;
+  if (await handleShopInteraction(interaction)) return true;
   if (interaction.isChatInputCommand?.() && interaction.commandName === "succes") {
     await interaction.reply(achievementsPayload(interaction.user.id));
     return true;

@@ -406,7 +406,7 @@ async function drawBoardItem(ctx, item, x, y, side) {
   let gifItems = null;
   const bgOf = arenaBackground, gif = clashGif;
   arenaBackground = (W, H) => {
-    const bg = bgOf(W, H);
+    const bg = (gifItems && decorOverride(W, H, gifItems.b)) || bgOf(W, H);
     if (!gifItems) return bg;
     const ctx = bg.getContext("2d");
     gifItems.items.forEach((item, i) => {
@@ -429,9 +429,8 @@ async function drawBoardItem(ctx, item, x, y, side) {
   };
   clashGif = async (b, res, hp0, pre) => {
     const items = [pendingItem(b, 0), pendingItem(b, 1)];
-    if (!items[0] && !items[1]) return gif(b, res, hp0, pre);
     const thumbs = await Promise.all(items.map((it) => (it ? cardThumb(it, false, 116, 162) : null)));
-    gifItems = { items, thumbs };
+    gifItems = { items, thumbs, b };
     // le décor est dessiné tout au début de l'animation, avant toute attente
     const run = gif(b, res, hp0, pre);
     gifItems = null;

@@ -2,7 +2,7 @@ async function openBooster(interaction, client, pulls, title, pack = null) {
   await interaction.deferReply({ ephemeral: true });
   const userId = interaction.user.id;
   const scoreBefore = collectionScore(userId);
-  const results = pulls.map((p) => ({ ...p, isNew: give(userId, p.card, p.holo) }));
+  const results = pulls.map((p) => ({ ...p, isNew: give(userId, p.card, p.holo), back: equipped(userId, "back"), fx: equipped(userId, "fx") }));
   questProgress(userId, "open_pack");
   bump("packsOpened");
   ustat(userId, "packs");
