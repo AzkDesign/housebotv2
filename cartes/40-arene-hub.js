@@ -27,7 +27,10 @@ function bossState(client = null) {
   const st = load();
   if (st.boss?.week !== mondayKey()) {
     // fin de semaine sans victoire : petite récompense pour les participants
-    if (st.boss && !st.boss.defeated) for (const id of Object.keys(st.boss.dmg ?? {})) st.dust[id] = (st.dust[id] ?? 0) + 100;
+    if (st.boss && !st.boss.defeated) {
+      for (const id of Object.keys(st.boss.dmg ?? {})) st.dust[id] = (st.dust[id] ?? 0) + 100;
+      bossTopBonus(st.boss); // la prime de points du top 3 est versée même sans victoire
+    }
     const def = weekBoss(), active = Object.values(st.arena ?? {}).filter((x) => x.w + x.l + x.d > 0).length;
     const maxHp = Math.max(20000, 2500 * active);
     st.boss = { week: mondayKey(), key: def.key, maxHp, hp: maxHp, dmg: {}, tries: {}, defeated: false, lastHit: null };
@@ -94,21 +97,31 @@ async function bossFightOver(client, b) {
     await bossDefeated(client, s, def);
   }
 }
+// prime de points de classement pour le top 3 des dégâts (hors plafond hebdomadaire), versée une seule fois
+const BOSS_TOP_RANK = [50, 30, 20];
+function bossTopBonus(s) {
+  if (s.topPaid) return [];
+  s.topPaid = true;
+  const top = Object.entries(s.dmg).sort((a, b) => b[1] - a[1]).slice(0, BOSS_TOP_RANK.length);
+  for (const [i, [id]] of top.entries()) arenaStats(id).elo += BOSS_TOP_RANK[i];
+  return top;
+}
 async function bossDefeated(client, s, def) {
   const ranking = Object.entries(s.dmg).sort((a, b) => b[1] - a[1]);
+  bossTopBonus(s);
   for (const [i, [id]] of ranking.entries()) {
     addPacks(id, packKey(CURRENT_GEN, i < 3 ? "prestige" : "premium"), 1);
     load().dust[id] = (load().dust[id] ?? 0) + 200 + ([500, 300, 200][i] ?? 0) + (id === s.lastHit ? 300 : 0);
     ustat(id, "bossKills");
     client?.users
       .fetch(id)
-      .then((u) => u.send(`👹 **${def.name} est vaincu !** Vous avez infligé **${s.dmg[id].toLocaleString("fr-FR")} dégâts** (${i + 1}ᵉ sur ${ranking.length}). Récompense : **1 booster ${i < 3 ? "Prestige" : "Premium"}** et **${200 + ([500, 300, 200][i] ?? 0) + (id === s.lastHit ? 300 : 0)} ✨**${id === s.lastHit ? " (dont 300 ✨ pour le coup de grâce)" : ""}.`))
+      .then((u) => u.send(`👹 **${def.name} est vaincu !** Vous avez infligé **${s.dmg[id].toLocaleString("fr-FR")} dégâts** (${i + 1}ᵉ sur ${ranking.length}). Récompense : **1 booster ${i < 3 ? "Prestige" : "Premium"}** et **${200 + ([500, 300, 200][i] ?? 0) + (id === s.lastHit ? 300 : 0)} ✨**${id === s.lastHit ? " (dont 300 ✨ pour le coup de grâce)" : ""}${BOSS_TOP_RANK[i] ? `, et une prime de **+${BOSS_TOP_RANK[i]} points de classement** pour votre place sur le podium` : ""}.`))
       .catch(() => null);
   }
   save();
   await chan("annonces")
     ?.send({
-      content: `👹 **${def.name} est vaincu !** ${ranking.length} combattant${ranking.length > 1 ? "s" : ""} l'ont terrassé ensemble.\n🥇 ${ranking.slice(0, 3).map(([id, d], i) => `${["🥇", "🥈", "🥉"][i]} **${pseudo(id)}** (${d.toLocaleString("fr-FR")} dégâts)`).join(" · ")}\n💥 Coup de grâce : **${pseudo(s.lastHit)}**. Tous les participants reçoivent un booster et de la poussière d'étoile ; un nouveau boss arrive lundi.`,
+      content: `👹 **${def.name} est vaincu !** ${ranking.length} combattant${ranking.length > 1 ? "s" : ""} l'ont terrassé ensemble.\n🥇 ${ranking.slice(0, 3).map(([id, d], i) => `${["🥇", "🥈", "🥉"][i]} **${pseudo(id)}** (${d.toLocaleString("fr-FR")} dégâts)`).join(" · ")} — prime de **+50 / +30 / +20 points de classement**\n💥 Coup de grâce : **${pseudo(s.lastHit)}**. Tous les participants reçoivent un booster et de la poussière d'étoile ; un nouveau boss arrive lundi.`,
       allowedMentions: { parse: [] },
     })
     .catch(() => null);
@@ -437,7 +450,7 @@ async function arenaHubPayload(userId, note = "") {
         .setDescription(
           (note ? `${note}\n\n` : "") +
             "🏆 **Partie classée** : le bot vous trouve un adversaire en ligne de votre niveau. C'est la seule qui fait monter (ou descendre) votre rang.\n" +
-            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tout le serveur s'additionnent.`} Il fait aussi **monter votre rang** (jusqu'à ${BOSS_RANK_FIGHT} points par combat, ${BOSS_RANK_WEEK} par semaine).\n` +
+            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tout le serveur s'additionnent.`} Il fait aussi **monter votre rang** (jusqu'à ${BOSS_RANK_FIGHT} points par combat, ${BOSS_RANK_WEEK} par semaine), et le **top 3 des dégâts** gagne une prime de +50 / +30 / +20 points.\n` +
             "🤝 **Défi amical** : contre le membre de votre choix, avec une mise si vous voulez (`/combat`).\n" +
             `🎯 **Défi de la semaine** : ${weeklyRule()[1]} — ${weekly.done ? "réussi ✅" : `${Math.min(weekly.wins, WEEKLY_GOAL)} / ${WEEKLY_GOAL} victoires`}`
         )
@@ -566,7 +579,7 @@ async function arenaBoardPayload() {
         .setTitle("⚔️ Arène de la Maison")
         .setDescription(
           "🏆 **Partie classée** : le bot vous trouve un adversaire en ligne de votre niveau. C'est la seule qui fait monter (ou descendre) votre rang.\n" +
-            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tous s'additionnent.`} Il fait aussi **monter votre rang** (jusqu'à ${BOSS_RANK_FIGHT} points par combat, ${BOSS_RANK_WEEK} par semaine).\n` +
+            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tous s'additionnent.`} Il fait aussi **monter votre rang** (jusqu'à ${BOSS_RANK_FIGHT} points par combat, ${BOSS_RANK_WEEK} par semaine), et le **top 3 des dégâts** gagne une prime de +50 / +30 / +20 points.\n` +
             "🤝 **Défi amical** et 🎒 **objets** : dans **Mon menu** (votre rang, vos essais, vos objets).\n" +
             "🤖 **Entraînement** contre la Maison, qui progresse avec vous."
         )
