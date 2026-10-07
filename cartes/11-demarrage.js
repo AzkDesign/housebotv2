@@ -77,6 +77,7 @@ async function setupCartes(client) {
       await passBoardLoop();
       await arenaBoardLoop();
       await shopLoop();
+      await marketBoardLoop().catch((err) => console.error("Marché (salon):", err.message));
       if (new Date().getMinutes() % 10 === 8) rosterCheckCompanies();
       if (new Date().getMinutes() % 15 === 3) await sweepCardChannels(client).catch(() => null);
       if (islandsDirty || new Date().getMinutes() % 10 === 5) await refreshIslands().catch(() => null);
