@@ -559,7 +559,7 @@ async function drawShopFront() {
   ctx.restore();
   ctx.font = "20px CardItalic";
   ctx.fillStyle = "#fbcfe8";
-  ctx.fillText("Dos de cartes · effets d'ouverture · décors d'Arène — votre style, rien que pour vous", W / 2, 172);
+  ctx.fillText("Dos de cartes · effets d'ouverture · décors d'Arène · îles — votre style, rien que pour vous", W / 2, 172);
   // vitrine
   ctx.font = "15px CardEngrave";
   ctx.fillStyle = "#fde68a";
@@ -626,7 +626,7 @@ async function drawShopCatalog(kind, userId) {
   ctx.font = "16px CardText";
   ctx.fillStyle = "#e9d5ff";
   ctx.fillText(`Vous avez ${(load().dust[userId] ?? 0).toLocaleString("fr-FR")} poussières d'étoile`, W / 2, 114);
-  const feat = shopFeatured(), eq = equipped(userId, kind) ?? (kind === "back" ? "back_maison" : null);
+  const feat = shopFeatured(), eq = equipped(userId, kind) ?? (kind === "back" ? "back_maison" : kind === "ile" ? "ile_tropique" : null);
   for (const [i, it] of items.entries()) {
     const x = 40 + (i % cols) * cw, y = 140 + Math.floor(i / cols) * (chh + 20);
     roundRect(ctx, x + 8, y, cw - 16, chh, 18);
@@ -664,7 +664,7 @@ async function shopFrontPayload() {
         .setColor(0xdb2777)
         .setTitle("🛍️ La Boutique de la Maison")
         .setDescription(
-          "Personnalisez votre jeu : **dos de cartes** (visibles à chaque ouverture de booster), **effets d'ouverture** et **décors d'Arène** (que vos adversaires voient aussi).\n" +
+          "Personnalisez votre jeu : **dos de cartes** (visibles à chaque ouverture de booster), **effets d'ouverture**, **décors d'Arène** (que vos adversaires voient aussi) et **skins d'île** (tout le serveur voit l'île telle que vous l'avez décorée tant que vous la gardez).\n" +
             `⭐ **En vitrine cette semaine (-${Math.round(SHOP_PROMO * 100)} %)** : ${feat.map((it) => `${it.name} (${priceText(it)})`).join(" · ")}\n` +
             "🏆 Des styles **exclusifs** se gagnent au tournoi du week-end."
         )
@@ -726,7 +726,7 @@ function myStylesPayload(userId, note = "") {
   const s = styleOf(userId);
   const line = (kind) => {
     const id = equipped(userId, kind);
-    return `${SHOP_KINDS[kind][0]} **${SHOP_KINDS[kind][1]}** : ${id ? shopItem(id).name : kind === "back" ? "Maison classique" : "aucun"}`;
+    return `${SHOP_KINDS[kind][0]} **${SHOP_KINDS[kind][1]}** : ${id ? shopItem(id).name : kind === "back" ? "Maison classique" : kind === "ile" ? "Lagon tropical" : "aucun"}`;
   };
   return {
     ephemeral: true,

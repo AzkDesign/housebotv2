@@ -19,7 +19,7 @@ const ISLAND_AI = { name: "Gardien", offset: 0, boost: 1, smart: 0.75 };
 const ISLANDS = {
   lagon: { name: "Île du Lagon", short: "Lagon", emoji: "🏝️", fluent: "Desert island", series: "paris", color: "#22d3ee" },
 };
-const ISLAND_LAYOUT = 2; // à augmenter quand l'image change de mise en page
+const ISLAND_LAYOUT = 3; // à augmenter quand l'image change de mise en page
 const islandFights = new Map(); // île -> id du combat en cours
 let islandsDirty = true;
 

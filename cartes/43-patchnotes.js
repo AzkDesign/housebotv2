@@ -2,6 +2,26 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.10",
+    color: 0x22d3ee,
+    parts: [
+      [
+        "🏝️ L'île fait peau neuve",
+        "• L'île est maintenant une **vraie scène illustrée** : ciel, mer, lagon, plage et décor en 3D.\n" +
+          "• Les cartes de la défense sont **plantées sur la plage**, avec leurs PV.\n" +
+          "• Un panneau pour le **gardien** : blason ou avatar, depuis quand il tient l'île, ses gains, les attaques repoussées.\n" +
+          "• Bouclier de conquête en **dôme**, alerte rouge pendant une attaque.",
+      ],
+      [
+        "🛍️ Nouveau dans la boutique : les skins d'île",
+        "Le gardien choisit le décor de l'île… et **tout le serveur le voit** tant qu'il la garde !\n" +
+          "🌙 Lagon de nuit · 🌋 Île volcanique · 🐧 Banquise · 🌸 Île des cerisiers · 🗿 Île de Pâques · 🏴‍☠️ Île au trésor · 👑 Paradis doré\n" +
+          "🎃 Et pour octobre seulement : l'**Île hantée**.",
+      ],
+    ],
+    footer: "À vous de marquer l'île de votre style ! 🏝️",
+  },
+  {
     version: "1.09",
     color: 0xfbbf24,
     parts: [
