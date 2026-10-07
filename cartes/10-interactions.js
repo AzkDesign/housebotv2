@@ -13,7 +13,8 @@ async function handleCartesInteraction(interaction, client) {
   if (await handleDuoPassInteraction(interaction)) return true;
   if (await handleShopInteraction(interaction)) return true;
   if (interaction.isChatInputCommand?.() && interaction.commandName === "succes") {
-    await interaction.reply(achievementsPayload(interaction.user.id));
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await achievementsPayloadHD(interaction.user.id));
     return true;
   }
   if (interaction.isChatInputCommand?.() && interaction.commandName === "vitrine") {
@@ -155,13 +156,15 @@ async function handleCartesInteraction(interaction, client) {
 
   // --- Succès et vitrine ---
   if (id === "carte_succ") {
-    await interaction.reply(achievementsPayload(userId));
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await achievementsPayloadHD(userId));
     return true;
   }
-  if (id === "carte_succ_titre") {
+  if (id === "carte_succ_titre" || id === "carte_succ_titre2") {
     achOf(userId).title = interaction.values[0];
     save();
-    await interaction.update(achievementsPayload(userId));
+    await interaction.deferUpdate();
+    await interaction.editReply(await achievementsPayloadHD(userId));
     return true;
   }
   if (id === "carte_vit") {
