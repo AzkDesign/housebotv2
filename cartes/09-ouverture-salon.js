@@ -19,31 +19,35 @@ async function openBooster(interaction, client, pulls, title, pack = null) {
   const bestJob = chain.then(() => (isAnimated(best.card, best.holo) ? cardFile(best.card, best.holo) : null)).catch(() => null);
   const spreadJob = bestJob.then(() => drawSpread(results, title, gained)).catch(() => null);
 
+  // Chaque animation a son propre message (privé) : elle n'est jamais remplacée par la suivante, on la voit
+  // en entier même si Discord met du temps à la charger (on attend sa durée + le temps de chargement).
+  const loadTime = (bytes) => 1200 + ((bytes ?? 0) / 1048576) * 800;
+  let first = true;
+  const post = async (payload) => {
+    const ok = first ? await interaction.editReply(payload).catch(() => null) : await interaction.followUp({ ...payload, ephemeral: true }).catch(() => null);
+    first = false;
+    return ok;
+  };
   if (pack) {
-    const intro = new AttachmentBuilder(await packOpenGif(pack.gen, pack.type), { name: "ouverture.gif" });
-    await interaction
-      .editReply({ embeds: [new EmbedBuilder().setColor(parseInt(PACKS[pack.type].accent.slice(1), 16)).setTitle(`${title} — ouverture…`).setImage("attachment://ouverture.gif")], files: [intro] })
-      .catch(() => null);
-    await sleep(2900);
+    const buf = await packOpenGif(pack.gen, pack.type), intro = new AttachmentBuilder(buf, { name: "ouverture.gif" });
+    if (await post({ embeds: [new EmbedBuilder().setColor(parseInt(PACKS[pack.type].accent.slice(1), 16)).setTitle(`${title} — ouverture…`).setImage("attachment://ouverture.gif")], files: [intro] })) await sleep(2900 + loadTime(buf.length));
   }
   // Révélation carte par carte, de la plus faible à la meilleure
   for (const [i, p] of results.entries()) {
     const r = RARITIES[p.card.rarity];
     const buffer = await jobs[i];
     const file = buffer ? new AttachmentBuilder(buffer, { name: `revelation-${i + 1}.gif` }) : await cardFile(p.card, p.holo);
-    await interaction
-      .editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(parseInt(r.color.slice(1), 16))
-            .setTitle(`${title} — carte ${i + 1}/${n}${i === n - 1 && n > 1 ? " · la meilleure !" : ""}`)
-            .setDescription(`${r.emoji} **${p.card.name}** — ${r.name}${p.holo ? " ✦ **HOLO**" : ""}${p.isNew ? "  🆕 **Nouvelle !**" : ""}`)
-            .setImage(`attachment://${file.name}`),
-        ],
-        files: [file],
-      })
-      .catch(() => null);
-    await sleep(revealDuration(p.card));
+    const shown = await post({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(parseInt(r.color.slice(1), 16))
+          .setTitle(`${title} — carte ${i + 1}/${n}${i === n - 1 && n > 1 ? " · la meilleure !" : ""}`)
+          .setDescription(`${r.emoji} **${p.card.name}** — ${r.name}${p.holo ? " ✦ **HOLO**" : ""}${p.isNew ? "  🆕 **Nouvelle !**" : ""}`)
+          .setImage(`attachment://${file.name}`),
+      ],
+      files: [file],
+    });
+    if (shown) await sleep(revealDuration(p.card) + loadTime(buffer?.length));
   }
   // Récapitulatif en éventail, puis la meilleure carte animée
   const spread = await spreadJob;
@@ -78,7 +82,7 @@ async function openBooster(interaction, client, pulls, title, pack = null) {
     new ButtonBuilder().setCustomId("carte_inv").setLabel("Inventaire").setEmoji("🎒").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("carte_album").setLabel("Album").setEmoji("📒").setStyle(ButtonStyle.Secondary)
   );
-  await interaction.editReply({ embeds, files, components: [row] }).catch(() => null);
+  await post({ embeds, files, components: [row] });
   // Grosses cartes : annonce publique
   for (const p of results) {
     if (p.card.shiny || ORDER.indexOf(p.card.rarity) >= ORDER.indexOf("epique")) await announcePull(client, interaction.user, p);
