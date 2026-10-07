@@ -8,13 +8,13 @@ const ISLAND_DUST = 10; // poussière par heure pour le gardien
 const ISLAND_CAPTURE_DUST = 50; // prime de conquête
 const ISLAND_DEFENSE_DUST = 5; // prime du gardien à chaque attaque repoussée
 const ISLAND_BONUS = 1.1; // cartes de la série favorite de l'île : PV et attaque +10 %
-const ISLAND_REGEN = 0.2; // part des PV récupérée chaque heure
+const ISLAND_REGEN = 0.35; // part des PV récupérée chaque heure
 const ISLAND_HEAL_COST = 40;
 const ISLAND_COOLDOWN = 10 * MINUTE; // délai avant de réattaquer la même île après une défaite
 const ISLAND_PROTECT = 30 * MINUTE; // bouclier après une prise : personne ne peut attaquer
 const ISLAND_REVENGE = 2 * HOUR; // l'ancien gardien doit attendre avant de reprendre l'île
 const ISLAND_WEAR_AFTER = 12; // heures de garde avant que la défense ne s'use
-const ISLAND_WEAR_RATE = 0.02, ISLAND_WEAR_MAX = 0.4; // PV max perdus par heure d'usure, plafond
+const ISLAND_WEAR_RATE = 0.02, ISLAND_WEAR_MAX = 0.2; // PV max perdus par heure d'usure, plafond
 const ISLAND_AI = { name: "Gardien", offset: 0, boost: 1, smart: 0.75 };
 const ISLANDS = {
   lagon: { name: "Île du Lagon", short: "Lagon", emoji: "🏝️", fluent: "Desert island", series: "paris", color: "#22d3ee" },
@@ -430,6 +430,7 @@ const ISLAND_RULES = () =>
         `⏳ **Usure** : après ${ISLAND_WEAR_AFTER} h de garde, la défense perd ${Math.round(ISLAND_WEAR_RATE * 100)} % de PV max par heure (jusqu'à -${Math.round(ISLAND_WEAR_MAX * 100)} %). L'île finit toujours par changer de mains !\n` +
         `🔒 Les cartes qui défendent ne peuvent être ni vendues ni échangées. Après une défaite, attendez ${ISLAND_COOLDOWN / MINUTE} min avant de réattaquer l'île.\n` +
         `🛡️ **Bouclier de conquête** : après chaque prise, l'île est protégée ${ISLAND_PROTECT / MINUTE} min, et l'ancien gardien doit attendre ${ISLAND_REVENGE / HOUR} h avant de tenter de la reprendre.\n` +
+        "🧠 **IA du gardien** : plus les cartes qui défendent sont rares, mieux elle joue. La défense a l'avantage du terrain (+10 %), et +15 % de PV et de dégâts par niveau de rareté d'avance sur l'attaquant (40 % au plus).\n" +
         "🤝 **Duos** : si un membre d'une équipe garde l'île, elle est à l'équipe : son coéquipier touche les mêmes gains, et les deux peuvent changer la défense (avec les cartes de l'un et de l'autre), la soigner ou la quitter.\n" +
         "🔁 Le gardien peut changer sa défense (les cartes ajoutées arrivent au niveau de PV le plus bas de l'équipe) ou quitter l'île : ses cartes redeviennent libres."
     );
@@ -783,4 +784,32 @@ async function handleIslandInteraction(interaction, client) {
     return true;
   }
   return false;
+}
+
+// --- Équilibre des combats d'île : l'IA s'ajuste à la force des cartes qui défendent ---
+// Plus la défense est rare, mieux l'IA joue ; si la défense est plus rare que l'attaquant, elle frappe et encaisse mieux.
+// Ainsi une défense de cartes bleues reste prenable par des épiques, mais trois légendaires leur résistent.
+const islandRank = (team) => (team.length ? team.reduce((a, f) => a + ORDER.indexOf(f.card.rarity), 0) / team.length : 0);
+function islandBalance(b) {
+  const def = islandRank(b.players[1].team), att = islandRank(b.players[0].team), gap = def - att;
+  b.aiLevel = { ...ISLAND_AI, smart: Math.min(0.95, 0.6 + 0.07 * def) };
+  // avantage du terrain (+10 %), et +15 % par niveau de rareté d'écart (40 % au plus)
+  {
+    const k = 1 + Math.min(0.4, 0.1 + Math.max(0, gap) * 0.15);
+    for (const f of b.players[1].team) {
+      const frac = f.maxHp ? f.hp / f.maxHp : 1;
+      f.maxHp = Math.round(f.maxHp * k);
+      f.hp = f.hp > 0 ? Math.max(1, Math.round(f.maxHp * frac)) : 0;
+      f.attackDmg = Math.round(f.attackDmg * k);
+      f.specialDmg = Math.round(f.specialDmg * k);
+    }
+  }
+  b.islandGap = gap;
+}
+{
+  const begin = beginRounds;
+  beginRounds = async (client, b) => {
+    if (b.island) islandBalance(b);
+    return begin(client, b);
+  };
 }
