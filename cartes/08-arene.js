@@ -315,7 +315,18 @@ async function drawFighterSide(ctx, b, i, W, opts = {}) {
   ctx.textAlign = "center";
   ctx.font = "12px CardBold";
   ctx.fillStyle = "#cbb9a9";
-  ctx.fillText(`Attaque ${f.attackDmg} · Spécial ${f.specialDmg} · Chance ${f.luck} · ${SERIES_LABELS[f.series].replace(/^\S+ /, "")}`, cx, y + ch + 50);
+  const astre = f.astre ?? astreOf(f.card);
+  ctx.fillText(`Attaque ${f.attackDmg} · Spécial ${f.specialDmg} · Chance ${f.luck}${astre ? ` · ${ASTRES[astre].label}` : ""}`, cx, y + ch + 50);
+  // l'astre bien visible, et l'avantage face à la carte adverse
+  if (astre) {
+    astreOrb(ctx, astre, x + 4, y + 4, 24);
+    const foeF = activeOf(b.players[1 - i]);
+    const mult = foeF && f.hp > 0 && foeF.hp > 0 ? typeMult(f, foeF) : 1;
+    if (mult !== 1) {
+      ctx.font = "13px CardBold";
+      pill(ctx, cx + 18, y - 2, mult > 1 ? `AVANTAGE · dégâts ×2` : `DÉSAVANTAGE · dégâts ×0,5`, mult > 1 ? "#16a34a" : "#b91c1c", "#ffffff");
+    }
+  }
   // banc : les autres cartes de l'équipe
   const bench = p.team.map((t, k) => ({ t, k })).filter(({ k }) => k !== p.active);
   bench.forEach(({ t }, n) => {
@@ -338,6 +349,8 @@ async function drawFighterSide(ctx, b, i, W, opts = {}) {
       ctx.stroke();
     }
     hpBar(ctx, gx, by + bh + 4, bw, 9, t.hp, t.maxHp, false);
+    const ta = t.hp > 0 ? t.astre ?? astreOf(t.card) : null;
+    if (ta) astreOrb(ctx, ta, left ? gx + bw - 2 : gx + 2, by + 2, 13);
   });
   ctx.textAlign = "left";
 }

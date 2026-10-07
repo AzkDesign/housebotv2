@@ -429,13 +429,13 @@ async function handleCartesInteraction(interaction, client) {
         }
         await interaction.reply({
           ephemeral: true,
-          content: "🔄 Quelle carte envoyer dans l'arène ?",
+          content: `🔄 Quelle carte envoyer dans l'arène ? En face : **${activeOf(b.players[1 - pi]).name}** (${astreLabel(activeOf(b.players[1 - pi]).astre ?? astreOf(activeOf(b.players[1 - pi]).card))}).`,
           components: [
             new ActionRowBuilder().addComponents(
               new StringSelectMenuBuilder()
                 .setCustomId(`carte_bt_sw_${bid}`)
                 .setPlaceholder("Carte remplaçante…")
-                .addOptions(bench.map(({ f, i }) => ({ label: f.name.slice(0, 100), value: String(i), emoji: RARITIES[f.card.rarity].emoji, description: `${f.hp} / ${f.maxHp} PV · attaque ${f.attackDmg} · spécial ${f.specialDmg}` })))
+                .addOptions(bench.map(({ f, i }) => ({ label: f.name.slice(0, 100), value: String(i), emoji: RARITIES[f.card.rarity].emoji, description: switchHint(f, activeOf(b.players[1 - pi]), `${f.hp} / ${f.maxHp} PV · attaque ${f.attackDmg}`) })))
             ),
           ],
         });

@@ -226,3 +226,12 @@ function drawAstreWheel(size = 520) {
   ctx.textAlign = "left";
   return c;
 }
+
+// aide au changement de carte : l'astre et le duel face à la carte adverse
+function switchHint(f, foe, rest) {
+  const a = f.astre ?? astreOf(f.card);
+  if (!a) return rest.slice(0, 100);
+  const give = foe ? astreMult(f, foe) : 1, take = foe ? astreMult(foe, f) : 1;
+  const tag = give > 1 ? "✅ frappe ×2" : take > 1 ? "⚠️ subit ×2" : give < 1 ? "⚠️ frappe ×0,5" : take < 1 ? "🛡️ subit ×0,5" : "neutre";
+  return `${ASTRES[a].label} · ${tag} · ${rest}`.slice(0, 100);
+}
