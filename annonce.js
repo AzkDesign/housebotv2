@@ -285,7 +285,55 @@ async function publishRecruitmentAnnouncement(client) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+// --- Alerte sécurité : attaque DDoS et coupure de courant dans la Maison (publiée une seule fois) ---
+
+const SECURITE_TITLE = "🚨 ALERTE SÉCURITÉ — LA MAISON";
+
+async function publishSecurityAlert(client) {
+  const state = loadAnnonces();
+  if (state.securiteDdosMessageId) return;
+
+  const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const existing = recent?.find((m) => m.author.id === client.user.id && m.embeds[0]?.title === SECURITE_TITLE);
+  if (existing) {
+    state.securiteDdosMessageId = existing.id;
+  } else {
+    const message = await channel.send({
+      content: "@everyone",
+      allowedMentions: { parse: ["everyone"] },
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xb91c1c)
+          .setTitle(SECURITE_TITLE)
+          .setDescription(
+            "**À tous les résidents,**\n\n" +
+              "**La Maison a été la cible d'une attaque informatique de grande ampleur (DDoS).** Nos systèmes internes ont été submergés, ce qui a provoqué une **coupure d'électricité générale** dans l'ensemble des logements.\n\n" +
+              "⚡ **Les générateurs de secours ont été activés.** L'éclairage d'urgence, les ascenseurs et les systèmes essentiels fonctionnent à nouveau, en mode réduit. Merci de **limiter votre consommation** (chauffage, appareils électriques) pour préserver nos réserves.\n\n" +
+              "🚪 **CONSIGNES OBLIGATOIRES — jusqu'à nouvel ordre**\n" +
+              "• **Ne sortez plus à l'extérieur.** Les accès principaux sont verrouillés pour votre sécurité.\n" +
+              "• **Restez dans vos chambres** ou dans les espaces communs éclairés.\n" +
+              "• **N'ouvrez à personne** que vous ne connaissez pas, même si quelqu'un se présente comme technicien ou comme membre du personnel.\n" +
+              "• **Ne touchez à aucun boîtier électrique, ni à aucun appareil défectueux.**\n" +
+              "• **Signalez immédiatement** tout comportement suspect, toute panne ou toute personne inconnue dans les couloirs.\n\n" +
+              "🛠️ **Nos équipes techniques sont mobilisées** pour rétablir le courant et identifier l'origine de l'attaque. Toute personne impliquée de près ou de loin sera **retrouvée et sanctionnée**.\n\n" +
+              "Gardez votre calme, restez à l'intérieur et suivez les consignes du personnel. Nous vous tiendrons informés dès que la situation évoluera.\n\n" +
+              "**La Maison veille sur vous.** 🏠\n\n" +
+              "*— Chloé & la Direction de La Maison*"
+          )
+          .setTimestamp(),
+      ],
+    });
+    state.securiteDdosMessageId = message.id;
+    console.log("Alerte sécurité (DDoS) publiée avec @everyone");
+  }
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
 module.exports = {
+  publishSecurityAlert,
   publishRecruitmentAnnouncement,
   setupReopeningAnnouncement,
   publishV3Announcement,
