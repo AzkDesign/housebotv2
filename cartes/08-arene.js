@@ -896,7 +896,8 @@ function fxBigText(ctx, text, x, y, size, color, scale = 1, alpha = 1, font = "C
   ctx.restore();
 }
 
-async function clashGif(b, res, hp0, pre) {
+// ancienne animation, gardée en secours (voir 47-anime.js)
+async function classicClashGif(b, res, hp0, pre) {
   const W = 880, H = 500, CW = 178, CH = 249, gap = W * 0.48;
   const bg = arenaBackground(W, H);
   const thumbs = new Map();
@@ -1634,7 +1635,7 @@ async function resolveRound(client, b) {
         components: battleComponents(b, true),
       })
       .catch(() => null);
-    await sleep(Math.min(14000, anim.duration + 900));
+    await sleep(Math.min(26000, anim.duration + 900));
   }
   void A;
   void B;

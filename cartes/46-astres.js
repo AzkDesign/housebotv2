@@ -132,6 +132,7 @@ function astreIcon(ctx, a, x, y, r, color = null) {
 }
 // orbe d'astre (en-tête des cartes)
 function astreOrb(ctx, a, x, y, r) {
+  if (!(r >= 1)) return;
   const col = ASTRES[a]?.color ?? "#94a3b8";
   const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, 1, x, y, r);
   g.addColorStop(0, shade(col, 1.6));

@@ -2,6 +2,34 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.07",
+    color: 0xdc2626,
+    parts: [
+      [
+        "🎬 Des combats dignes d'un anime",
+        "Chaque manche est désormais une vraie séquence animée :\n" +
+          "• **Caméra en mouvement** : zooms, travellings et tremblements à chaque coup.\n" +
+          "• **Images d'impact** en noir, blanc et rouge, arrêt sur image et onomatopées façon manga.\n" +
+          "• **Gros plan en cases de manga** avant chaque attaque spéciale, avec l'illustration de votre carte.\n" +
+          "• Une nouvelle **interface de combat** : barres de vie qui se vident, astre de chaque carte, cartes restantes.",
+      ],
+      [
+        "🌌 Les Territoires des astres",
+        "Quand une attaque spéciale frappe l'astre qu'elle domine, l'attaquant **déploie son Territoire** : l'arène entière se transforme.\n" +
+          "☀️ Soleil noir · ❄️ Zéro absolu · ⚡ Mille éclairs · ⭐ Voûte céleste · 🌑 Néant · 🌙 Lune pâle\n" +
+          "Chaque astre a sa propre charge, son attaque et ses éclats : boule de feu, pics de glace, foudre, pluie de météores, mains d'ombre, lames de lune…",
+      ],
+      [
+        "⚔️ Et aussi",
+        "• Les **coups critiques** déchirent l'écran d'éclairs noirs, les **K.O.** font voler la carte en éclats.\n" +
+          "• Le **coup de grâce** a sa propre mise en scène, jusqu'à l'écran de victoire.\n" +
+          "• Dans l'arène, l'astre de chaque carte est visible et le menu de changement indique qui a l'avantage.\n" +
+          "• Le **codex** ne montre plus que les cartes de base : les éditions dorées, full art, or et prisme sont des styles de la carte.",
+      ],
+    ],
+    footer: "Que vos territoires s'étendent ! 🌌",
+  },
+  {
     version: "1.06",
     color: 0x8b5cf6,
     image: () => drawAstreWheel(560),
