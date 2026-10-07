@@ -1019,9 +1019,10 @@ async function handleCartesInteraction(interaction, client) {
     const card = findCard(interaction.values[0]);
     const holo = Boolean(load().inv[userId]?.[`${card?.id}*`]);
     if (!card) { await interaction.reply({ content: "❌ Carte introuvable.", ephemeral: true }); return true; }
+    // image animée (duos, légendaires…) : plus de 3 s de rendu possible, on répond d'abord à Discord
+    await interaction.deferReply({ ephemeral: true });
     const file = await cardFile(card, holo);
-    await interaction.reply({
-      ephemeral: true,
+    await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(parseInt(RARITIES[card.rarity].color.slice(1), 16)).setTitle(card.name).setImage(`attachment://${file.name}`)],
       files: [file],
       components: [
@@ -1038,11 +1039,12 @@ async function handleCartesInteraction(interaction, client) {
     const card = findCard(id.slice("carte_show_".length));
     if (!card || !ownedIds(userId).has(card.id)) { await interaction.reply({ content: "❌ Vous n'avez pas cette carte.", ephemeral: true }); return true; }
     const holo = Boolean(load().inv[userId]?.[`${card.id}*`]);
+    await interaction.deferUpdate().catch(() => null);
     const msg = await chan("discussion")
       ?.send({ content: `📣 ${interaction.user} montre sa carte :`, files: [await cardFile(card, holo)], allowedMentions: { parse: [] } })
       .catch(() => null);
     deleteLater(msg, MINUTE);
-    await interaction.update({ components: [] });
+    await interaction.editReply({ components: [] }).catch(() => null);
     return true;
   }
 
@@ -1124,13 +1126,17 @@ async function handleCartesInteraction(interaction, client) {
     s.dust[userId] -= cost;
     save();
     give(userId, card, false);
-    const file = await cardFile(card, false);
-    await interaction.update({
-      content: `🔨 Vous avez fabriqué **${card.name}** pour ${cost} ✨ !`,
-      components: [],
-      embeds: [new EmbedBuilder().setColor(parseInt(RARITIES[card.rarity].color.slice(1), 16)).setImage(`attachment://${file.name}`)],
-      files: [file],
-    });
+    // l'image animée (duos, légendaires…) peut prendre plus de 3 s : on répond tout de suite à Discord
+    await interaction.deferUpdate().catch(() => null);
+    const file = await cardFile(card, false).catch((err) => (console.error("Fabrication (image):", err.message), null));
+    await interaction
+      .editReply({
+        content: `🔨 Vous avez fabriqué **${card.name}** pour ${cost} ✨ !`,
+        components: [],
+        embeds: file ? [new EmbedBuilder().setColor(parseInt(RARITIES[card.rarity].color.slice(1), 16)).setImage(`attachment://${file.name}`)] : [],
+        files: file ? [file] : [],
+      })
+      .catch(() => null);
     await checkSeriesRewards(client, userId);
     panelDirty = true;
     return true;
