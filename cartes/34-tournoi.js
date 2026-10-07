@@ -130,8 +130,12 @@ async function tournamentTick(client) {
       t.started[r] = true;
       save();
       tourDirty = true;
+      const poster = await tdRoundPoster(t, r).catch(() => null);
       await chan("tournoi")
-        ?.send({ content: `⚔️ **${roundName(t, r)}** : c'est parti ! Les matchs se jouent jusqu'à ${tourDayLabel(t.slots[r] + TOUR_ROUND_HOURS * 3600000).replace(/^\S+ à /, "")}.` })
+        ?.send({
+          content: `⚔️ **${roundName(t, r)}** : c'est parti ! Les matchs se jouent jusqu'à ${tourDayLabel(t.slots[r] + TOUR_ROUND_HOURS * 3600000).replace(/^\S+ à /, "")}.`,
+          files: poster ? [new AttachmentBuilder(await poster.encode("jpeg", 88), { name: "tour.jpg" })] : [],
+        })
         .then((m) => deleteLater(m, TOUR_ROUND_HOURS * 60 * MINUTE))
         .catch(() => null);
     }
@@ -197,8 +201,13 @@ async function tourBattleOver(client, b, winner) {
   save();
   tourDirty = true;
   const last = ref.r === t.rounds.length - 1;
+  const card = last ? null : await tdResultCard(t, ref.r, m.winner, loser).catch(() => null);
   await chan("tournoi")
-    ?.send({ content: `⚔️ **${pseudo(m.winner)}** bat **${pseudo(loser)}** (${roundName(t, ref.r).toLowerCase()})${last ? "" : ` et file vers les ${roundName(t, ref.r + 1).toLowerCase()} !`}`, allowedMentions: { parse: [] } })
+    ?.send({
+      content: `⚔️ **${pseudo(m.winner)}** bat **${pseudo(loser)}** (${roundName(t, ref.r).toLowerCase()})${last ? "" : ` et file vers ${ref.r + 1 === t.rounds.length - 1 ? "la finale" : `les ${roundName(t, ref.r + 1).toLowerCase()}`} !`}`,
+      files: card ? [new AttachmentBuilder(await card.encode("jpeg", 88), { name: "victoire.jpg" })] : [],
+      allowedMentions: { parse: [] },
+    })
     .then((x) => deleteLater(x, 30 * MINUTE))
     .catch(() => null);
   if (last) await tourFinish(client, t);
@@ -231,8 +240,11 @@ async function tourFinish(client, t) {
     }
   }
   checkAchievements(champion).catch(() => null);
+  const sacre = await tdChampionGif(t).catch((err) => (console.error("Tournoi (sacre):", err.message), null));
+  if (sacre) await chan("tournoi")?.send({ content: `🏆 **${pseudo(champion)} est sacré champion du tournoi !**`, files: [new AttachmentBuilder(sacre, { name: "champion.gif" })], allowedMentions: { parse: [] } }).catch(() => null);
   await chan("annonces")
     ?.send({
+      files: sacre ? [new AttachmentBuilder(sacre, { name: "champion.gif" })] : [],
       content: `🏆 **${pseudo(champion)} remporte le tournoi du week-end !**\n🥈 Finaliste : **${pseudo(finalist)}**${semis.length ? ` · 🥉 Demi-finalistes : ${semis.map((x) => `**${pseudo(x)}**`).join(", ")}` : ""}\nLe champion gagne **${TOUR_PRIZES.champion.dust} ✨**, **${formatEuro(TOUR_PRIZES.champion.money)}**, un booster Prestige et le rôle **Champion du tournoi** jusqu'au prochain week-end.`,
       allowedMentions: { parse: [] },
     })
@@ -542,7 +554,7 @@ ${tourAdminText()}` : me.content, components: [...tourButtons(t), ...(admin ? to
     const { m, r, k } = cur, foe = m.a === userId ? m.b : m.a;
     if (m.battle && battles.has(m.battle)) {
       const b = battles.get(m.battle);
-      return say(`⚔️ Votre match est déjà en cours : ${b.message?.url ?? chan("arene")}`);
+      return say(`⚔️ Votre match est déjà en cours : ${(b.thread ?? b.message)?.url ?? chan("arene")}`);
     }
     if (userBattle.has(userId)) return say("❌ Vous êtes déjà dans un autre combat : terminez-le d'abord.");
     m.showed[userId] = true;
@@ -569,8 +581,9 @@ ${tourAdminText()}` : me.content, components: [...tourButtons(t), ...(admin ? to
     m.battle = b.id;
     save();
     tourDirty = true;
-    await interaction.editReply({ content: `⚔️ **Votre match du tournoi commence !** ${b.message?.url ?? ""}` });
-    client.users.fetch(foe).then((u) => u.send(`⚔️ Votre match du tournoi contre **${pseudo(userId)}** commence : ${b.message?.url ?? chan("arene")}`)).catch(() => null);
+    tdMatchIntro(b, t, r, m).catch((err) => console.error("Tournoi (VS):", err.message));
+    await interaction.editReply({ content: `⚔️ **Votre match du tournoi commence !** ${(b.thread ?? b.message)?.url ?? ""}` });
+    client.users.fetch(foe).then((u) => u.send(`⚔️ Votre match du tournoi contre **${pseudo(userId)}** commence : ${(b.thread ?? b.message)?.url ?? chan("arene")}`)).catch(() => null);
     return true;
   }
   return false;
@@ -595,6 +608,18 @@ ${tourAdminText()}` : me.content, components: [...tourButtons(t), ...(admin ? to
   const facts = playerFacts;
   playerFacts = (userId) => ({ ...facts(userId), tourneyWins: load().userStats[userId]?.tourneyWins ?? 0 });
   ACHIEVEMENTS.push(["tournoi1", "🏆", "Champion du week-end", "Remporter un tournoi du week-end", "tourneyWins", 1, 300]);
+}
+// le « VS » animé dans le fil du combat ; le choix des équipes redescend juste en dessous
+async function tdMatchIntro(b, t, r, m) {
+  const gif = await tdVsGif(t, r, m.a, m.b);
+  if (!b.channel || b.phase !== "team") return;
+  const sent = await b.channel.send({ content: `🏆 **Tournoi du week-end — ${roundName(t, r)}**`, files: [new AttachmentBuilder(gif, { name: "vs.gif" })] }).catch(() => null);
+  if (!sent || b.phase !== "team") return;
+  const panel = await b.channel.send(await teamPayload(b)).catch(() => null);
+  if (panel) {
+    b.message.delete().catch(() => null);
+    b.message = panel;
+  }
 }
 async function tournamentLoop(client) {
   await tournamentTick(client).catch((err) => console.error("Tournoi:", err.message));

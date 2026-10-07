@@ -2,6 +2,21 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.08",
+    color: 0xf59e0b,
+    parts: [
+      [
+        "🏆 Le tournoi du week-end fait peau neuve",
+        "• **Un tableau digne d'un vrai tournoi** : les deux moitiés convergent vers la finale, sous le trophée. Avatars, têtes de série, rangs, matchs **EN DIRECT** et parcours des vainqueurs en or.\n" +
+          "• **Inscriptions** : le podium des récompenses, les inscrits et les places encore libres.\n" +
+          "• **Affiche de chaque tour** avec tous les duels, et une **carte de victoire** après chaque match.\n" +
+          "• **Un « VS » animé** au début de chaque match (et une version spéciale pour la grande finale).\n" +
+          "• **Le sacre du champion** : couronne, confettis… et un podium final avec les 4 meilleurs.",
+      ],
+    ],
+    footer: "Rendez-vous vendredi midi pour les inscriptions ! 🏆",
+  },
+  {
     version: "1.07",
     color: 0xdc2626,
     parts: [
