@@ -2,7 +2,7 @@
 // --- Pass de combat : une saison par mois, 30 paliers, une voie gratuite et une voie Premium ---
 // L'XP se gagne en jouant (boosters, combats, échanges, île, Clash, tournoi…), avec un plafond par jour.
 // Les récompenses : poussière d'étoile, boosters, euros et ressources du Clash. Aucune carte n'est créée.
-const PASS_TIERS = 30, PASS_TIER_XP = 400, PASS_DAY_CAP = 1200, PASS_PRICE = 20000, PASS_PAGE = 10;
+const PASS_TIERS = 30, PASS_TIER_XP = 400, PASS_DAY_CAP = 1200, PASS_PRICE = 8000, PASS_PAGE = 10;
 const PASS_XP = {
   // actions suivies par les quêtes
   open_pack: 25, daily_pack: 30, win_fight: 60, play_round: 4, trade: 40, market: 25, wild: 40, recycle: 10,

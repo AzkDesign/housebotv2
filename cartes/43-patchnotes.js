@@ -14,7 +14,7 @@ const PATCH_NOTES = [
       [
         "🎟️ Pass de combat",
         "• Un pass **chaque mois**, 30 paliers : gagnez de l'XP en jouant et réclamez poussière, euros et boosters.\n" +
-          "• **Pass Premium** (20 000 €) : une 2ᵉ voie bien plus riche.\n" +
+          "• **Pass Premium** (8 000 €) : une 2ᵉ voie bien plus riche.\n" +
           "• 🎃 **Octobre : le Pass de l'Effroi** — boosters Frisson, Chat noir, Fantôme de la Maison et **Lune de sang** à gagner !\n" +
           "• 🤝 **Pass Duo** : avec votre coéquipier, remplissez ensemble un pass d'équipe. Au bout du Premium : votre carte DUO en holo.\n" +
           "• Nouveau salon **🎟️・pass-de-combat** avec le classement de tous les joueurs.",

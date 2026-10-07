@@ -13,8 +13,8 @@ const SHOP_ITEMS = [
   { id: "back_tempete", kind: "back", name: "Tempête", price: 2400, cur: "dust", bg: ["#1e40af", "#0f172a"], ink: "#93c5fd", pattern: "shards", emoji: "🦅", art: "line" },
   { id: "back_foret", kind: "back", name: "Forêt ancienne", price: 2000, cur: "dust", bg: ["#22c55e", "#14532d"], ink: "#dcfce7", pattern: "hex", emoji: "🦎", art: "color" },
   { id: "back_phenix", kind: "back", name: "Phénix", price: 3000, cur: "dust", bg: ["#dc2626", "#450a0a"], ink: "#fecaca", pattern: "rays", emoji: "🔥", art: "color" },
-  { id: "back_royal", kind: "back", name: "Or royal", price: 25000, cur: "euro", bg: ["#fffbeb", "#e7e5e4"], ink: "#b45309", pattern: "rays", emoji: "👑", art: "line" },
-  { id: "back_cristal", kind: "back", name: "Cristal", price: 30000, cur: "euro", bg: ["#14b8a6", "#134e4a"], ink: "#ccfbf1", pattern: "diamonds", emoji: "💎", art: "line" },
+  { id: "back_royal", kind: "back", name: "Or royal", price: 6000, cur: "euro", bg: ["#fffbeb", "#e7e5e4"], ink: "#b45309", pattern: "rays", emoji: "👑", art: "line" },
+  { id: "back_cristal", kind: "back", name: "Cristal", price: 8000, cur: "euro", bg: ["#14b8a6", "#134e4a"], ink: "#ccfbf1", pattern: "diamonds", emoji: "💎", art: "line" },
   { id: "back_spectre", kind: "back", name: "Spectre", price: 1666, cur: "dust", bg: ["#4c1d95", "#120321"], ink: "#e9d5ff", pattern: "stars", emoji: "👻", art: "line", month: 10 },
   { id: "back_champion", kind: "back", name: "Couronne du champion", price: 0, cur: "dust", bg: ["#fef3c7", "#d97706"], ink: "#78350f", pattern: "rays", emoji: "🏆", art: "line", exclusive: "Réservé au champion du tournoi du week-end" },
   // effets d'ouverture de booster
@@ -23,14 +23,14 @@ const SHOP_ITEMS = [
   { id: "fx_flammes", kind: "fx", name: "Flammes", price: 1500, cur: "dust" },
   { id: "fx_sakura", kind: "fx", name: "Pétales de sakura", price: 1500, cur: "dust" },
   { id: "fx_eclairs", kind: "fx", name: "Éclairs", price: 1800, cur: "dust" },
-  { id: "fx_or", kind: "fx", name: "Pluie d'or", price: 20000, cur: "euro" },
+  { id: "fx_or", kind: "fx", name: "Pluie d'or", price: 4000, cur: "euro" },
   { id: "fx_spectre", kind: "fx", name: "Feux follets", price: 1666, cur: "dust", month: 10 },
   // décors d'Arène
   { id: "decor_colisee", kind: "decor", name: "Colisée", price: 2000, cur: "dust" },
   { id: "decor_paris", kind: "decor", name: "Toits de Paris", price: 2500, cur: "dust" },
   { id: "decor_temple", kind: "decor", name: "Temple du soleil levant", price: 2500, cur: "dust" },
   { id: "decor_abysses", kind: "decor", name: "Abysses", price: 3000, cur: "dust" },
-  { id: "decor_galaxie", kind: "decor", name: "Galaxie", price: 35000, cur: "euro" },
+  { id: "decor_galaxie", kind: "decor", name: "Galaxie", price: 10000, cur: "euro" },
   { id: "decor_manoir", kind: "decor", name: "Manoir hanté", price: 1666, cur: "dust", month: 10 },
 ];
 const SHOP_KINDS = { back: ["🃏", "Dos de cartes"], fx: ["🎆", "Effets d'ouverture"], decor: ["🏟️", "Décors d'Arène"] };
