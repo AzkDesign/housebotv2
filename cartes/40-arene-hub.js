@@ -564,6 +564,9 @@ function bossAutoFight(userId) {
     if (!b.players.every((p) => p.team.some((f) => f.hp > 0))) break;
   }
   const f = b.players[1].team[0];
+  // comme un vrai combat : chaque manche jouée compte (quêtes et XP de pass), et la victoire aussi
+  questProgress(userId, "play_round", b.round);
+  if (f.hp <= 0) questProgress(userId, "win_fight");
   return Math.max(0, Math.min(s.hp, f.maxHp - Math.max(0, f.hp)));
 }
 
