@@ -40,7 +40,7 @@ const ACHIEVEMENTS = [
   ["collec50", "📚", "Encyclopédiste", "Posséder 50 cartes différentes", "unique", 50, 300],
   ["paris", "🗼", "Parisien", "Compléter la série Paris", "paris", 1, 200],
   ["maison", "🏡", "Pilier de la Maison", "Compléter la série La Maison", "maison", 1, 200],
-  ["holo1", "✦", "Éclat holographique", "Obtenir une carte holo", "holos", 1, 50],
+  ["holo1", "✨", "Éclat holographique", "Obtenir une carte holo", "holos", 1, 50],
   ["holo10", "🌈", "Galerie holographique", "Posséder 10 cartes holo différentes", "holos", 10, 250],
   ["shiny", "🍀", "Chasseur de Shiny", "Obtenir une carte Shiny", "shiny", 1, 300],
   ["mythique", "🔴", "Mythe vivant", "Obtenir une carte mythique", "myth", 1, 200],
@@ -100,7 +100,8 @@ function achievementsPayload(userId) {
             new StringSelectMenuBuilder()
               .setCustomId("carte_succ_titre")
               .setPlaceholder("Choisir le titre affiché sur mon profil…")
-              .addOptions(unlocked.slice(0, 25).map(([id, emoji, name]) => ({ label: name, value: id, emoji, default: a.title === id })))
+              // Discord refuse tout le message si un emoji n'en est pas un (✦, ★…) : on met 🏅 à la place
+              .addOptions(unlocked.slice(0, 25).map(([id, emoji, name]) => ({ label: name, value: id, emoji: /\p{Extended_Pictographic}/u.test(emoji) ? emoji : "🏅", default: a.title === id })))
           ),
         ]
       : [],
