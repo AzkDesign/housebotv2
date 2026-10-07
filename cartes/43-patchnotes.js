@@ -2,6 +2,23 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.11",
+    color: 0xa855f7,
+    parts: [
+      [
+        "📚 Le défi ultime : Maître Collectionneur",
+        "Réunissez **toute la collection de la Génération 1** (hors cartes de membres et de duos) : Paris, La Maison, événements, saisons, Mode Histoire, Utilitaires…\n" +
+          "Le premier qui y arrive (et chaque suivant) reçoit la carte **mythique unique Maître Collectionneur** en holo, impossible à obtenir autrement. Elle est déjà visible dans le codex… à vous de la débloquer !",
+      ],
+      [
+        "⚔️ Et aussi",
+        "• Les **cartes de membres** suivent enfin leur rareté en combat : une carte mythique de membre est maintenant plus forte qu'une légendaire.\n" +
+          "• L'**île** rapporte **10 ✨ toutes les 10 minutes**, et 10 XP d'équipe par heure de garde.",
+      ],
+    ],
+    footer: "Bonne chasse aux cartes ! 📚",
+  },
+  {
     version: "1.10",
     color: 0x22d3ee,
     parts: [
