@@ -1757,7 +1757,7 @@ function refundInterruptedBattles() {
 }
 function arenaLeaderboard() {
   return Object.entries(load().arena)
-    .filter(([, s]) => s.w + s.l + s.d > 0)
+    .filter(([, s]) => s.w + s.l + s.d > 0 || (s.bp ?? 0) > 0)
     .sort((a, b) => b[1].elo - a[1].elo)
     .slice(0, 10)
     .map(([id, s], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} **${pseudo(id)}** — **${s.elo}** · ${tierOf(s.elo)[1]} · ${s.w} V / ${s.l} D${s.streak >= 3 ? ` · 🔥 ${s.streak}` : ""}`)

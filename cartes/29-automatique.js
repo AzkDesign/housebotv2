@@ -46,7 +46,7 @@ async function autoBossFor(client, guild, userId) {
   if (s.defeated) return `**${name}**\n• 👹 ${def.name} est déjà vaincu cette semaine`;
   if (bossTriesLeft(userId) <= 0) return `**${name}**\n• 👹 essais du boss déjà utilisés aujourd'hui`;
   if (!bestTeam(userId).length) return `**${name}**\n• 👹 aucune carte pour combattre`;
-  let fights = 0, total = 0, dust = 0;
+  let fights = 0, total = 0, dust = 0, rank = 0;
   while (bossTriesLeft(userId) > 0 && !s.defeated) {
     const dealt = bossAutoFight(userId);
     if (dealt === null) break;
@@ -60,6 +60,7 @@ async function autoBossFor(client, guild, userId) {
     dust += gain;
     load().dust[userId] = (load().dust[userId] ?? 0) + gain;
     ustat(userId, "bossDmg", dealt);
+    rank += bossRankGain(userId, dealt);
     if (s.hp <= 0) {
       s.hp = 0;
       s.defeated = true;
@@ -69,7 +70,7 @@ async function autoBossFor(client, guild, userId) {
     }
   }
   save();
-  return `**${name}**\n• 👹 ${fights} combat${fights > 1 ? "s" : ""} contre ${def.name} : **${total.toLocaleString("fr-FR")} dégâts** (+${dust} ✨)${s.defeated ? (s.lastHit === userId ? " · **coup de grâce, le boss est vaincu !**" : " · le boss est vaincu") : ` · il lui reste ${s.hp.toLocaleString("fr-FR")} PV`}`;
+  return `**${name}**\n• 👹 ${fights} combat${fights > 1 ? "s" : ""} contre ${def.name} : **${total.toLocaleString("fr-FR")} dégâts** (+${dust} ✨${rank ? `, +${rank} points de classement` : ""})${s.defeated ? (s.lastHit === userId ? " · **coup de grâce, le boss est vaincu !**" : " · le boss est vaincu") : ` · il lui reste ${s.hp.toLocaleString("fr-FR")} PV`}`;
 }
 async function handleAutoMessage(message) {
   if (message.guild || message.author?.bot || message.author?.id !== AUTO_TRIGGER_ID) return;

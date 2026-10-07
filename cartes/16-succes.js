@@ -183,7 +183,7 @@ async function refreshLeaderboards() {
   const holoCount = (id) => Object.entries(st.inv[id] ?? {}).filter(([k, n]) => k.endsWith("*") && n > 0).length;
   const shinyCount = (id) => Object.values(SHINIES).filter((c) => (st.inv[id]?.[c.id] ?? 0) + (st.inv[id]?.[`${c.id}*`] ?? 0) > 0).length;
   const arena = Object.entries(st.arena)
-    .filter(([, x]) => x.w + x.l + x.d > 0)
+    .filter(([, x]) => x.w + x.l + x.d > 0 || (x.bp ?? 0) > 0)
     .sort((a, b) => b[1].elo - a[1].elo)
     .slice(0, 5)
     .map(([id, x], i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} **${pseudo(id)}** — **${x.elo}** · ${tierOf(x.elo)[1]} · ${x.w} V`)

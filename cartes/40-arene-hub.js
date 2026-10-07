@@ -60,6 +60,19 @@ function bossFighter(b) {
     if (!already && b.boss) await bossFightOver(client, b).catch((err) => console.error("Boss:", err.message));
   };
 }
+// le boss fait aussi monter le rang : ~1 point par tranche de 40 dégâts, 15 par combat et 60 par semaine au plus
+const BOSS_RANK_FIGHT = 15, BOSS_RANK_WEEK = 60;
+function bossRankGain(userId, dealt) {
+  const st = load();
+  st.bossRank ??= {};
+  const w = st.bossRank[userId]?.week === mondayKey() ? st.bossRank[userId] : (st.bossRank[userId] = { week: mondayKey(), n: 0 });
+  const gain = Math.max(0, Math.min(BOSS_RANK_FIGHT, Math.round(dealt / 40), BOSS_RANK_WEEK - w.n));
+  const s = arenaStats(userId);
+  s.elo += gain;
+  s.bp = (s.bp ?? 0) + 1; // combats de boss (pour apparaître au classement)
+  w.n += gain;
+  return gain;
+}
 async function bossFightOver(client, b) {
   const s = bossState(), def = bossDef(b.boss), f = b.players[1].team[0], uid = b.players[0].id;
   if (!f || s.week !== b.bossWeek) return;
@@ -70,9 +83,10 @@ async function bossFightOver(client, b) {
   const dust = 10 + Math.floor(dealt / 8);
   load().dust[uid] = (load().dust[uid] ?? 0) + dust;
   ustat(uid, "bossDmg", dealt);
+  const rank = bossRankGain(uid, dealt);
   save();
   const pct = Math.round((s.hp / s.maxHp) * 1000) / 10;
-  const msg = await b.channel?.send({ content: `👹 **${b.players[0].name}** inflige **${dealt.toLocaleString("fr-FR")} dégâts** à ${def.name} (+${dust} ✨). Il lui reste **${s.hp.toLocaleString("fr-FR")} PV** (${pct} %).`, allowedMentions: { parse: [] } }).catch(() => null);
+  const msg = await b.channel?.send({ content: `👹 **${b.players[0].name}** inflige **${dealt.toLocaleString("fr-FR")} dégâts** à ${def.name} (+${dust} ✨${rank ? `, +${rank} points de classement` : ""}). Il lui reste **${s.hp.toLocaleString("fr-FR")} PV** (${pct} %).`, allowedMentions: { parse: [] } }).catch(() => null);
   deleteLater(msg, MINUTE);
   if (s.hp <= 0 && !s.defeated) {
     s.defeated = true;
@@ -379,7 +393,7 @@ async function drawArenaHub(userId) {
   ctx.fillText("Seules les parties classées comptent pour le rang.", 68, 684);
   card(500, 480, 856, 236, "CLASSEMENT DE LA SAISON");
   const board = Object.entries(load().arena)
-    .filter(([, x]) => x.w + x.l + x.d > 0)
+    .filter(([, x]) => x.w + x.l + x.d > 0 || (x.bp ?? 0) > 0)
     .sort((a, b) => b[1].elo - a[1].elo)
     .slice(0, 5);
   if (!board.length) {
@@ -423,7 +437,7 @@ async function arenaHubPayload(userId, note = "") {
         .setDescription(
           (note ? `${note}\n\n` : "") +
             "🏆 **Partie classée** : le bot vous trouve un adversaire en ligne de votre niveau. C'est la seule qui fait monter (ou descendre) votre rang.\n" +
-            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tout le serveur s'additionnent.`}\n` +
+            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tout le serveur s'additionnent.`} Il fait aussi **monter votre rang** (jusqu'à ${BOSS_RANK_FIGHT} points par combat, ${BOSS_RANK_WEEK} par semaine).\n` +
             "🤝 **Défi amical** : contre le membre de votre choix, avec une mise si vous voulez (`/combat`).\n" +
             `🎯 **Défi de la semaine** : ${weeklyRule()[1]} — ${weekly.done ? "réussi ✅" : `${Math.min(weekly.wins, WEEKLY_GOAL)} / ${WEEKLY_GOAL} victoires`}`
         )
@@ -552,7 +566,7 @@ async function arenaBoardPayload() {
         .setTitle("⚔️ Arène de la Maison")
         .setDescription(
           "🏆 **Partie classée** : le bot vous trouve un adversaire en ligne de votre niveau. C'est la seule qui fait monter (ou descendre) votre rang.\n" +
-            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tous s'additionnent.`}\n` +
+            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tous s'additionnent.`} Il fait aussi **monter votre rang** (jusqu'à ${BOSS_RANK_FIGHT} points par combat, ${BOSS_RANK_WEEK} par semaine).\n` +
             "🤝 **Défi amical** et 🎒 **objets** : dans **Mon menu** (votre rang, vos essais, vos objets).\n" +
             "🤖 **Entraînement** contre la Maison, qui progresse avec vous."
         )
