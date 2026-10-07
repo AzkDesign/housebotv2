@@ -33,7 +33,7 @@ const SHOP_ITEMS = [
   { id: "decor_galaxie", kind: "decor", name: "Galaxie", price: 35000, cur: "euro" },
   { id: "decor_manoir", kind: "decor", name: "Manoir hanté", price: 1666, cur: "dust", month: 10 },
 ];
-const SHOP_KINDS = { back: ["🂠", "Dos de cartes"], fx: ["🎆", "Effets d'ouverture"], decor: ["🏟️", "Décors d'Arène"] };
+const SHOP_KINDS = { back: ["🃏", "Dos de cartes"], fx: ["🎆", "Effets d'ouverture"], decor: ["🏟️", "Décors d'Arène"] };
 Object.assign(FLUENT, { "⚡": "High voltage", "🐳": "Spouting whale", "🦇": "Bat", "🌸": "Cherry blossom", "🦅": "Eagle", "🦎": "Lizard", "💎": "Gem stone", "🔥": "Fire", "🏆": "Trophy" });
 const shopItem = (id) => SHOP_ITEMS.find((x) => x.id === id) ?? null;
 const shopMonth = () => Number(new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", month: "2-digit" }).format(new Date()));
