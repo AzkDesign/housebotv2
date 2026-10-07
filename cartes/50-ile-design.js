@@ -325,6 +325,7 @@ async function drawArchipelagoHD() {
   const cw = 128, ch = 179;
   if (!isl.holder) {
     for (const s of slots) {
+      islePlinth(ctx, s.x, s.y + 6, cw, acc);
       roundRect(ctx, s.x - cw / 2, s.y - ch, cw, ch, 14);
       ctx.fillStyle = "rgba(2,6,23,0.35)";
       ctx.fill();
@@ -352,6 +353,7 @@ async function drawArchipelagoHD() {
     const defs = islandDefenders(id);
     for (const [k, f] of defs.entries()) {
       const s = slots[k];
+      islePlinth(ctx, s.x, s.y + 6, cw, f.hp > 0 ? acc : "#475569");
       glow(ctx, s.x, s.y - ch / 2, 120, f.hp > 0 ? acc : "#000000", 0.35);
       ctx.save();
       ctx.shadowColor = "rgba(0,0,0,0.6)";
@@ -361,15 +363,15 @@ async function drawArchipelagoHD() {
       ctx.drawImage(await cardThumb(f.card, isHoloKey(f.key), cw * 2, ch * 2), s.x - cw / 2, s.y - ch, cw, ch);
       ctx.restore();
       if (f.series === def.series) tdPill(ctx, s.x + cw / 2 - 8, s.y - ch + 6, "+10 %", rgba(acc, 0.95), "#020617", 10);
-      hpBar(ctx, s.x - cw / 2 - 6, s.y + 10, cw + 12, 16, f.hp, f.maxHp, false);
+      hpBar(ctx, s.x - cw / 2 - 6, s.y + 26, cw + 12, 16, f.hp, f.maxHp, false);
       ctx.textAlign = "center";
       ctx.font = "14px CardBold";
       ctx.lineWidth = 4;
       ctx.strokeStyle = "rgba(0,0,0,0.7)";
       const t = f.hp > 0 ? `${f.hp} / ${f.maxHp} PV` : "K.O.";
-      ctx.strokeText(t, s.x, s.y + 46);
+      ctx.strokeText(t, s.x, s.y + 62);
       ctx.fillStyle = f.hp > 0 ? "#ffffff" : "#fca5a5";
-      ctx.fillText(t, s.x, s.y + 46);
+      ctx.fillText(t, s.x, s.y + 62);
     }
   }
   // le panneau du gardien
