@@ -1634,8 +1634,8 @@ async function resolveRound(client, b) {
         return null;
       });
     if (shown) {
-      // durée de l'animation + temps de chargement du GIF (environ 0,8 s par Mo) avant de passer à la suite
-      await sleep(Math.min(45000, anim.duration + 2500 + (anim.buffer.length / 1048576) * 800));
+      // durée de l'animation + petite marge pour le chargement du GIF, puis la suite tout de suite
+      await sleep(Math.min(45000, anim.duration + 800 + (anim.buffer.length / 1048576) * 450));
       // le panneau du combat redescend sous l'animation
       const panel = await b.channel.send({ ...(await livePayload(b)), components: battleComponents(b, true) }).catch(() => null);
       if (panel) {

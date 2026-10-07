@@ -2816,14 +2816,14 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
           },
         ];
       },
-      [...Array(21).fill(60), 3200]
+      [...Array(21).fill(60), 1500]
     );
   } else {
-    await run(4, () => {}, [60, 60, 60, 2400]);
+    await run(4, () => {}, [60, 60, 60, 200]);
   }
   flush();
   enc.finish();
-  return { buffer: Buffer.from(enc.bytes()), duration: duration - (finisher ? 3200 : 2400), frames: wrote };
+  return { buffer: Buffer.from(enc.bytes()), duration: duration - (finisher ? 1500 : 200), frames: wrote };
 }
 
 // la manche animée ; trop lourde pour Discord, elle est refaite plus petite ; en cas de pépin, l'ancienne animation
