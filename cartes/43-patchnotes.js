@@ -2,6 +2,26 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.12",
+    color: 0x22c55e,
+    parts: [
+      [
+        "🎯 Plus de quêtes chaque jour",
+        "• **5 quêtes par jour** au lieu de 3 : **3 normales** et **2 difficiles** 🔥.\n" +
+          "• Les quêtes difficiles demandent plus (gagner 3 combats, ouvrir 5 boosters, jouer 25 manches…) mais rapportent **3 à 4 fois plus** de poussière et d'euros.\n" +
+          "• Jamais deux fois la même action le même jour.\n" +
+          "• Terminez les **cinq** pour gagner un **booster Premium** (au lieu d'un Standard).",
+      ],
+      [
+        "🏆 Des classements tout neufs",
+        "Le salon des classements devient un vrai **Hall of Fame** en image :\n" +
+          "• le **podium de la collection** (les 3 meilleurs sur les marches, puis les places 4 à 10) ;\n" +
+          "• les meilleurs de l'**Arène**, des **équipes**, des **succès**, des **holos** et des **Shiny**, et le **gardien de l'île**, avec vos avatars.",
+      ],
+    ],
+    footer: "Bonne chance pour grimper au classement ! 🏆",
+  },
+  {
     version: "1.11",
     color: 0xa855f7,
     parts: [
