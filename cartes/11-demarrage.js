@@ -1,4 +1,5 @@
 async function setupCartes(client) {
+  cardClient = client;
   load();
   const annonces = await client.channels.fetch(ANNOUNCE_CHANNEL_ID).catch(() => null);
   const guild = annonces?.guild ?? client.guilds.cache.first();

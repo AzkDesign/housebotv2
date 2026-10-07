@@ -1,5 +1,6 @@
 // --- Interactions ---
 async function handleCartesInteraction(interaction, client) {
+  cardClient ??= client ?? interaction.client;
   if (await handleRosterInteraction(interaction)) return true;
   if (await handleArenaHubInteraction(interaction, client)) return true;
   if (await handleIslandInteraction(interaction, client)) return true;

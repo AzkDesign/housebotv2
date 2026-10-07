@@ -1478,6 +1478,10 @@ async function startBattle(client, a, bUser, opts) {
   escrow(b);
   const thread = await chan("arene")?.threads.create({ name: `⚔️ ${players[0].name} vs ${players[1].name}`.slice(0, 95), autoArchiveDuration: 60, reason: "Combat de cartes" }).catch(() => null);
   b.channel = thread ?? chan("arene");
+  if (!b.channel) {
+    await cancelBattle(b, "salon introuvable");
+    return null;
+  }
   if (thread) setTimeout(() => cleanThreadNotices(chan("arene")).catch(() => null), 2500);
   b.thread = thread;
   const mentions = players.filter((p) => !p.isAI).map((p) => `<@${p.id}>`).join(" ");

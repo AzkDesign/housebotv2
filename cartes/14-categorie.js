@@ -21,7 +21,15 @@ const CARD_CHANNELS = [
 const cardChannels = {};
 // anciens salons regroupés : les cartes sauvages vont dans la discussion, les grosses ventes avec les échanges
 const CHANNEL_ALIASES = { sauvages: "discussion", marche: "echanges" };
-const chan = (key) => cardChannels[CHANNEL_ALIASES[key] ?? key] ?? channelRef;
+// juste après un redémarrage, la mise en place des salons prend quelques minutes :
+// en attendant, on retrouve le salon par l'identifiant enregistré
+let cardClient = null;
+const chan = (key) => {
+  const k = CHANNEL_ALIASES[key] ?? key;
+  if (cardChannels[k]) return cardChannels[k];
+  const cache = cardClient?.channels?.cache, ids = load().cardChannels ?? {};
+  return (ids[k] && cache?.get(ids[k])) || channelRef || (load().channelId && cache?.get(load().channelId)) || null;
+};
 // Invitations (combat, échange, équipe) : envoyées en message privé à l'invité ;
 // si ses messages privés sont fermés, elles sont publiées dans le salon prévu.
 const lastInvite = new Map(); // auteur -> dernière invitation envoyée (pour le bouton d'annulation)
