@@ -1621,21 +1621,28 @@ async function resolveRound(client, b) {
     return `${ACTIONS[a.type].emoji} **${p.name}** : ${a.type === "special" ? `Spécial — ${p.team[res.startIdx[i]].special}` : ACTIONS[a.type].label}${a.auto ? " *(automatique)*" : ""}`;
   };
   if (anim) {
-    await b.message
-      .edit({
-        content: null,
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xef4444)
-            .setTitle(`⚔️ Manche ${b.round} — révélation !`)
-            .setDescription(`${actText(0)}\n${actText(1)}\n\n${res.lines.map((l) => `• ${l.text}`).join("\n")}`)
-            .setImage("attachment://manche.gif"),
-        ],
+    // L'animation a son propre message dans le fil : elle n'est jamais remplacée par la manche suivante,
+    // on la voit en entier (et on peut la revoir) même si Discord met du temps à la charger.
+    await b.message.edit({ components: battleComponents(b, true) }).catch(() => null);
+    const shown = await b.channel
+      .send({
+        embeds: [new EmbedBuilder().setColor(0xef4444).setTitle(`⚔️ Manche ${b.round} — révélation !`).setDescription(`${actText(0)}\n${actText(1)}`).setImage("attachment://manche.gif")],
         files: [new AttachmentBuilder(anim.buffer, { name: "manche.gif" })],
-        components: battleComponents(b, true),
       })
-      .catch(() => null);
-    await sleep(Math.min(26000, anim.duration + 900));
+      .catch((err) => {
+        console.error("Animation de combat (envoi):", err.message);
+        return null;
+      });
+    if (shown) {
+      // durée de l'animation + temps de chargement du GIF (environ 0,8 s par Mo) avant de passer à la suite
+      await sleep(Math.min(45000, anim.duration + 2500 + (anim.buffer.length / 1048576) * 800));
+      // le panneau du combat redescend sous l'animation
+      const panel = await b.channel.send({ ...(await livePayload(b)), components: battleComponents(b, true) }).catch(() => null);
+      if (panel) {
+        b.message.delete().catch(() => null);
+        b.message = panel;
+      }
+    }
   }
   void A;
   void B;

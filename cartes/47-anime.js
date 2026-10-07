@@ -7,7 +7,7 @@
 // dernier recours on retombe sur l'ancienne animation.
 const AN_W = 880, AN_H = 500, AN_BW = 1144, AN_BH = 650, AN_MX = (AN_BW - AN_W) / 2, AN_MY = (AN_BH - AN_H) / 2;
 const AN_CW = 178, AN_CH = 249, AN_BASE = 292, AN_HOME = [AN_W / 2 - 220, AN_W / 2 + 220];
-const AN_MAX_BYTES = 9 * 1024 * 1024; // Discord accepte 10 Mo par message
+const AN_MAX_BYTES = 7 * 1024 * 1024; // plus léger = chargé plus vite par Discord (limite : 10 Mo)
 let anDebug = null; // tests : reçoit chaque image rendue
 const AN_PAL = {
   soleil: { main: "#f59e0b", light: "#fef3c7", dark: "#431407", accent: "#ef4444", realm: "TERRITOIRE DU SOLEIL NOIR", sfx: ["FWOOSH", "BRAAAM", "KRAÂÂM"] },
