@@ -69,7 +69,8 @@ function duoCards(activeOnly = false) {
     const cp = profile(card, holo);
     if (!card.duo) return cp;
     const d = duoInfo(card.duo.emblem);
-    return { ...cp, hp: Math.round(cp.hp * 1.15), special: Math.round(cp.special * 1.12), attackName: d.attack, specialName: d.duo };
+    // deux joueurs sur une carte : plus solide et plus forte qu'une carte normale de même rareté
+    return { ...cp, hp: Math.round(cp.hp * 1.25), attack: Math.round(cp.attack * 1.2), special: Math.round(cp.special * 1.25), attackName: d.attack, specialName: d.duo };
   };
   seriesIcon = (ctx, s, x, y, size, color) => {
     if (s !== "duos") return icon(ctx, s, x, y, size, color);
