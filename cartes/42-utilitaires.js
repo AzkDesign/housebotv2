@@ -340,3 +340,101 @@ async function drawUtilityCard(card, holo = false, t = 0.37) {
     ctx.stroke();
   };
 }
+
+// --- L'objet est posé sur le plateau : on le voit dans l'arène, de chaque côté, pendant tout le combat ---
+function pendingItem(b, i) {
+  const p = b.players[i];
+  if (p.item) return UTILITY[p.item];
+  if (b.boss && i === 0) return bossItemOf(p.id);
+  if (b.island && i === 1) return islandItemOf(islandsState()[b.island]);
+  return null;
+}
+async function drawBoardItem(ctx, item, x, y, side) {
+  const col = utilityColor[item.fx] ?? "#38bdf8", w = 78, h = 109;
+  // socle lumineux sur le sol de l'arène
+  ctx.save();
+  ctx.fillStyle = rgba(col, 0.35);
+  ctx.beginPath();
+  ctx.ellipse(x, y + h / 2 + 8, 58, 14, 0, 0, TAU);
+  ctx.fill();
+  glow(ctx, x, y + h / 2, 90, col, 0.4);
+  ctx.translate(x, y);
+  ctx.rotate(side ? 0.08 : -0.08);
+  ctx.shadowColor = rgba(col, 0.9);
+  ctx.shadowBlur = 18;
+  ctx.drawImage(await cardThumb(item, false, w * 2, h * 2), -w / 2, -h / 2, w, h);
+  ctx.restore();
+  // étiquette
+  ctx.save();
+  ctx.font = "11px CardEngrave";
+  const label = "OBJET EN JEU", tw = ctx.measureText(label).width + 22;
+  roundRect(ctx, x - tw / 2, y - h / 2 - 26, tw, 20, 10);
+  ctx.fillStyle = col;
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.fillText(label, x, y - h / 2 - 12);
+  ctx.font = `${fitText(ctx, item.name, 150, 13, "CardBold")}px CardBold`;
+  ctx.shadowColor = "rgba(0,0,0,0.9)";
+  ctx.shadowBlur = 6;
+  ctx.fillText(item.name, x, y + h / 2 + 34);
+  ctx.restore();
+}
+{
+  const draw = drawArena;
+  drawArena = async (b, opts = {}) => {
+    const c = await draw(b, opts);
+    const items = [pendingItem(b, 0), pendingItem(b, 1)];
+    if (!items[0] && !items[1]) return c;
+    const ctx = c.getContext("2d");
+    // de part et d'autre du médaillon « VS », sur le sol de l'arène
+    if (items[0]) await drawBoardItem(ctx, items[0], c.width / 2 - 120, c.height - 176, 0);
+    if (items[1]) await drawBoardItem(ctx, items[1], c.width / 2 + 120, c.height - 176, 1);
+    return c;
+  };
+  // au début du combat, un message rappelle l'objet posé
+  const begin = beginRounds;
+  beginRounds = async (client, b) => {
+    const items = [pendingItem(b, 0), pendingItem(b, 1)];
+    await begin(client, b);
+    for (const [i, item] of items.entries())
+      if (item) b.lastLines = [{ text: `${b.players[i].name} pose ${item.name} sur le plateau : ${(b.boss || i === 0 ? item.boss : item.island).replace(/\.$/, "")}.` }, ...(b.lastLines ?? [])];
+  };
+}
+{
+  // dans l'animation de chaque manche aussi : l'objet est posé dans les coins bas du plateau
+  let gifItems = null;
+  const bgOf = arenaBackground, gif = clashGif;
+  arenaBackground = (W, H) => {
+    const bg = bgOf(W, H);
+    if (!gifItems) return bg;
+    const ctx = bg.getContext("2d");
+    gifItems.items.forEach((item, i) => {
+      if (!item) return;
+      const col = utilityColor[item.fx] ?? "#38bdf8", w = 58, h = 81, x = i ? W - 62 : 62, y = H - 92;
+      glow(ctx, x, y, 70, col, 0.45);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(i ? 0.08 : -0.08);
+      ctx.shadowColor = rgba(col, 0.9);
+      ctx.shadowBlur = 14;
+      ctx.drawImage(gifItems.thumbs[i], -w / 2, -h / 2, w, h);
+      ctx.restore();
+      ctx.font = "9px CardEngrave";
+      ctx.textAlign = "center";
+      ctx.fillStyle = col;
+      ctx.fillText("OBJET EN JEU", x, y - h / 2 - 6);
+    });
+    return bg;
+  };
+  clashGif = async (b, res, hp0, pre) => {
+    const items = [pendingItem(b, 0), pendingItem(b, 1)];
+    if (!items[0] && !items[1]) return gif(b, res, hp0, pre);
+    const thumbs = await Promise.all(items.map((it) => (it ? cardThumb(it, false, 116, 162) : null)));
+    gifItems = { items, thumbs };
+    // le décor est dessiné tout au début de l'animation, avant toute attente
+    const run = gif(b, res, hp0, pre);
+    gifItems = null;
+    return run;
+  };
+}
