@@ -250,7 +250,7 @@ async function panelMessage() {
           `**${GENERATIONS[CURRENT_GEN].name} — ${GENERATIONS[CURRENT_GEN].title}**\nCollectionnez les cartes de Paris, de la Maison, des entreprises et des membres !\n\n` +
             `📦 **Standard** — 5 cartes · **${formatEuro(boosterPrice("standard"))}**${soldes}${stockShort("standard")}\n` +
             `💎 **Premium** — 5 cartes dont une **rare** garantie · **${formatEuro(boosterPrice("premium"))}**${soldes}${stockShort("premium")}\n` +
-            `👑 **Prestige** — 3 cartes dont une **épique** garantie · **${formatEuro(boosterPrice("prestige"))}**${soldes}${stockShort("prestige")}\n` +
+            `👑 **Prestige** — 4 cartes **sans commune** dont une **épique** garantie · **${formatEuro(boosterPrice("prestige"))}**${soldes}${stockShort("prestige")}\n` +
             `🎁 **Booster gratuit** — ${daily} chaque jour\n\n` +
             "🎒 Les boosters achetés vont dans votre **inventaire** (`/inventaire`) : ouvrez-les tout de suite ou gardez-les. Seuls les boosters de la génération en cours sont vendus.\n" +
             "🏪 **Marché** (`/marche`) : achetez et vendez des cartes entre membres · 🔄 **Échanges** (`/echange`) : proposez cartes et argent contre cartes.\n" +

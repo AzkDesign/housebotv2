@@ -2,6 +2,20 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.09",
+    color: 0xfbbf24,
+    parts: [
+      [
+        "👑 Le booster Prestige est amélioré",
+        "Même prix, bien meilleur contenu :\n" +
+          "• **4 cartes** au lieu de 3, et **plus aucune commune**.\n" +
+          "• Toujours **une épique garantie**… qui a maintenant bien plus de chances d'être **légendaire** ou **mythique**.\n" +
+          "• Au total : environ **1 chance sur 3** d'avoir une légendaire ou mieux dans chaque Prestige (contre 1 sur 5 avant), et une mythique deux fois plus souvent.",
+      ],
+    ],
+    footer: "Bonnes ouvertures ! 👑",
+  },
+  {
     version: "1.08",
     color: 0xf59e0b,
     parts: [

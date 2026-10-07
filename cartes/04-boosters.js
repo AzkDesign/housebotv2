@@ -53,7 +53,7 @@ async function grantEventCard(client, userId, eventKey, holo = Math.random() < 0
 const BOOSTERS = {
   standard: { name: "Standard", emoji: "📦", price: 500, size: 5, guarantee: null },
   premium: { name: "Premium", emoji: "💎", price: 1500, size: 5, guarantee: "rare" },
-  prestige: { name: "Prestige", emoji: "👑", price: 5000, size: 3, guarantee: "epique" },
+  prestige: { name: "Prestige", emoji: "👑", price: 5000, size: 4, guarantee: "epique" },
 };
 function boosterPrice(key) {
   const base = (BOOSTERS[key] ?? PACKS[key]).price;
@@ -95,7 +95,7 @@ const GENERATIONS = {
 const PACKS = {
   standard: { ...BOOSTERS.standard, tagline: "5 CARTES", colors: ["#b91c1c", "#f87171", "#450a0a"], accent: "#fcd34d", metal: "legendaire", pattern: "guilloche", foil: 0.14 },
   premium: { ...BOOSTERS.premium, tagline: "5 CARTES · 1 RARE GARANTIE", colors: ["#1d4ed8", "#60a5fa", "#0b1340"], accent: "#bfdbfe", metal: "rare", pattern: "losanges", foil: 0.24 },
-  prestige: { ...BOOSTERS.prestige, tagline: "3 CARTES · 1 ÉPIQUE GARANTIE", colors: ["#292524", "#57534e", "#050404"], accent: "#fbbf24", metal: "legendaire", pattern: "artdeco", foil: 0.16 },
+  prestige: { ...BOOSTERS.prestige, tagline: "4 CARTES · SANS COMMUNE · 1 ÉPIQUE GARANTIE", colors: ["#292524", "#57534e", "#050404"], accent: "#fbbf24", metal: "legendaire", pattern: "artdeco", foil: 0.16 },
   jour: { name: "Cadeau du jour", emoji: "🎁", price: 0, size: 1, guarantee: null, tagline: "BOOSTER GRATUIT", colors: ["#047857", "#34d399", "#022c22"], accent: "#a7f3d0", metal: "peucommune", pattern: "confettis", foil: 0.16 },
   // boosters saisonniers, vendus seulement pendant leur événement
   frisson: { name: "Frisson", emoji: "🎃", price: 1200, size: 4, guarantee: null, season: "halloween", tagline: "4 CARTES · 1 CARTE D'HALLOWEEN GARANTIE", colors: ["#c2410c", "#fb923c", "#1c0a00"], accent: "#fdba74", metal: "legendaire", pattern: "artdeco", foil: 0.2, featured: ["hw_citrouille", "hw_fantome", "hw_chat"] },
@@ -130,8 +130,16 @@ function takePack(userId, key) {
   save();
   return true;
 }
+// Prestige : aucune commune, de meilleures chances partout, et une carte au moins épique
+// (≈ 31 % d'avoir une légendaire ou mieux par booster, ≈ 4,7 % une mythique)
+const PRESTIGE_WEIGHTS = { commune: 0, peucommune: 50, rare: 33, epique: 13, legendaire: 3.4, mythique: 0.6 };
+const PRESTIGE_GUARANTEE = { commune: 0, peucommune: 0, rare: 0, epique: 78, legendaire: 19, mythique: 3 };
 function packPulls(gen, type) {
   if (PACKS[type].season) return seasonPackPulls(gen, type);
+  if (type === "prestige") {
+    const pulls = [...Array.from({ length: PACKS.prestige.size - 1 }, () => drawOne(null, PRESTIGE_WEIGHTS, gen)), drawOne(null, PRESTIGE_GUARANTEE, gen)];
+    return pulls.sort((a, c) => ORDER.indexOf(a.card.rarity) - ORDER.indexOf(c.card.rarity));
+  }
   const P = PACKS[type];
   const size = type === "jour" ? (lawActive("boosterDouble") ? 2 : 1) : P.size;
   const pulls = Array.from({ length: size }, () => drawOne(null, null, gen));
