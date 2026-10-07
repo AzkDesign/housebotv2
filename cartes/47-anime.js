@@ -7,7 +7,8 @@
 // dernier recours on retombe sur l'ancienne animation.
 const AN_W = 880, AN_H = 500, AN_BW = 1144, AN_BH = 650, AN_MX = (AN_BW - AN_W) / 2, AN_MY = (AN_BH - AN_H) / 2;
 const AN_CW = 178, AN_CH = 249, AN_BASE = 292, AN_HOME = [AN_W / 2 - 220, AN_W / 2 + 220];
-const AN_MAX_BYTES = 7 * 1024 * 1024; // plus léger = chargé plus vite par Discord (limite : 10 Mo)
+const AN_MAX_BYTES = 4 * 1024 * 1024; // léger = chargé vite par Discord, et lu sans saccade même sur téléphone
+const AN_SCALE = 0.82; // taille de base de l'image (880 × 500 → 720 × 410)
 let anDebug = null; // tests : reçoit chaque image rendue
 const AN_PAL = {
   soleil: { main: "#f59e0b", light: "#fef3c7", dark: "#431407", accent: "#ef4444", realm: "TERRITOIRE DU SOLEIL NOIR", sfx: ["FWOOSH", "BRAAAM", "KRAÂÂM"] },
@@ -2848,10 +2849,10 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
 async function clashGif(b, res, hp0, pre) {
   const bg = arenaBackground(AN_BW, AN_BH); // le décor (et les objets posés) avant toute attente
   try {
-    // taille de départ selon la longueur prévue de la manche (environ 78 ko par image en pleine taille)
+    // taille de départ selon la longueur prévue de la manche (environ 95 ko par image en pleine taille)
     const frames = 17 + res.events.reduce((n, ev) => n + (ev.kind === "strike" ? (ev.type === "special" ? 62 + (ev.mult !== 1 ? 13 : 0) + (ev.mult > 1 ? 18 : 0) : 27) : { ko: 21, enter: 11, counter: 17, switch: 12 }[ev.kind] ?? 5), 0);
     const finale = res.events.some((ev) => ev.kind === "strike" && ev.type === "special" && ev.to <= 0) ? 50 : 0;
-    let scale = Math.min(1, Math.max(0.55, Math.sqrt((AN_MAX_BYTES * 0.9) / ((frames + finale) * 78000))));
+    let scale = Math.min(AN_SCALE, Math.max(0.5, Math.sqrt((AN_MAX_BYTES * 0.9) / ((frames + finale) * 95000))));
     let out = await animeClashGif(b, res, hp0, pre, bg, scale);
     if (out.buffer.length > AN_MAX_BYTES) {
       scale = Math.max(0.5, scale * Math.sqrt(AN_MAX_BYTES / out.buffer.length) * 0.94);
