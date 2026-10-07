@@ -34,7 +34,7 @@ async function autoPlayFor(guild, userId) {
   else {
     for (const it of q.list) it.progress = it.goal;
     const r = claimQuests(userId);
-    lines.push(`🎯 ${r.n} quête${r.n > 1 ? "s" : ""} terminée${r.n > 1 ? "s" : ""} : +${r.dust} ✨ et +${formatEuro(r.money)}${r.bonus ? " · bonus : 1 booster Standard" : ""}`);
+    lines.push(`🎯 ${r.n} quête${r.n > 1 ? "s" : ""} terminée${r.n > 1 ? "s" : ""} : +${r.dust} ✨ et +${formatEuro(r.money)}${r.bonus ? " · bonus : 1 booster Premium" : ""}`);
   }
   save();
   // succès et séries : pas d'annonce maintenant, ils se débloqueront à la prochaine action normale du joueur

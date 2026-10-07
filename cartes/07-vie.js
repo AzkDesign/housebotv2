@@ -100,19 +100,41 @@ const QUESTS = {
   wild: { label: "Attraper une carte sauvage", goal: [1, 1], dust: 50, money: 300, emoji: "✋" },
   daily_pack: { label: "Récupérer votre booster gratuit du jour", goal: [1, 1], dust: 20, money: 150, emoji: "🎁" },
 };
+// quêtes difficiles : les mêmes actions, en bien plus grand (kind = l'action suivie)
+const QUESTS_HARD = {
+  h_open_pack: { kind: "open_pack", label: "Ouvrir {n} boosters", goal: [4, 6], dust: 150, money: 1200, emoji: "📦" },
+  h_win_fight: { kind: "win_fight", label: "Gagner {n} combats dans l'Arène", goal: [3, 4], dust: 200, money: 1500, emoji: "⚔️" },
+  h_play_round: { kind: "play_round", label: "Jouer {n} manches dans l'Arène", goal: [20, 30], dust: 150, money: 1000, emoji: "🥊" },
+  h_market: { kind: "market", label: "Acheter ou vendre {n} cartes au marché", goal: [3, 4], dust: 150, money: 1000, emoji: "🏪" },
+  h_trade: { kind: "trade", label: "Conclure {n} échanges avec des membres", goal: [2, 3], dust: 180, money: 1200, emoji: "🔄" },
+  h_wild: { kind: "wild", label: "Attraper {n} cartes sauvages", goal: [3, 4], dust: 180, money: 1200, emoji: "✋" },
+  h_recycle: { kind: "recycle", label: "Recycler des doublons {n} fois", goal: [3, 4], dust: 120, money: 800, emoji: "♻️" },
+};
+const QUEST_NORMAL = 3, QUEST_HARD = 2;
+const questDef = (it) => QUESTS_HARD[it.id] ?? QUESTS[it.id];
+const questKind = (it) => questDef(it)?.kind ?? it.id;
+// tire n quêtes d'un lot, sans reprendre une action déjà prise
+function pickQuests(R, pool, n, used, hard) {
+  const keys = Object.keys(pool).filter((k) => !used.has(pool[k].kind ?? k)), out = [];
+  while (out.length < n && keys.length) {
+    const k = keys.splice(Math.floor(R() * keys.length), 1)[0], [lo, hi] = pool[k].goal;
+    used.add(pool[k].kind ?? k);
+    out.push({ id: k, goal: lo + Math.floor(R() * (hi - lo + 1)), progress: 0, claimed: false, ...(hard ? { hard: true } : {}) });
+  }
+  return out;
+}
 function questsOf(userId) {
   const st = load(), day = dayKey();
   let q = st.quests[userId];
   if (q?.day !== day) {
-    const R = seeded(hashOf(userId + day));
-    const keys = Object.keys(QUESTS);
-    const picks = [];
-    while (picks.length < 3) {
-      const k = keys.splice(Math.floor(R() * keys.length), 1)[0];
-      const [lo, hi] = QUESTS[k].goal;
-      picks.push({ id: k, goal: lo + Math.floor(R() * (hi - lo + 1)), progress: 0, claimed: false });
-    }
-    q = st.quests[userId] = { day, list: picks, bonus: false };
+    const R = seeded(hashOf(userId + day)), used = new Set();
+    const hard = pickQuests(R, QUESTS_HARD, QUEST_HARD, used, true);
+    q = st.quests[userId] = { day, list: [...pickQuests(R, QUESTS, QUEST_NORMAL, used, false), ...hard], bonus: false };
+  } else if (!q.list.some((it) => it.hard)) {
+    // quêtes du jour tirées avant la mise à jour : on ajoute les deux difficiles
+    const used = new Set(q.list.map(questKind));
+    q.list.push(...pickQuests(seeded(hashOf(userId + day + "h")), QUESTS_HARD, QUEST_HARD, used, true));
+    q.bonus = false;
   }
   return q;
 }
@@ -121,19 +143,19 @@ function questProgress(userId, kind, n = 1) {
   const q = questsOf(userId);
   let changed = false;
   for (const it of q.list) {
-    if (it.id !== kind || it.progress >= it.goal) continue;
+    if (questKind(it) !== kind || it.progress >= it.goal) continue;
     it.progress = Math.min(it.goal, it.progress + n);
     changed = true;
   }
   if (changed) save();
 }
-const questLabel = (it) => QUESTS[it.id].label.replace("{n}", String(it.goal));
+const questLabel = (it) => questDef(it).label.replace("{n}", String(it.goal));
 function questsPayload(userId) {
   const q = questsOf(userId);
   const lines = q.list.map((it) => {
-    const def = QUESTS[it.id], done = it.progress >= it.goal;
+    const def = questDef(it), done = it.progress >= it.goal;
     const bar = "▰".repeat(Math.round((it.progress / it.goal) * 10)) + "▱".repeat(10 - Math.round((it.progress / it.goal) * 10));
-    return `${it.claimed ? "✔️" : done ? "✅" : def.emoji} **${questLabel(it)}**\n${bar} ${it.progress}/${it.goal} · récompense : ${def.dust} ✨ + ${formatEuro(def.money)}${it.claimed ? " *(réclamée)*" : ""}`;
+    return `${it.claimed ? "✔️" : done ? "✅" : def.emoji} ${it.hard ? "🔥 **DIFFICILE** · " : ""}**${questLabel(it)}**\n${bar} ${it.progress}/${it.goal} · récompense : ${def.dust} ✨ + ${formatEuro(def.money)}${it.claimed ? " *(réclamée)*" : ""}`;
   });
   const claimable = q.list.some((it) => it.progress >= it.goal && !it.claimed);
   const allDone = q.list.every((it) => it.claimed);
@@ -143,7 +165,7 @@ function questsPayload(userId) {
       new EmbedBuilder()
         .setColor(0x22c55e)
         .setTitle("🎯 Vos quêtes du jour")
-        .setDescription(`${lines.join("\n\n")}\n\n🎁 **Bonus** : terminez les trois quêtes pour gagner **1 booster Standard**${q.bonus ? " — *obtenu !*" : ""}.`)
+        .setDescription(`${lines.join("\n\n")}\n\n🎁 **Bonus** : terminez les cinq quêtes (dont les deux difficiles) pour gagner **1 booster Premium**${q.bonus ? " — *obtenu !*" : ""}.`)
         .setFooter({ text: `Nouvelles quêtes chaque jour à minuit · ${allDone ? "toutes réclamées, bravo !" : "elles se valident toutes seules quand vous jouez"}` }),
     ],
     components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_qt_claim").setLabel("Réclamer les récompenses").setEmoji("🎁").setStyle(ButtonStyle.Success).setDisabled(!claimable))],
@@ -155,15 +177,15 @@ function claimQuests(userId) {
   for (const it of q.list) {
     if (it.progress < it.goal || it.claimed) continue;
     it.claimed = true;
-    dust += QUESTS[it.id].dust;
-    money += QUESTS[it.id].money;
+    dust += questDef(it).dust;
+    money += questDef(it).money;
     n++;
   }
   let bonus = false;
   if (!q.bonus && q.list.every((it) => it.claimed)) {
     q.bonus = true;
     bonus = true;
-    addPacks(userId, packKey(CURRENT_GEN, "standard"), 1);
+    addPacks(userId, packKey(CURRENT_GEN, "premium"), 1);
   }
   if (dust) load().dust[userId] = (load().dust[userId] ?? 0) + dust;
   if (money) changeBalance(userId, money, "Quêtes des cartes", { force: true });
@@ -269,7 +291,7 @@ function cardsGuideTopics() {
     ["album", "Album, codex, poussière et récompenses", "📒", "`/album` montre votre collection page par page ; les cartes manquantes apparaissent en silhouette.\n📖 `/codex` liste toutes les cartes qui vous manquent, avec la façon de les obtenir (boosters, marché, fabrication, événement…).\n\n♻️ **Recyclez** vos doublons en **poussière d'étoile**, puis **fabriquez** la carte de votre choix.\n🏆 Compléter une série fixe rapporte de l'argent, 500 ✨ et un rôle de collectionneur."],
     ["marche", "Marché et échanges", "🏪", `**Marché** (\`/marche\`) : mettez une carte en vente au prix de votre choix, achetez celles des autres. La **cote** suit la circulation : moins une carte est répandue, plus elle vaut cher. Commission de 5 %, annonces valables 7 jours.\n\n**Échanges** (\`/echange\`) : invitez le membre de votre choix. S'il accepte, une **table d'échange** s'ouvre en direct : chacun y pose ses cartes (et de l'argent), puis les deux valident. Toute modification annule les validations : impossible de se faire avoir au dernier moment.\n\n⏳ Il faut être sur le serveur depuis au moins ${MIN_SENIORITY_DAYS} jours pour échanger, vendre, acheter ou parier.`],
     ["arene", "Arène et combats", "⚔️", "`/arene` ouvre le menu de combat :\n🏆 **Partie classée** : le bot vous trouve un adversaire **en ligne** de votre niveau. Seules ces parties changent votre rang.\n👹 **Boss de la semaine** : un boss commun à tout le serveur, 3 essais par jour ; les dégâts de tous s'additionnent et chacun est récompensé quand il tombe.\n🤝 **Défi amical** (`/combat @membre`, avec une mise si vous voulez) et 🤖 **entraînement** contre la Maison. Chaque joueur choisit 3 cartes.\n\nChaque manche, choisissez **en secret** : ⚔️ Attaque, 🛡️ Garde, 💥 Spécial (3 ⚡) ou 🔄 Changer.\n**Triangle** : la Garde bat l'Attaque, l'Attaque interrompt le Spécial, le Spécial brise la Garde. La garde s'use si vous la répétez.\n**Astres** : ☀️ Soleil bat ❄️ Givre, qui bat ⚡ Orage, qui bat ⭐ Étoile, qui bat 🌑 Ombre, qui bat 🌙 Lune, qui bat ☀️ Soleil. Contre l'astre qu'on domine, les dégâts sont **×2** ; contre celui qui nous domine, **×0,5**. Composez votre équipe selon l'adversaire !\n\n🏆 Une **saison** par mois : le top 3 gagne une carte exclusive, de la poussière, et le n°1 le rôle **Champion de l'Arène**. Les spectateurs peuvent **parier** pendant les 2 premières manches."],
-    ["quetes", "Quêtes du jour", "🎯", "`/quetes` : trois quêtes par jour (ouvrir un booster, gagner un combat, vendre une carte…). Elles se valident toutes seules quand vous jouez. Chaque quête rapporte de la poussière et de l'argent, et les trois ensemble donnent **un booster Standard en bonus**."],
+    ["quetes", "Quêtes du jour", "🎯", "`/quetes` : cinq quêtes par jour, **trois normales et deux difficiles** (ouvrir des boosters, gagner des combats, échanger…). Elles se valident toutes seules quand vous jouez. Chaque quête rapporte de la poussière et de l'argent (les difficiles bien plus), et les cinq ensemble donnent **un booster Premium en bonus**."],
     ["succes", "Succès, titres et vitrine", "🏅", "`/succes` : 26 succès à débloquer (boosters, collection, holos, Shiny, combats, ventes, échanges…). Chacun rapporte de la poussière d'étoile et un **titre** à afficher sur votre `/profil`.\n🖼️ `/vitrine` : exposez vos **trois plus belles cartes**, visibles sur votre profil et à montrer dans la discussion.\n🏆 Les **classements** se mettent à jour en direct dans leur salon."],
     ["pass", "Le pass de combat", "🎟️", "`/pass` : une **saison par mois**, 30 paliers. Vous gagnez de l'XP en jouant (boosters, combats, échanges, cartes sauvages, île, Clash, tournoi, quêtes), jusqu'à 1 200 XP par jour.\n🎁 **Voie gratuite** : poussière d'étoile, euros, boosters Standard et Premium.\n⭐ **Pass Premium** (8 000 €) : une 2ᵉ voie bien plus riche (boosters Prestige, or et essence pour le Clash…), valable aussi pour les paliers déjà atteints.\nÀ la fin du mois, ce qui est débloqué et pas réclamé est versé automatiquement.\n🤝 **Pass Duo** : avec votre coéquipier, toute l'XP de pass de l'un ou de l'autre remplit un pass d'équipe de 20 paliers (chacun réclame ses récompenses ; Premium du duo : 2 500 ✨ du coffre, avec votre carte DUO en holo au bout). Tout se passe dans le salon du pass de combat."],
     ["boutique", "La boutique de styles", "🛍️", "`/boutique` (ou le salon 🛍️・boutique) : des **styles**, sans effet sur la force des cartes.\n🃏 **Dos de cartes** : on les voit à chaque ouverture de booster, quand vos cartes se retournent.\n🎆 **Effets d'ouverture** : confettis, étoiles, flammes, sakura, éclairs, pluie d'or… pendant la révélation.\n🏟️ **Décors d'Arène** : le fond de vos combats, que votre adversaire voit aussi.\n⭐ Une **vitrine** à -25 % chaque lundi, des **éditions limitées** (Halloween) et des styles **exclusifs** (champion du tournoi). Choisissez ce que vous portez dans **Mes styles**."],
@@ -402,7 +424,7 @@ async function publishCardsAnnouncement() {
       {
         name: "⌨️ Les commandes",
         value:
-          "`/inventaire` — vos boosters et vos statistiques\n`/album` — votre collection page par page\n`/quetes` — vos trois quêtes du jour\n`/marche` — acheter et vendre des cartes\n`/echange` — échanger avec un membre\n`/combat` — défier un membre ou la Maison\n`/arene` — classement de la saison\n`/aide-cartes` — le guide complet",
+          "`/inventaire` — vos boosters et vos statistiques\n`/album` — votre collection page par page\n`/quetes` — vos cinq quêtes du jour\n`/marche` — acheter et vendre des cartes\n`/echange` — échanger avec un membre\n`/combat` — défier un membre ou la Maison\n`/arene` — classement de la saison\n`/aide-cartes` — le guide complet",
       },
       {
         name: "✨ Ce qui vous attend",

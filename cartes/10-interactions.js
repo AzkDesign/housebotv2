@@ -216,7 +216,7 @@ async function handleCartesInteraction(interaction, client) {
     const r = claimQuests(userId);
     await interaction.update({
       ...questsPayload(userId),
-      content: r.n ? `🎁 **${r.n}** quête(s) réclamée(s) : +**${r.dust} ✨** et **${formatEuro(r.money)}**${r.bonus ? " · 🎉 bonus : **1 booster Standard** ajouté à votre inventaire !" : ""}` : "Rien à réclamer pour le moment.",
+      content: r.n ? `🎁 **${r.n}** quête(s) réclamée(s) : +**${r.dust} ✨** et **${formatEuro(r.money)}**${r.bonus ? " · 🎉 bonus : **1 booster Premium** ajouté à votre inventaire !" : ""}` : "Rien à réclamer pour le moment.",
     });
     return true;
   }
