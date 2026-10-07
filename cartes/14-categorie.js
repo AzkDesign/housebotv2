@@ -52,7 +52,7 @@ async function cleanThreadNotices(channel) {
 // On garde : les messages avec des boutons encore actifs, les tableaux en direct et les annonces avec image.
 async function sweepCardChannels(client) {
   const st = load();
-  const keep = new Set([st.clashBoardId, st.islandMessageId, st.teamsMessageId, st.ruleMessageId, st.seasonMessageId, st.weeklyCard?.messageId, st.boardMessageId, st.tournamentMessageId, st.passMessageId].filter(Boolean));
+  const keep = new Set([st.clashBoardId, st.islandMessageId, st.teamsMessageId, st.ruleMessageId, st.seasonMessageId, st.weeklyCard?.messageId, st.boardMessageId, st.tournamentMessageId, st.passMessageId, st.arenaBoardId].filter(Boolean));
   const rules = {
     arene: (m) => !m.components.length,
     iles: (m) => !m.components.length,

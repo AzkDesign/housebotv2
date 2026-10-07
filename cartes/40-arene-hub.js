@@ -66,6 +66,7 @@ async function bossFightOver(client, b) {
   const dealt = Math.max(0, Math.min(s.hp, f.maxHp - Math.max(0, f.hp)));
   s.hp -= dealt;
   s.dmg[uid] = (s.dmg[uid] ?? 0) + dealt;
+  arenaBoardDirty = true;
   const dust = 10 + Math.floor(dealt / 8);
   load().dust[uid] = (load().dust[uid] ?? 0) + dust;
   ustat(uid, "bossDmg", dealt);
@@ -110,6 +111,7 @@ async function rqLeave(userId, text = null) {
   const e = rankedQueue.get(userId);
   if (!e) return;
   rankedQueue.delete(userId);
+  arenaBoardDirty = true;
   e.notice?.delete().catch(() => null);
   if (text) await e.interaction?.editReply({ content: text, embeds: [], components: [], files: [], attachments: [] }).catch(() => null);
 }
@@ -225,7 +227,7 @@ async function drawBossCard(card, t = 0.37) {
   return c;
 }
 async function drawArenaHub(userId) {
-  const W = 1400, H = 760, s = arenaStats(userId), [, tier, tcol] = tierOf(s.elo), boss = bossState(), def = bossDef(boss.key);
+  const W = 1400, H = 760, s = userId ? arenaStats(userId) : { elo: 1000, w: 0, l: 0, d: 0, streak: 0 }, [, tier, tcol] = tierOf(s.elo), boss = bossState(), def = bossDef(boss.key);
   const c = createCanvas(W, H), ctx = c.getContext("2d");
   ctx.imageSmoothingQuality = "high";
   const bg = ctx.createLinearGradient(0, 0, W, H);
@@ -264,7 +266,23 @@ async function drawArenaHub(userId) {
     ctx.textAlign = "left";
     spacedLeft(ctx, title, x + 24, y + 36, 3);
   };
-  // 1. mon rang
+  // 1. mon rang (dans le salon : le défi de la semaine)
+  if (!userId) {
+    card(44, 150, 420, 300, "DÉFI DE LA SEMAINE");
+    const [, label, desc] = weeklyRule();
+    ctx.textAlign = "left";
+    ctx.font = `${fitText(ctx, label.replace(/^\S+ /, ""), 370, 40, "CardTitle")}px CardTitle`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(label.replace(/^\S+ /, ""), 68, 248);
+    ctx.font = "16px CardText";
+    ctx.fillStyle = "#e7e5e4";
+    wrapText(ctx, desc, 68, 288, 370, 22, 3);
+    ctx.font = "16px CardBold";
+    ctx.fillStyle = "#fde68a";
+    ctx.fillText(`${WEEKLY_GOAL} victoires dans la semaine :`, 68, 382);
+    ctx.fillText("1 booster Premium + 150 poussières", 68, 408);
+  }
+  if (userId) {
   card(44, 150, 420, 300, "MON RANG CLASSÉ");
   const sx = 140, sy = 300;
   ctx.save();
@@ -307,6 +325,7 @@ async function drawArenaHub(userId) {
   ctx.font = "13px CardText";
   ctx.fillStyle = "#a8a29e";
   ctx.fillText(next ? `${next[0] - s.elo} points avant ${next[1]}` : "Rang maximum atteint", 238, 412);
+  }
   // 2. le boss de la semaine
   card(500, 150, 856, 300, "BOSS DE LA SEMAINE", rgba(def.color, 0.8));
   glow(ctx, 640, 300, 160, def.color, 0.5);
@@ -336,9 +355,9 @@ async function drawArenaHub(userId) {
   const mine = boss.dmg[userId] ?? 0, fighters = Object.keys(boss.dmg).length;
   ctx.font = "16px CardBold";
   ctx.fillStyle = "#fde68a";
-  ctx.fillText(`Vos dégâts : ${mine.toLocaleString("fr-FR")}`, 772, 344);
+  ctx.fillText(userId ? `Vos dégâts : ${mine.toLocaleString("fr-FR")}` : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants`, 772, 344);
   ctx.fillStyle = "#e7e5e4";
-  ctx.fillText(`Essais aujourd'hui : ${Math.max(0, bossTriesLeft(userId))} / ${BOSS_TRIES}`, 1010, 344);
+  ctx.fillText(userId ? `Essais aujourd'hui : ${Math.max(0, bossTriesLeft(userId))} / ${BOSS_TRIES}` : `${BOSS_TRIES} essais par jour et par joueur`, 1010, 344);
   ctx.font = "14px CardText";
   ctx.fillStyle = "#a8a29e";
   ctx.fillText(`${fighters} combattant${fighters > 1 ? "s" : ""} cette semaine · tous gagnent un booster quand il tombe`, 772, 376);
@@ -455,6 +474,7 @@ async function handleArenaHubInteraction(interaction, client) {
     const elo = arenaStats(userId).elo;
     const entry = { at: Date.now(), elo, name, user: interaction.user, interaction };
     rankedQueue.set(userId, entry);
+    arenaBoardDirty = true;
     await interaction.editReply({
       content: `🔎 **Recherche d'un adversaire classé…** (${tierOf(elo)[1]} · ${elo} pts)\nVous serez prévenu ici et en message privé dès qu'un adversaire de votre niveau est trouvé (10 minutes au plus).`,
       embeds: [],
@@ -518,4 +538,57 @@ function bossAutoFight(userId) {
   }
   const f = b.players[1].team[0];
   return Math.max(0, Math.min(s.hp, f.maxHp - Math.max(0, f.hp)));
+}
+
+// --- Le menu, affiché en permanence dans le salon de l'Arène ---
+let arenaBoardDirty = true;
+async function arenaBoardPayload() {
+  const boss = bossState(), def = bossDef(boss.key);
+  const file = new AttachmentBuilder(await (await drawArenaHub(null)).encode("jpeg", 86), { name: "arene.jpg" });
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xe9c46a)
+        .setTitle("⚔️ Arène de la Maison")
+        .setDescription(
+          "🏆 **Partie classée** : le bot vous trouve un adversaire en ligne de votre niveau. C'est la seule qui fait monter (ou descendre) votre rang.\n" +
+            `👹 **Boss de la semaine** : ${def.name}, ${boss.defeated ? "**vaincu** ! Un nouveau arrive lundi." : `${Math.round((boss.hp / boss.maxHp) * 100)} % de PV restants — ${BOSS_TRIES} essais par jour, les dégâts de tous s'additionnent.`}\n` +
+            "🤝 **Défi amical** et 🎒 **objets** : dans **Mon menu** (votre rang, vos essais, vos objets).\n" +
+            "🤖 **Entraînement** contre la Maison, qui progresse avec vous."
+        )
+        .setImage("attachment://arene.jpg"),
+    ],
+    files: [file],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("carte_rk_join").setLabel("Partie classée").setEmoji("🏆").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("carte_boss_go").setLabel(boss.defeated ? "Boss vaincu" : "Affronter le boss").setEmoji("👹").setStyle(ButtonStyle.Danger).setDisabled(boss.defeated),
+        new ButtonBuilder().setCustomId("carte_bt_ai").setLabel("Entraînement").setEmoji("🤖").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("carte_bt").setLabel("Mon menu").setEmoji("⚔️").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("carte_bt_rules").setLabel("Règles").setEmoji("📖").setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+async function refreshArenaBoard() {
+  const ch = chan("arene");
+  if (!ch || ch === channelRef) return;
+  arenaBoardDirty = false;
+  const st = load(), payload = await arenaBoardPayload();
+  let msg = st.arenaBoardId ? await ch.messages.fetch(st.arenaBoardId).catch(() => null) : null;
+  if (msg && !(await msg.edit({ ...payload, attachments: [] }).catch(() => null))) {
+    await msg.delete().catch(() => null);
+    msg = null;
+  }
+  if (!msg) {
+    msg = await ch.send(payload).catch(() => null);
+    if (msg) {
+      st.arenaBoardId = msg.id;
+      save();
+    }
+  }
+}
+async function arenaBoardLoop() {
+  const min = new Date().getMinutes();
+  if ((arenaBoardDirty && min % 2 === 0) || min % 15 === 9) await refreshArenaBoard().catch(() => null);
 }
