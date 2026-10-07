@@ -5,6 +5,7 @@ const CARD_RULES_ROLE_ID = "1509975426179797012"; // membres ayant accepté le r
 const CARD_CHANNELS = [
   ["panel", "🃏・cartes-de-la-maison", "🃏 Le salon principal : boosters, booster gratuit du jour, inventaire, album, codex, quêtes…"],
   ["annonces", "🌟・annonces-cartes", "🌟 Carte de la semaine, grosses ouvertures, séries complétées, succès et nouvelles générations"],
+  ["patchnotes", "📜・patch-notes", "📜 Les nouveautés de chaque mise à jour des Cartes de la Maison"],
   ["arene", "⚔️・arène", "⚔️ Défis, combats en direct (un fil par combat), défi de la semaine et fin de saison"],
   ["pass", "🎟️・pass-de-combat", "🎟️ Le pass de combat du mois : votre progression, le Pass Duo de votre équipe et les classements de la saison"],
   ["tournoi", "🏆・tournoi", "🏆 Le tournoi du week-end : inscriptions le vendredi midi, élimination directe, finale le dimanche à 20 h"],
