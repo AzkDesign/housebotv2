@@ -125,13 +125,8 @@ function teamActivity(userId, key, n) {
     if (team) {
       const partner = team.members.find((m) => m !== holder);
       if (partner) load().dust[partner] = (load().dust[partner] ?? 0) + Math.round(gain * TEAM_ISLAND_SHARE);
-      // XP d'équipe : toujours 2 par heure de garde, même si l'île paie plus souvent
-      isl.xpCarry = (isl.xpCarry ?? 0) + gain;
-      const perHour = ISLAND_DUST * (HOUR / ISLAND_PERIOD), hours = Math.floor(isl.xpCarry / perHour);
-      if (hours) {
-        isl.xpCarry -= hours * perHour;
-        addTeamXp(team, hours * 2, holder);
-      }
+      // XP d'équipe : 10 à chaque versement de l'île (toutes les 10 minutes)
+      addTeamXp(team, Math.round(gain / ISLAND_DUST) * 10, holder);
     }
     return gain;
   };
