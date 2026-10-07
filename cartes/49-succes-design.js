@@ -189,24 +189,20 @@ async function drawAchievementsHall(userId) {
   }
   return c;
 }
-// l'écran des succès : l'image, puis le choix du titre (deux menus si plus de 25 succès débloqués)
+// l'écran des succès : juste l'image
 async function achievementsPayloadHD(userId) {
-  const a = achOf(userId), unlocked = ACHIEVEMENTS.filter(([id]) => a.unlocked[id]);
+  const unlocked = ACHIEVEMENTS.filter(([id]) => achOf(userId).unlocked[id]);
   const file = new AttachmentBuilder(await (await drawAchievementsHall(userId)).encode("jpeg", 88), { name: "succes.jpg" });
-  const option = ([id, emoji, name]) => ({ label: name, value: id, emoji: /\p{Extended_Pictographic}/u.test(emoji) ? emoji : "🏅", default: a.title === id });
-  const menus = [unlocked.slice(0, 25), unlocked.slice(25, 50)].filter((l) => l.length).map((list, k) =>
-    new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(k ? "carte_succ_titre2" : "carte_succ_titre").setPlaceholder(k ? "Choisir mon titre (suite)…" : "Choisir le titre affiché sur mon profil…").addOptions(list.map(option)))
-  );
   return {
     embeds: [
       new EmbedBuilder()
         .setColor(0xfbbf24)
         .setTitle(`🏅 Salle des trophées — ${unlocked.length} / ${ACHIEVEMENTS.length}`)
-        .setDescription(`Chaque succès rapporte de la poussière d'étoile. Titre affiché sur votre profil : **${achievementTitle(userId) ?? "aucun"}**.`)
+        .setDescription("Chaque succès rapporte de la poussière d'étoile.")
         .setImage("attachment://succes.jpg"),
     ],
     files: [file],
     attachments: [],
-    components: menus,
+    components: [],
   };
 }
