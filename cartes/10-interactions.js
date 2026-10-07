@@ -381,7 +381,7 @@ async function handleCartesInteraction(interaction, client) {
           .slice(0, 25)
           .map((k) => {
             const f = fighter(k);
-            return { label: keyLabel(k).slice(0, 100), value: k, emoji: RARITIES[f.card.rarity].emoji, description: `${f.maxHp} PV · attaque ${f.attackDmg} · spécial ${f.specialDmg} · ${SERIES_LABELS[f.series].replace(/^\S+ /, "")}`.slice(0, 100) };
+            return { label: keyLabel(k).slice(0, 100), value: k, emoji: RARITIES[f.card.rarity].emoji, description: `${astreLabel(f.astre)} · ${f.maxHp} PV · attaque ${f.attackDmg} · spécial ${f.specialDmg}`.slice(0, 100) };
           });
         await interaction.reply({
           ephemeral: true,

@@ -446,7 +446,8 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
   ctx.fillText("PV", 520 - hpW - 6, 64);
   ctx.restore();
   ctx.textAlign = "left";
-  energyOrb(ctx, elKey, 551, 54, 21);
+  if (astreOf(card)) astreOrb(ctx, astreOf(card), 551, 54, 21);
+  else energyOrb(ctx, elKey, 551, 54, 21);
 
   // 5. Ruban d'informations
   const ry = full ? 520 : art.y + art.h + 10;
@@ -475,7 +476,7 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
   ctx.shadowBlur = 5;
   ctx.fill();
   ctx.restore();
-  const info = `${numberOf(card).replace("#", "N° ")}   ·   ${kindOf(card)}   ·   ${el.label}`;
+  const info = `${numberOf(card).replace("#", "N° ")}   ·   ${kindOf(card)}   ·   astre ${ASTRES[astreOf(card)]?.label ?? el.label}`;
   ctx.textAlign = "center";
   ctx.font = `${fitText(ctx, info, 410, 14, "CardItalic")}px CardItalic`;
   ctx.fillStyle = full ? "#ffffff" : "#1a1a1a";
@@ -520,10 +521,11 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
   ctx.moveTo(40, by - 18);
   ctx.lineTo(W - 40, by - 18);
   ctx.stroke();
-  const weak = Object.keys(TYPE_BEATS).find((s) => TYPE_BEATS[s] === series), strong = TYPE_BEATS[series];
+  // l'astre qui la bat (dégâts ×2 reçus) et celui qu'elle domine (dégâts ×0,5 reçus)
+  const astre = astreOf(card), weak = astreWeakTo(astre), strong = ASTRE_BEATS[astre];
   const cols = [
-    ["faiblesse", weak, weak ? "×1,25" : "—"],
-    ["résistance", strong, strong ? "−15 %" : "—"],
+    ["faiblesse", weak, weak ? `${ASTRES[weak].label} ×2` : "—"],
+    ["résistance", strong, strong ? `${ASTRES[strong].label} ×0,5` : "—"],
     ["chance", null, String(cp.luck)],
   ];
   cols.forEach(([label, s, value], i) => {
@@ -531,7 +533,7 @@ async function drawCreatureCard(card, holo = false, t = 0.37) {
     ctx.font = "11px CardText";
     ctx.fillStyle = sub;
     ctx.fillText(label, x, by);
-    if (s) seriesIcon(ctx, s, x + 7, by + 15, 7, ink);
+    if (s) astreIcon(ctx, s, x + 7, by + 15, 8);
     else if (i === 2) combatIcon(ctx, 2, x + 7, by + 15, ink);
     ctx.font = "14px CardBold";
     ctx.fillStyle = ink;

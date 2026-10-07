@@ -48,7 +48,7 @@ function bossCard(def) {
 }
 function bossFighter(b) {
   const def = bossDef(b.boss), s = bossState(), hp = Math.max(1, Math.min(s.hp, BOSS_FIGHT_HP));
-  return { key: `boss_${def.key}`, card: bossCard(def), name: def.name, series: "boss", maxHp: hp, hp, atk: def.atk, luck: 50, special: def.special, attackName: def.attack, attackDmg: Math.round(10 + def.atk * 0.55), specialDmg: Math.round(18 + def.atk * 1.1) };
+  return { key: `boss_${def.key}`, card: bossCard(def), name: def.name, series: "boss", astre: BOSS_ASTRE[def.key] ?? "ombre", maxHp: hp, hp, atk: def.atk, luck: 50, special: def.special, attackName: def.attack, attackDmg: Math.round(10 + def.atk * 0.55), specialDmg: Math.round(18 + def.atk * 1.1) };
 }
 {
   // le boss remplace l'équipe de l'IA

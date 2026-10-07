@@ -25,10 +25,9 @@ function arenaStats(userId) {
   return (load().arena[userId] ??= { elo: 1000, w: 0, l: 0, d: 0, streak: 0 });
 }
 const tierOf = (elo) => ARENA_TIERS.find(([min]) => elo >= min);
-function typeMult(a, d) {
-  if (TYPE_BEATS[a] === d) return 1.25;
-  if (TYPE_BEATS[d] === a) return 0.85;
-  return 1;
+// faiblesses et résistances : voir les Astres (46-astres.js)
+function typeMult(att, def) {
+  return astreMult(att, def);
 }
 function specialName(card) {
   if (card.memberStats) return memberMoves(card)[1].name;
@@ -36,7 +35,7 @@ function specialName(card) {
 }
 function fighter(key) {
   const card = cardOfKey(key), cp = combatProfile(card, isHoloKey(key));
-  return { key, card, name: card.name, series: seriesOf(card), maxHp: cp.hp, hp: cp.hp, atk: cp.atk, luck: cp.luck, special: cp.specialName, attackName: cp.attackName, attackDmg: cp.attack, specialDmg: cp.special };
+  return { key, card, name: card.name, series: seriesOf(card), astre: astreOf(card), maxHp: cp.hp, hp: cp.hp, atk: cp.atk, luck: cp.luck, special: cp.specialName, attackName: cp.attackName, attackDmg: cp.attack, specialDmg: cp.special };
 }
 const fighterPower = (key) => {
   const f = fighter(key);
@@ -103,7 +102,7 @@ function resolveRoundState(b) {
     if (type === "special") me.energy -= SPECIAL_COST;
     let dmg = type === "special" ? 18 + att.atk * 1.1 : 10 + att.atk * 0.55;
     dmg *= 0.85 + Math.random() * 0.3;
-    const mult = typeMult(att.series, def.series);
+    const mult = typeMult(att, def);
     dmg *= mult;
     const crit = Math.random() < (att.luck / 350) * (ruleIs("critiques") ? 2 : 1);
     if (crit) dmg *= 1.5;
@@ -131,6 +130,7 @@ function resolveRoundState(b) {
     if (dodge) dmg = 0;
     if (ruleIs("rage")) dmg *= 1.25;
     dmg = Math.round(dmg);
+    if (mult > 1) dmg = Math.min(dmg, Math.round(def.maxHp * ASTRE_CAP));
     const from = def.hp;
     def.hp = Math.max(0, def.hp - dmg);
     struck[i] = true;
@@ -1253,8 +1253,9 @@ async function clashGif(b, res, hp0, pre) {
       if (t.shield) t.shieldFlash = 1;
       if (ev.broke) t.crack = true;
       addFloat(o, `−${ev.dmg}`, ev.crit ? "#fbbf24" : "#f87171", ev.crit || big ? 76 : 60);
-      const tag = [ev.crit && "CRITIQUE !", ev.broke && "GARDE BRISÉE !", ev.guarded && "GARDE", ev.interrupt && "INTERROMPU !", ev.weakened && "AFFAIBLI", ev.mult > 1 && "SUPER EFFICACE"].filter(Boolean)[0];
-      if (tag) addFloat(o, tag, ev.broke || ev.interrupt ? "#fb923c" : "#fde68a", 26, -62);
+      const tag = [ev.mult > 1 && "SUPER EFFICACE ×2", ev.mult < 1 && "PEU EFFICACE…", ev.crit && "CRITIQUE !", ev.broke && "GARDE BRISÉE !", ev.guarded && "GARDE", ev.interrupt && "INTERROMPU !", ev.weakened && "AFFAIBLI"].filter(Boolean)[0];
+      if (tag) addFloat(o, tag, ev.mult > 1 ? "#facc15" : ev.mult < 1 ? "#94a3b8" : ev.broke || ev.interrupt ? "#fb923c" : "#fde68a", ev.mult > 1 ? 32 : 26, -62);
+      if (tag && ev.mult !== 1 && (ev.crit || ev.broke || ev.interrupt)) addFloat(o, ev.crit ? "CRITIQUE !" : ev.broke ? "GARDE BRISÉE !" : "INTERROMPU !", "#fb923c", 22, -96);
       await run(
         2,
         (q) => {
@@ -1429,7 +1430,7 @@ const RULES_EMBED = () =>
         "**Triangle** : la Garde bat l'Attaque, l'Attaque bat le Spécial, le Spécial bat la Garde. Entre deux coups identiques, la carte la plus **chanceuse** frappe la première ; une carte mise K.O. avant son tour ne frappe pas.\n" +
         "**La Maison** progresse : Apprenti → Confirmé → Expert → Maître (un niveau toutes les 3 victoires contre elle).\n\n" +
         `**Énergie** : +1 ⚡ par manche (max ${MAX_ENERGY}). **Critique** et **esquive** dépendent de la CHANCE.\n` +
-        "**Types** : 🗼 Paris bat 🏢 Entreprises, qui battent 🏡 La Maison, qui bat 🗼 Paris (×1,25). Membres et Événements sont neutres.\n" +
+        ASTRE_RULES + "\n" +
         `**K.O.** : la carte suivante entre automatiquement. Le premier joueur sans carte perd. Sans réponse en ${ROUND_SECONDS} s, la carte se met en garde.\n\n` +
         "**Parties classées** : depuis le menu de l'Arène, le bot vous associe à un joueur en ligne de votre niveau. Ce sont les seules qui changent vos points (Elo). Les défis entre membres sont **amicaux**.\n" +
         "**Boss de la semaine** : un boss commun à tout le serveur ; 3 essais par jour, les dégâts s'additionnent, et tous les participants sont récompensés quand il tombe.\n" +
@@ -1541,12 +1542,12 @@ function aiChoice(b) {
     if (canSpecial && Math.random() < 0.5) return { type: "special" };
     return { type: Math.random() < 0.6 ? "attack" : "guard" };
   }
-  const atkDmg = (10 + f.atk * 0.55) * typeMult(f.series, o.series);
+  const atkDmg = (10 + f.atk * 0.55) * typeMult(f, o);
   // achever une carte affaiblie (l'attaque frappe en priorité)
   if (o.hp <= atkDmg * 0.9) return { type: "attack" };
   // mauvais type : changer pour une carte avantagée
-  if (typeMult(o.series, f.series) > 1) {
-    const good = aliveBench(me).find(({ f: x }) => typeMult(o.series, x.series) <= 1 && x.hp > x.maxHp * 0.35);
+  if (typeMult(o, f) > 1) {
+    const good = aliveBench(me).find(({ f: x }) => typeMult(o, x) <= 1 && x.hp > x.maxHp * 0.35);
     if (good && Math.random() < 0.75) return { type: "switch", to: good.i };
   }
   // carte presque K.O. : la protéger si une autre peut prendre le relais

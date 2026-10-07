@@ -2,6 +2,41 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.06",
+    color: 0x8b5cf6,
+    image: () => drawAstreWheel(560),
+    parts: [
+      [
+        "🌌 Les Astres : faiblesses et résistances",
+        "Chaque carte appartient désormais à un **astre**, et il compte vraiment en combat :\n" +
+          "☀️ **Soleil** bat ❄️ **Givre** — le soleil fait fondre le givre\n" +
+          "❄️ **Givre** bat ⚡ **Orage** — le froid fige l'orage en neige\n" +
+          "⚡ **Orage** bat ⭐ **Étoile** — les nuées cachent les étoiles\n" +
+          "⭐ **Étoile** bat 🌑 **Ombre** — la lumière perce l'ombre\n" +
+          "🌑 **Ombre** bat 🌙 **Lune** — l'éclipse de Lune\n" +
+          "🌙 **Lune** bat ☀️ **Soleil** — l'éclipse de Soleil",
+      ],
+      [
+        "⚔️ En combat",
+        "• Frapper l'astre qu'on domine : **dégâts ×2** — « SUPER EFFICACE ! »\n" +
+          "• Frapper l'astre qui nous domine : **dégâts ×0,5** — « Peu efficace… »\n" +
+          "• Un coup super efficace ne retire jamais plus des **2/3 des PV** d'une carte : pas de K.O. en un seul coup.\n" +
+          "• Valable partout : classées, défis, entraînement, île et boss.",
+      ],
+      [
+        "🃏 Sur vos cartes",
+        "• Chaque carte affiche son **astre**, sa **faiblesse** (×2) et sa **résistance** (×0,5).\n" +
+          "• Les **membres** prennent l'astre de leur point fort, les **cartes DUO** celui de leur emblème.\n" +
+          "• L'astre apparaît aussi dans le choix de votre équipe.",
+      ],
+      [
+        "👹 Les boss ont un astre",
+        "Le Spectre du Manoir est 🌑 **Ombre** : sortez vos cartes ⭐ **Étoile** ! Chaque boss a le sien, à vous d'adapter votre équipe.",
+      ],
+    ],
+    footer: "Que les astres vous soient favorables ! 🌙",
+  },
+  {
     version: "1.05",
     color: 0xe9c46a,
     parts: [
@@ -63,7 +98,7 @@ async function publishPatchNotes() {
   if (!ch || ch === channelRef) return;
   const st = load();
   st.patchNotes ??= {};
-  for (const note of PATCH_NOTES) {
+  for (const note of [...PATCH_NOTES].sort((a, b) => Number(a.version) - Number(b.version))) {
     if (st.patchNotes[note.version]) continue;
     const embeds = note.parts.map(([title, text], i) => {
       const e = new EmbedBuilder().setColor(note.color).setTitle(title).setDescription(text);
@@ -72,7 +107,12 @@ async function publishPatchNotes() {
       return e;
     });
     // un message pour le titre, puis les nouveautés par groupes de 4 encadrés
-    const head = await ch.send({ content: `# 🃏 Mise à jour v${note.version}` }).catch(() => null);
+    const files = [];
+    if (note.image) {
+      const img = await Promise.resolve(note.image()).catch(() => null);
+      if (img) files.push(new AttachmentBuilder(await img.encode("png"), { name: `patch-${note.version}.png` }));
+    }
+    const head = await ch.send({ content: `# 🃏 Mise à jour v${note.version}`, files }).catch(() => null);
     if (!head) return;
     for (let k = 0; k < embeds.length; k += 4) await ch.send({ embeds: embeds.slice(k, k + 4) }).catch(() => null);
     st.patchNotes[note.version] = Date.now();
