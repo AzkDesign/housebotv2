@@ -853,23 +853,49 @@ async function handleShopInteraction(interaction) {
 // --- Le salon de la boutique ---
 async function refreshShopFront() {
   const ch = chan("boutique");
-  if (!ch || ch === channelRef) return;
-  const st = load(), payload = await shopFrontPayload();
+  if (!ch || ch === channelRef) return false;
+  const st = load();
+  // la devanture illustrée ; si l'image échoue, la boutique s'affiche quand même (sans image)
+  let payload;
+  try {
+    payload = await shopFrontPayload();
+  } catch (err) {
+    console.error("Boutique (image):", err.message);
+    const feat = shopFeatured();
+    payload = {
+      embeds: [new EmbedBuilder().setColor(0xdb2777).setTitle("🛍️ La Boutique de la Maison").setDescription(`Dos de cartes, effets d'ouverture et décors d'Arène.
+⭐ **En vitrine cette semaine (-${Math.round(SHOP_PROMO * 100)} %)** : ${feat.map((it) => `${it.name} (${priceText(it)})`).join(" · ")}`)],
+      files: [],
+      components: [shopNav()],
+    };
+  }
   let msg = st.shopMessageId ? await ch.messages.fetch(st.shopMessageId).catch(() => null) : null;
   if (msg && !(await msg.edit({ ...payload, attachments: [] }).catch(() => null))) {
     await msg.delete().catch(() => null);
     msg = null;
   }
   if (!msg) {
-    msg = await ch.send(payload).catch(() => null);
-    if (msg) {
-      st.shopMessageId = msg.id;
-      save();
-    }
+    msg = await ch.send(payload).catch((err) => (console.error("Boutique (envoi):", err.message), null));
+    if (!msg) return false; // on réessaiera à la prochaine minute
+    st.shopMessageId = msg.id;
   }
   st.shopWeek = mondayKey();
   save();
+  return true;
 }
+// nouvelle vitrine le lundi ; et tant que la devanture n'est pas dans le salon, on réessaie
+let shopRetryAt = 0;
 async function shopLoop() {
-  if (load().shopWeek !== mondayKey()) await refreshShopFront().catch(() => null);
+  const st = load();
+  if (st.shopWeek === mondayKey() && st.shopMessageId) {
+    // toutes les 10 minutes : la devanture est-elle toujours là ?
+    if (new Date().getMinutes() % 10 !== 3) return;
+    const ch = chan("boutique");
+    const msg = ch && ch !== channelRef ? await ch.messages.fetch(st.shopMessageId).catch(() => null) : true;
+    if (msg) return;
+    st.shopMessageId = null;
+  }
+  if (Date.now() < shopRetryAt) return;
+  shopRetryAt = Date.now() + 2 * MINUTE;
+  await refreshShopFront().catch((err) => console.error("Boutique:", err.message));
 }
