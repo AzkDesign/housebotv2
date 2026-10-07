@@ -301,13 +301,21 @@ function storyJournalPayload(userId) {
 // --- Avancer dans l'histoire ---
 // renvoie le payload à afficher (scène suivante ou écran « plus de tickets »)
 async function storyGo(userId, name, target, notes = [], opts = {}) {
+  const step = storyStep(userId, name, target, notes);
+  if (step === "missing") return storyScenePayload(userId, name, [...notes, "⚠️ La suite de l'histoire n'est pas encore écrite."]);
+  if (step === "noticket") return storyNoTicketPayload(userId);
+  return storyScenePayload(userId, name, notes, opts);
+}
+let storyQuiet = false; // lecture automatique : pas d'annonce de succès sur le serveur
+// avance la sauvegarde jusqu'à la scène target (sans rien dessiner) : "ok", "noticket" ou "missing"
+function storyStep(userId, name, target, notes = []) {
   const sv = storySave(userId), scene = STORY[target];
-  if (!scene) return storyScenePayload(userId, name, [...notes, "⚠️ La suite de l'histoire n'est pas encore écrite."]);
+  if (!scene) return "missing";
   if (scene.ep && sv.scene !== target) {
     if (sv.tickets <= 0) {
       sv.pending = target;
       save();
-      return storyNoTicketPayload(userId);
+      return "noticket";
     }
     sv.tickets--;
     notes.push(`🎟️ Nouvel épisode — il vous reste ${sv.tickets} ticket${sv.tickets > 1 ? "s" : ""} aujourd'hui.`);
@@ -328,11 +336,11 @@ async function storyGo(userId, name, target, notes = [], opts = {}) {
         notes.push(`📦 +1 booster ${PACKS[R.pack].name} dans votre inventaire`);
         S.card(R.card);
       }
-      checkAchievements(userId).catch(() => null);
+      if (!storyQuiet) checkAchievements(userId).catch(() => null);
     }
   }
   save();
-  return storyScenePayload(userId, name, notes, opts);
+  return "ok";
 }
 
 // --- Épreuves : une de vos cartes vous aide ---
