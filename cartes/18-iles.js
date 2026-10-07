@@ -4,7 +4,9 @@
 // Les autres l'attaquent : c'est une IA qui joue les cartes du gardien. Toute la défense K.O. = l'île change de mains.
 // Les dégâts restent d'un combat à l'autre (les cartes se soignent doucement) et la défense s'use si on garde l'île très longtemps.
 const HOUR = 60 * MINUTE;
-const ISLAND_DUST = 10; // poussière par heure pour le gardien
+const ISLAND_DUST = 10; // poussière versée au gardien à chaque période
+const ISLAND_PERIOD = 10 * MINUTE; // un versement toutes les 10 minutes
+const ISLAND_RATE = "toutes les 10 min";
 const ISLAND_CAPTURE_DUST = 50; // prime de conquête
 const ISLAND_DEFENSE_DUST = 5; // prime du gardien à chaque attaque repoussée
 const ISLAND_BONUS = 1.1; // cartes de la série favorite de l'île : PV et attaque +10 %
@@ -83,12 +85,12 @@ function islandDefenders(id) {
 // verse la poussière gagnée (heures pleines)
 function payIsland(isl) {
   if (!isl.holder) return 0;
-  const hours = Math.floor((Date.now() - isl.paidAt) / HOUR);
-  if (hours < 1) return 0;
-  const gain = hours * ISLAND_DUST;
+  const periods = Math.floor((Date.now() - isl.paidAt) / ISLAND_PERIOD);
+  if (periods < 1) return 0;
+  const gain = periods * ISLAND_DUST;
   load().dust[isl.holder] = (load().dust[isl.holder] ?? 0) + gain;
   isl.earned += gain;
-  isl.paidAt += hours * HOUR;
+  isl.paidAt += periods * ISLAND_PERIOD;
   return gain;
 }
 function payIslands() {
@@ -267,7 +269,7 @@ async function drawIslandPanel(ctx, id, x, y, w, h) {
     ctx.font = "17px CardItalic";
     ctx.fillStyle = "#cbd5e1";
     ctx.fillText("Personne ne la garde : placez vos cartes", rx, y + 158);
-    ctx.fillText(`et gagnez ${ISLAND_DUST} poussières d'étoile par heure.`, rx, y + 182);
+    ctx.fillText(`et gagnez ${ISLAND_DUST} poussières d'étoile ${ISLAND_RATE}.`, rx, y + 182);
     // emplacements vides
     for (let k = 0; k < 3; k++) {
       const tx = rx + k * 96;
@@ -363,7 +365,7 @@ async function drawArchipelago() {
   ctx.shadowBlur = 0;
   ctx.font = "19px CardItalic";
   ctx.fillStyle = "#bae6fd";
-  ctx.fillText(`Gardez l'île avec vos cartes : ${ISLAND_DUST} poussières d'étoile par heure… tant que personne ne vous la prend.`, W / 2, 96);
+  ctx.fillText(`Gardez l'île avec vos cartes : ${ISLAND_DUST} poussières d'étoile ${ISLAND_RATE}… tant que personne ne vous la prend.`, W / 2, 96);
   // une seule île, dessinée en grand
   ctx.save();
   ctx.translate(120, 126);
@@ -406,7 +408,7 @@ async function islandsPayload() {
         .setColor(0x0ea5e9)
         .setTitle(`${ISLANDS.lagon.emoji} ${ISLANDS.lagon.name}`)
         .setDescription(
-          `Si l'île est libre, placez **jusqu'à 3 cartes** pour la garder : elle vous rapporte **${ISLAND_DUST} ✨ par heure**.\n` +
+          `Si l'île est libre, placez **jusqu'à 3 cartes** pour la garder : elle vous rapporte **${ISLAND_DUST} ✨ ${ISLAND_RATE}**.\n` +
             "Si elle est gardée, battez sa défense : c'est une **IA qui joue les cartes du gardien**. Mettez toutes ses cartes K.O. et l'île est à vous !" +
             (islandsState().lagon?.holder && (islandsState().lagon.protectUntil ?? 0) > Date.now() ? `\n\n🛡️ **Bouclier de conquête** : l'île ne peut pas être attaquée avant <t:${Math.floor(islandsState().lagon.protectUntil / 1000)}:t> (<t:${Math.floor(islandsState().lagon.protectUntil / 1000)}:R>).` : "")
         )
@@ -423,7 +425,7 @@ const ISLAND_RULES = () =>
     .setTitle("📖 Les règles de l'île")
     .setDescription(
       `🏝️ **Prendre l'île quand elle est libre** : choisissez jusqu'à 3 cartes, elles deviennent sa défense.\n` +
-        `✨ **Gains** : le gardien reçoit **${ISLAND_DUST} ✨ par heure**, +${ISLAND_DEFENSE_DUST} ✨ à chaque attaque repoussée. Celui qui conquiert l'île gagne **${ISLAND_CAPTURE_DUST} ✨**.\n` +
+        `✨ **Gains** : le gardien reçoit **${ISLAND_DUST} ✨ ${ISLAND_RATE}**, +${ISLAND_DEFENSE_DUST} ✨ à chaque attaque repoussée. Celui qui conquiert l'île gagne **${ISLAND_CAPTURE_DUST} ✨**.\n` +
         "⚔️ **Attaquer** : combat normal de l'Arène, mais contre une **IA qui joue la défense du gardien**. Le gardien n'a rien à faire. Mettez toutes ses cartes K.O. : votre équipe devient la nouvelle défense.\n" +
         `🩹 **Dégâts** : les PV perdus par la défense restent d'un combat à l'autre et reviennent de ${Math.round(ISLAND_REGEN * 100)} % par heure. Le gardien peut tout soigner pour ${ISLAND_HEAL_COST} ✨.\n` +
         `⭐ **Bonus** : l'île favorise la série **${SERIES_LABELS[ISLANDS.lagon.series].replace(/^\S+ /, "")}** ; ses cartes y ont **+10 %** de PV et d'attaque en défense.\n` +
@@ -464,7 +466,7 @@ function myIslandPayload(userId) {
   if (!id) return { ephemeral: true, content: "🏝️ Vous ne gardez aucune île pour le moment. Prenez-la si elle est libre, ou attaquez son gardien.", embeds: [], components: [] };
   const def = ISLANDS[id], isl = islandsState()[id];
   const lines = islandDefenders(id).map((f) => `${RARITIES[f.card.rarity].emoji} **${keyLabel(f.key)}** — ${f.hp > 0 ? `${f.hp} / ${f.maxHp} PV` : "**K.O.** (se soigne)"}${f.series === def.series ? " ⭐" : ""}`);
-  const next = HOUR - ((Date.now() - isl.paidAt) % HOUR);
+  const next = ISLAND_PERIOD - ((Date.now() - isl.paidAt) % ISLAND_PERIOD);
   const wear = islandWear(isl);
   const rows = [];
   const pr = placeRow(userId, id, "Changer ma défense (jusqu'à 3 cartes)…");
@@ -483,7 +485,7 @@ function myIslandPayload(userId) {
         .setColor(parseInt(def.color.slice(1), 16))
         .setTitle(`${def.emoji} ${def.name} — votre île`)
         .setDescription(
-          `Gardée depuis **${fmtHeld(Date.now() - isl.since)}** · **${isl.earned} ✨** gagnés · ${isl.defenses} attaque(s) repoussée(s)\n` +
+          `Gardée depuis **${fmtHeld(Date.now() - isl.since)}** · **${isl.earned} ✨** gagnés\n` +
             `Prochain versement de ${ISLAND_DUST} ✨ dans **${Math.ceil(next / MINUTE)} min**.` +
             (wear > 0 ? `\n⏳ Usure : la défense a perdu **${Math.round(wear * 100)} %** de PV max.` : "") +
             (islandFights.has(id) ? "\n⚔️ **Votre île est attaquée en ce moment !**" : "") +
@@ -653,7 +655,7 @@ async function handleIslandInteraction(interaction, client) {
           new EmbedBuilder()
             .setColor(parseInt(def.color.slice(1), 16))
             .setTitle(`${def.emoji} Prendre l'${def.name}`)
-            .setDescription(`Choisissez **jusqu'à 3 cartes** : une IA les jouera pour défendre l'île. Vous gagnerez **${ISLAND_DUST} ✨ par heure** tant que vous la gardez.\n⭐ Bonus de l'île : les cartes **${SERIES_LABELS[def.series].replace(/^\S+ /, "")}** ont +10 % de PV et d'attaque.\n🔒 Tant qu'elles défendent, ces cartes ne peuvent être ni vendues ni échangées.`),
+            .setDescription(`Choisissez **jusqu'à 3 cartes** : une IA les jouera pour défendre l'île. Vous gagnerez **${ISLAND_DUST} ✨ ${ISLAND_RATE}** tant que vous la gardez.\n⭐ Bonus de l'île : les cartes **${SERIES_LABELS[def.series].replace(/^\S+ /, "")}** ont +10 % de PV et d'attaque.\n🔒 Tant qu'elles défendent, ces cartes ne peuvent être ni vendues ni échangées.`),
         ],
         components: row ? [row] : [],
       });
@@ -728,7 +730,7 @@ async function handleIslandInteraction(interaction, client) {
     ustat(userId, "islands");
     save();
     checkAchievements(userId).catch(() => null);
-    await interaction.update({ content: `${def.emoji} Vous gardez maintenant l'**${def.name}** ! Elle vous rapporte **${ISLAND_DUST} ✨ par heure**.`, embeds: [], components: [] });
+    await interaction.update({ content: `${def.emoji} Vous gardez maintenant l'**${def.name}** ! Elle vous rapporte **${ISLAND_DUST} ✨ ${ISLAND_RATE}**.`, embeds: [], components: [] });
     await islandNotice(`${def.emoji} <@${userId}> s'installe sur l'**${def.name}**, restée libre. Qui osera l'attaquer ?`, [userId]);
     return true;
   }

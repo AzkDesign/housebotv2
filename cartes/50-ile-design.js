@@ -304,7 +304,7 @@ async function drawArchipelagoHD() {
   ctx.fillText(def.name, 46, 116);
   ctx.font = "17px CardItalic";
   ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.fillText(`${ISLAND_DUST} poussières d'étoile par heure pour qui la garde… tant que personne ne la prend.`, 48, 148);
+  ctx.fillText(`${ISLAND_DUST} poussières d'étoile ${ISLAND_RATE} pour qui la garde… tant que personne ne la prend.`, 48, 148);
   // bouclier : un dôme au-dessus de l'île
   if (shield) {
     ctx.save();
@@ -410,8 +410,7 @@ async function drawArchipelagoHD() {
     const rows = [
       ["Gardée depuis", fmtHeld(Date.now() - isl.since)],
       ["Poussière gagnée", `${isl.earned}`],
-      ["Attaques repoussées", `${isl.defenses}`],
-      ["Rapporte", `${ISLAND_DUST} par heure`],
+      ["Rapporte", `${ISLAND_DUST} / 10 min`],
     ];
     rows.forEach(([label, value], k) => {
       const y = py + 282 + k * 48;
@@ -434,7 +433,7 @@ async function drawArchipelagoHD() {
     ctx.font = "16px CardText";
     ctx.fillStyle = "#cbd5e1";
     ctx.textAlign = "left";
-    wrapText(ctx, `Personne ne garde l'île. Placez jusqu'à 3 cartes : elle vous rapporte ${ISLAND_DUST} poussières d'étoile par heure, et ${ISLAND_CAPTURE_DUST} de prime de conquête. Ensuite, défendez-la !`, px + 40, py + 170, pw - 80, 24, 6);
+    wrapText(ctx, `Personne ne garde l'île. Placez jusqu'à 3 cartes : elle vous rapporte ${ISLAND_DUST} poussières d'étoile ${ISLAND_RATE}, et ${ISLAND_CAPTURE_DUST} de prime de conquête. Ensuite, défendez-la !`, px + 40, py + 170, pw - 80, 24, 6);
   }
   // pastilles d'état
   const pills = [];

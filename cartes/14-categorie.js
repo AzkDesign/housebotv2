@@ -12,7 +12,7 @@ const CARD_CHANNELS = [
   ["tournoi", "🏆・tournoi", "🏆 Le tournoi du week-end : inscriptions le vendredi midi, élimination directe, finale le dimanche à 20 h"],
   ["echanges", "🔄・échanges-et-marché", "🔄 Tables d'échange en direct (chacun pose ses cartes, puis les deux valident) et grosses ventes du marché"],
   ["histoire", "📖・mode-histoire", "📖 Les Secrets de la Maison : une enquête illustrée où vos choix changent tout. Cliquez sur « Ouvrir le livre » !"],
-  ["iles", "🏝️・île", "🏝️ L'île de la Maison : gardez-la avec vos cartes (10 ✨ par heure)… et défendez-la contre les autres membres"],
+  ["iles", "🏝️・île", "🏝️ L'île de la Maison : gardez-la avec vos cartes (10 ✨ toutes les 10 min)… et défendez-la contre les autres membres"],
   ["equipes", "🛡️・équipes", "🛡️ Les duos de joueurs : créez votre équipe, invitez un partenaire, montez de niveau ensemble"],
   ["clash", "🏰・clash-de-la-maison", "🏰 Bâtissez votre Maison, défendez-la et attaquez celles des autres avec vos cartes. Guerre des équipes le week-end !"],
   ["classements", "🏆・classements-cartes", "🏆 Classements en direct : collection, holos, shiny, arène et succès"],
