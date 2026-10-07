@@ -298,8 +298,9 @@ function combatProfile(card, holo = false) {
 
 function numberOf(card) {
   const key = seriesOf(card);
-  const list = SERIES[key] ? SERIES[key].cards : allCards().filter((c) => seriesOf(c) === key);
-  const i = list.findIndex((c) => c.id === card.id);
+  const list = SERIES[key] ? SERIES[key].cards : allCards().filter((c) => seriesOf(c) === key && !c.variant);
+  // une édition spéciale (dorée, full art…) porte le numéro de sa carte de base
+  const i = list.findIndex((c) => c.id === (card.baseId ?? card.id));
   return `#${String(i + 1).padStart(3, "0")}/${String(list.length).padStart(3, "0")}`;
 }
 

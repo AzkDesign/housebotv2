@@ -865,10 +865,10 @@ async function drawInventory(user) {
   ctx.font = "18px CardEngrave";
   ctx.fillStyle = "#ecc979";
   ctx.fillText("PROGRESSION DE LA COLLECTION", 48, 568);
-  const owned = ownedIds(userId);
+  const owned = collectedIds(userId);
   const groups = albumGroups();
   for (const [i, g] of groups.entries()) {
-    const y = 596 + i * (groups.length > 6 ? 23 : groups.length > 5 ? 27 : 32), list = allCards().filter((card) => seriesOf(card) === g), have = list.filter((card) => owned.has(card.id)).length;
+    const y = 596 + i * (groups.length > 6 ? 23 : groups.length > 5 ? 27 : 32), list = collectionCards().filter((card) => seriesOf(card) === g), have = list.filter((card) => owned.has(card.id)).length;
     const pct = list.length ? have / list.length : 0;
     seriesIcon(ctx, g, 60, y, 8, gold[0]);
     ctx.font = "15px CardBold";
@@ -907,7 +907,7 @@ async function drawInventory(user) {
   ctx.fillStyle = "#ecc979";
   ctx.textAlign = "center";
   spaced(ctx, "STATISTIQUES", px + pw2 / 2, py + 34, 3);
-  const unique = owned.size, all = allCards().length, pct = all ? unique / all : 0;
+  const unique = owned.size, all = collectionCards().length, pct = all ? unique / all : 0;
   progressRing(ctx, px + 96, py + 140, 66, pct, [gold[3], gold[0]]);
   ctx.fillStyle = "#ffffff";
   ctx.font = "34px CardTitle";
@@ -1008,7 +1008,7 @@ async function vitrineFile() {
   spaced(ctx, `${G.name.toUpperCase()}  —  ${G.title.toUpperCase()}`, W / 2, 66, 4);
   ctx.font = "21px CardItalic";
   ctx.fillStyle = "#ecc979";
-  ctx.fillText(`${allCards().length} cartes à collectionner · les boosters se gardent dans votre inventaire`, W / 2, 102);
+  ctx.fillText(`${collectionCards().length} cartes à collectionner · les boosters se gardent dans votre inventaire`, W / 2, 102);
   ctx.shadowBlur = 0;
   for (const [i, type] of ["standard", "premium", "prestige"].entries()) {
     const cx = 230 + i * 370, w = 252, h = w * (920 / 600), y = 128;

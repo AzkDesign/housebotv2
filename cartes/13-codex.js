@@ -28,16 +28,16 @@ function codexView(userId) {
   return codexViews.get(userId);
 }
 function codexEntries(userId, view) {
-  const owned = ownedIds(userId);
+  const owned = collectedIds(userId);
   const order = albumGroups();
-  return allCards()
+  return collectionCards()
     .filter((c) => (view.series === "all" || seriesOf(c) === view.series) && (view.rarity === "all" || c.rarity === view.rarity))
     .filter((c) => (view.filter === "manquantes" ? !owned.has(c.id) : view.filter === "possedees" ? owned.has(c.id) : true))
     .sort((a, b) => order.indexOf(seriesOf(a)) - order.indexOf(seriesOf(b)) || numberOf(a).localeCompare(numberOf(b)));
 }
 
 async function drawCodex(user, view) {
-  const userId = user.id, owned = ownedIds(userId), inv = load().inv[userId] ?? {};
+  const userId = user.id, owned = collectedIds(userId), inv = load().inv[userId] ?? {};
   const list = codexEntries(userId, view), pages = Math.max(1, Math.ceil(list.length / CODEX_PER_PAGE));
   view.page = Math.min(Math.max(0, view.page), pages - 1);
   const slice = list.slice(view.page * CODEX_PER_PAGE, (view.page + 1) * CODEX_PER_PAGE);
@@ -48,7 +48,7 @@ async function drawCodex(user, view) {
   velvet(ctx, W, H);
 
   // En-tête : titre, progression totale et par rareté
-  const all = allCards(), have = all.filter((card) => owned.has(card.id)).length;
+  const all = collectionCards(), have = all.filter((card) => owned.has(card.id)).length;
   ctx.font = "34px CardEngrave";
   ctx.fillStyle = "#fde68a";
   ctx.shadowColor = "rgba(0,0,0,0.7)";
@@ -190,7 +190,7 @@ async function codexPayload(user) {
   const view = codexView(user.id);
   const { canvas, slice, pages, list } = await drawCodex(user, view);
   const file = new AttachmentBuilder(await canvas.encode("jpeg", 90), { name: "codex.jpg" });
-  const owned = ownedIds(user.id);
+  const owned = collectedIds(user.id);
   const missing = slice.filter((card) => !owned.has(card.id));
   const lines = missing.slice(0, 24).map((card) => {
     const [icon, how] = howToGet(card);

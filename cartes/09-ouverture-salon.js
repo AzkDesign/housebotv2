@@ -110,6 +110,20 @@ function ownedIds(userId) {
   return new Set(Object.keys(load().inv[userId] ?? {}).filter((k) => load().inv[userId][k] > 0).map((k) => k.replace("*", "")));
 }
 
+// la collection ne compte que les cartes de base : une édition spéciale (dorée, full art, or, prisme)
+// est un style de la carte, elle débloque la carte de base sans compter en plus
+function collectionCards() {
+  return allCards().filter((c) => !c.variant);
+}
+function collectedIds(userId) {
+  const owned = ownedIds(userId), out = new Set();
+  for (const id of owned) {
+    const m = /^(.+)_(or|full|prisme)$/.exec(id);
+    out.add(m && (m[1].startsWith("mb_") || m[1].startsWith("duo_") || findCard(m[1])) ? m[1] : id);
+  }
+  return out;
+}
+
 function collectionScore(userId) {
   const inv = load().inv[userId] ?? {};
   let score = 0;

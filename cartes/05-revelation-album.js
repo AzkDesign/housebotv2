@@ -330,7 +330,7 @@ async function drawSpread(results, title, gained) {
 // --- Album en images ---
 const albumGroups = () => ["paris", "maison", ...(CURRENT_GEN >= 2 ? ["voyage"] : []), "entreprises", "membres", "duos", "utilitaire", "saisons", "histoire", "evenements"];
 const ALBUM_PER_PAGE = 21;
-const seriesCards = (group) => allCards().filter((c) => seriesOf(c) === group);
+const seriesCards = (group) => collectionCards().filter((c) => seriesOf(c) === group);
 const thumbCache = new Map();
 async function cardThumb(card, holo, w, h) {
   const key = `${card.id}:${holo ? 1 : 0}:${w}:${card.avatar ?? ""}:${card.rating ?? ""}`;
@@ -446,7 +446,7 @@ async function drawAlbumCover(user) {
   ctx.font = "20px CardItalic";
   ctx.fillStyle = "#ecc979";
   ctx.fillText(`Les Cartes de la Maison · ${G.name} — ${G.title}`, 196, 174);
-  const owned = ownedIds(userId), all = allCards().length, pct = all ? owned.size / all : 0;
+  const owned = collectedIds(userId), all = collectionCards().length, pct = all ? owned.size / all : 0;
   progressRing(ctx, W - 130, 124, 62, pct, [gold[3], gold[0]]);
   ctx.textAlign = "center";
   ctx.fillStyle = "#ffffff";
@@ -555,7 +555,7 @@ async function drawAlbumPage(user, group, page) {
   const list = seriesCards(group), pages = Math.max(1, Math.ceil(list.length / ALBUM_PER_PAGE));
   page = Math.min(Math.max(0, page), pages - 1);
   const slice = list.slice(page * ALBUM_PER_PAGE, (page + 1) * ALBUM_PER_PAGE);
-  const inv = load().inv[userId] ?? {}, owned = ownedIds(userId);
+  const inv = load().inv[userId] ?? {}, owned = collectedIds(userId);
   const c = createCanvas(W, H);
   const ctx = c.getContext("2d");
   ctx.imageSmoothingQuality = "high";
@@ -725,7 +725,7 @@ async function albumPayload(target, own, view = "cover", page = 0) {
     page = info.page;
   }
   const file = new AttachmentBuilder(await canvas.encode("jpeg", 92), { name: "album.jpg" });
-  const owned = ownedIds(target.id);
+  const owned = collectedIds(target.id);
   const embed = new EmbedBuilder()
     .setColor(0xe9c46a)
     .setTitle(view === "cover" ? `📒 Album de ${name}` : `${SERIES_LABELS[view]} — album de ${name}`)
@@ -737,7 +737,7 @@ async function albumPayload(target, own, view = "cover", page = 0) {
         .setCustomId(`carte_alb_nav_${target.id}`)
         .setPlaceholder("Feuilleter l'album…")
         .addOptions([
-          { label: "Couverture", value: "cover", emoji: "📒", description: `${owned.size} / ${allCards().length} cartes`, default: view === "cover" },
+          { label: "Couverture", value: "cover", emoji: "📒", description: `${owned.size} / ${collectionCards().length} cartes`, default: view === "cover" },
           ...albumGroups().map((g) => {
             const list = seriesCards(g);
             return { label: SERIES_LABELS[g].replace(/^\S+ /, ""), value: g, emoji: SERIES_LABELS[g].split(" ")[0], description: `${list.filter((c) => owned.has(c.id)).length} / ${list.length} cartes`, default: view === g };

@@ -1094,8 +1094,8 @@ async function handleCartesInteraction(interaction, client) {
   }
 
   if (id === "carte_craftseries") {
-    const owned = ownedIds(userId);
-    const list = allCards()
+    const owned = collectedIds(userId);
+    const list = collectionCards()
       .filter((c) => seriesOf(c) === interaction.values[0])
       .sort((a, b) => Number(owned.has(a.id)) - Number(owned.has(b.id)));
     if (!list.length) { await interaction.update({ content: "Aucune carte dans cette série.", components: [] }); return true; }
@@ -1228,7 +1228,7 @@ async function syncMemberCards(guild) {
 
 // Pour /profil
 function getCollectionSummary(userId) {
-  const n = ownedIds(userId).size;
+  const n = collectedIds(userId).size;
   if (!n) return null;
   const best = bestCardOf(userId), arena = load().arena[userId];
   const lines = [`${n} carte(s) · ${collectionScore(userId)} pts`];

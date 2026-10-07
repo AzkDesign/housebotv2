@@ -12,7 +12,7 @@ function resetStreak(userId) {
   s.streak = 0;
 }
 function playerFacts(userId) {
-  const inv = load().inv[userId] ?? {}, s = load().userStats[userId] ?? {}, owned = ownedIds(userId);
+  const inv = load().inv[userId] ?? {}, s = load().userStats[userId] ?? {}, owned = collectedIds(userId);
   const holos = Object.entries(inv).filter(([k, n]) => k.endsWith("*") && n > 0).length;
   const has = (pred) => [...owned].some((id) => pred(findCard(id)));
   return {
@@ -124,7 +124,7 @@ async function drawShowcase(user, keys) {
   const title = achievementTitle(user.id);
   ctx.font = "20px CardItalic";
   ctx.fillStyle = "#ecc979";
-  ctx.fillText(title ? `${title.replace(/^\S+ /, "")} · ${ownedIds(user.id).size} cartes` : `${ownedIds(user.id).size} cartes dans la collection`, W / 2, 96);
+  ctx.fillText(title ? `${title.replace(/^\S+ /, "")} · ${collectedIds(user.id).size} cartes` : `${collectedIds(user.id).size} cartes dans la collection`, W / 2, 96);
   const cards = keys.map((k) => ({ card: cardOfKey(k), holo: isHoloKey(k) })).filter((x) => x.card);
   for (const [i, { card, holo }] of cards.entries()) {
     const off = cards.length === 1 ? 0 : i - (cards.length - 1) / 2, w = off === 0 ? 300 : 260, h = w * 1.4;
