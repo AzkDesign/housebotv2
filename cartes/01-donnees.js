@@ -272,7 +272,14 @@ const SERIES_LABELS = { paris: "🗼 Paris", maison: "🏡 La Maison", voyage: "
 
 // Statistiques stables (pour les futures batailles), selon la rareté
 function statsOf(card) {
-  if (card.memberStats) return { prestige: card.memberStats.PRE, influence: Math.max(card.memberStats.STA, card.memberStats.ACT), chance: card.memberStats.CHA };
+  if (card.memberStats) {
+    // l'attaque d'un membre part de la base de sa rareté (comme les autres cartes), plus un bonus
+    // selon son activité ou son éclat (jusqu'à +11) et ses élections Membre Star (+2 chacune, jusqu'à +6)
+    const base = { rare: 45, epique: 60, legendaire: 75, mythique: 88 }[card.rarity] ?? 45;
+    const own = Math.max(card.memberStats.STA, card.memberStats.ACT);
+    const bonus = Math.max(0, Math.min(11, Math.round((own - 50) / 4))) + Math.min(6, (card.stars ?? 0) * 2);
+    return { prestige: card.memberStats.PRE, influence: Math.min(99, base + bonus), chance: card.memberStats.CHA };
+  }
   let h = 0;
   for (const ch of card.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const base = { commune: 20, peucommune: 32, rare: 45, epique: 60, legendaire: 75, mythique: 88 }[card.rarity];
