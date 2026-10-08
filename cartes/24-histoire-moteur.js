@@ -343,6 +343,13 @@ function storyStep(userId, name, target, notes = []) {
   return "ok";
 }
 
+// ouvre le livre là où on en est : la page en attente reprend dès qu'il y a de nouveau des tickets
+function storyResume(userId, name, notes = []) {
+  const sv = storySave(userId);
+  if (sv.pending) return sv.tickets > 0 ? storyGo(userId, name, sv.pending, [`🎟️ Nouveaux tickets ! Vous reprenez l'enquête.`, ...notes]) : storyNoTicketPayload(userId);
+  return sv.scene ? storyScenePayload(userId, name, notes) : storyCoverPayload(userId);
+}
+
 // --- Épreuves : une de vos cartes vous aide ---
 function storyCardOptions(userId, by) {
   const seen = new Set();
@@ -516,7 +523,7 @@ async function handleStoryInteraction(interaction, client) {
     await interaction.editReply(payload);
   };
   if (isCmd || id === "carte_hs") {
-    await show(sv.pending ? storyNoTicketPayload(userId) : sv.scene ? storyScenePayload(userId, name) : storyCoverPayload(userId), true);
+    await show(storyResume(userId, name), true);
     return true;
   }
   if (id === "carte_hs_help") {
@@ -532,7 +539,7 @@ async function handleStoryInteraction(interaction, client) {
     return true;
   }
   if (id === "carte_hs_back") {
-    await show(sv.pending ? storyNoTicketPayload(userId) : sv.scene ? storyScenePayload(userId, name) : storyCoverPayload(userId));
+    await show(storyResume(userId, name));
     return true;
   }
   if (id === "carte_hs_reset") {
@@ -573,7 +580,7 @@ async function handleStoryInteraction(interaction, client) {
   if (ch) {
     const [, sceneId, idxText] = ch, scene = STORY[sceneId];
     if (!scene || sv.scene !== sceneId) {
-      await show(sv.pending ? storyNoTicketPayload(userId) : storyScenePayload(userId, name, ["⏩ Cette page est déjà tournée : voici où vous en êtes."]));
+      await show(storyResume(userId, name, ["⏩ Cette page est déjà tournée : voici où vous en êtes."]));
       return true;
     }
     const notes = [], S = storyCtx(userId, notes, name);
