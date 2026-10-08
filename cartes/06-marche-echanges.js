@@ -433,7 +433,10 @@ const TRADE_STATUS = {
   expired: ["PROPOSITION EXPIRÉE", "#52525b"],
   failed: ["ÉCHANGE IMPOSSIBLE", "#dc2626"],
 };
-const sideValue = (keys, money) => keys.reduce((a, k) => a + coteOf(k), 0) + (money ?? 0);
+const sideValue = (keys, money, packs = {}) => keys.reduce((a, k) => a + coteOf(k), 0) + (money ?? 0) + Object.entries(packs).reduce((a, [k, n]) => a + (PACKS[parsePack(k)?.type]?.price ?? 0) * n, 0);
+// boosters posés dans un échange : une entrée par booster
+const packUnits = (packs = {}) => Object.entries(packs).flatMap(([k, n]) => (parsePack(k) ? Array(n).fill(k) : []));
+const packsText = (packs = {}) => Object.entries(packs).filter(([k, n]) => n > 0 && parsePack(k)).map(([k, n]) => `${packLabel(k)}${n > 1 ? ` ×${n}` : ""}`);
 function swapArrows(ctx, x, y, r, color) {
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -474,10 +477,10 @@ async function drawTrade(tr) {
   ctx.textAlign = "left";
 
   const sides = [
-    { name: tr.fromName, avatar: tr.fromAvatar, keys: tr.give, money: tr.giveMoney, verb: tr.live ? (tr.status === "done" ? "a donné" : "propose") : "donne", ready: tr.ready?.from },
-    { name: tr.toName, avatar: tr.toAvatar, keys: tr.take, money: tr.takeMoney, verb: tr.status === "done" ? "a donné" : tr.live ? "propose" : "donnerait", ready: tr.ready?.to },
+    { name: tr.fromName, avatar: tr.fromAvatar, keys: tr.give, money: tr.giveMoney, packs: tr.packs?.from ?? {}, verb: tr.live ? (tr.status === "done" ? "a donné" : "propose") : "donne", ready: tr.ready?.from },
+    { name: tr.toName, avatar: tr.toAvatar, keys: tr.take, money: tr.takeMoney, packs: tr.packs?.to ?? {}, verb: tr.status === "done" ? "a donné" : tr.live ? "propose" : "donnerait", ready: tr.ready?.to },
   ];
-  const values = sides.map((sd) => sideValue(sd.keys, sd.money));
+  const values = sides.map((sd) => sideValue(sd.keys, sd.money, sd.packs));
   for (const [i, sd] of sides.entries()) {
     const px = i === 0 ? 36 : 644, py = 128, pw = 520, ph = 502;
     ctx.save();
@@ -516,20 +519,27 @@ async function drawTrade(tr) {
       pill(ctx, px + pw - 70, py + 40, sd.ready ? "VALIDÉ" : "EN RÉFLEXION", sd.ready ? "#16a34a" : "#52525b", "#ffffff");
       ctx.textAlign = "left";
     }
-    // cartes en éventail
-    const n = sd.keys.length, cw = 150, ch = 210, area = pw - 60;
+    // cartes (et boosters) en éventail
+    const items = [...sd.keys.map((key) => ({ key })), ...packUnits(sd.packs).map((pack) => ({ pack }))];
+    const n = items.length, cw = 150, ch = 210, area = pw - 60;
     const step = n > 1 ? Math.min(cw + 16, (area - cw) / (n - 1)) : 0, total = n > 1 ? step * (n - 1) + cw : cw;
-    for (const [k, key] of sd.keys.entries()) {
-      const card = cardOfKey(key);
-      if (!card) continue;
+    for (const [k, { key, pack }] of items.entries()) {
+      const card = key ? cardOfKey(key) : null;
+      if (!card && !pack) continue;
       const x = px + (pw - total) / 2 + k * step, rot = n > 3 ? (k - (n - 1) / 2) * 0.05 : 0;
       ctx.save();
       ctx.translate(x + cw / 2, py + 120 + ch / 2 + Math.abs(k - (n - 1) / 2) * (n > 3 ? 6 : 0));
       ctx.rotate(rot);
       ctx.shadowColor = "rgba(0,0,0,0.7)";
       ctx.shadowBlur = 16;
-      glow(ctx, 0, 0, 110, METAL[card.rarity][4], 0.2);
-      ctx.drawImage(await cardThumb(card, isHoloKey(key), cw, ch), -cw / 2, -ch / 2, cw, ch);
+      if (pack) {
+        const p = parsePack(pack), art = await drawPackBase(p.gen, p.type), pw2 = Math.round((ch * art.width) / art.height);
+        glow(ctx, 0, 0, 110, PACKS[p.type].accent, 0.22);
+        ctx.drawImage(art, -pw2 / 2, -ch / 2, pw2, ch);
+      } else {
+        glow(ctx, 0, 0, 110, METAL[card.rarity][4], 0.2);
+        ctx.drawImage(await cardThumb(card, isHoloKey(key), cw, ch), -cw / 2, -ch / 2, cw, ch);
+      }
       ctx.restore();
     }
     if (!n && !sd.money) {
@@ -549,7 +559,7 @@ async function drawTrade(tr) {
     ctx.textAlign = "center";
     ctx.font = "13px CardBold";
     ctx.fillStyle = "#cbb9a9";
-    const names = sd.keys.map(keyLabel).join(" · ");
+    const names = [...sd.keys.map(keyLabel), ...packsText(sd.packs).map((t) => t.replace(/^\S+\s/, "Booster "))].join(" · ");
     ctx.font = `${fitText(ctx, names, pw - 40, 14, "CardBold")}px CardBold`;
     ctx.fillText(names, px + pw / 2, py + 362);
     // argent

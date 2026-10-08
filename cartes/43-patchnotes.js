@@ -2,6 +2,27 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.13",
+    color: 0x2563eb,
+    parts: [
+      [
+        "📦 Les boosters s'échangent !",
+        "À la **table d'échange**, un nouveau bouton **📦 Boosters** permet de poser vos **boosters fermés** à côté de vos cartes et de votre argent.\n" +
+          "• Jusqu'à **10 boosters** par personne et par échange (Standard, Premium, Prestige, boosters de saison…).\n" +
+          "• Ils apparaissent sur la table et comptent dans la **valeur estimée** de l'offre.\n" +
+          "• Comme pour les cartes, rien ne bouge tant que **les deux** n'ont pas validé, et toute modification annule les validations.\n" +
+          "• Le **cadeau du jour** reste personnel : il ne s'échange pas.",
+      ],
+      [
+        "🛠️ Et aussi",
+        "• Nouvelle carte de membre légendaire : **Lisa**, la développeuse de la Maison 💻.\n" +
+          "• **Mode Histoire** : la partie de blackjack contre Velours (chapitre II) ne provoque plus d'erreur, et les pages s'ouvrent même quand le bot est très occupé.\n" +
+          "• **Combats** : les manches très longues ne font plus planter le bot ; l'animation est simplement allégée.",
+      ],
+    ],
+    footer: "Bons échanges ! 🔄",
+  },
+  {
     version: "1.12",
     color: 0x22c55e,
     parts: [

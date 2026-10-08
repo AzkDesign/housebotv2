@@ -3,6 +3,7 @@
 // 1. Un membre invite qui il veut. 2. L'invité accepte : la table d'échange s'ouvre dans le salon des échanges.
 // 3. Chacun y pose ses propres cartes (et de l'argent), la table se met à jour en direct pour tout le monde.
 // 4. Les deux valident : l'échange se fait. Toute modification annule les validations (impossible de changer l'offre au dernier moment).
+// Les boosters fermés s'échangent aussi (sauf le cadeau du jour, gratuit).
 const LIVE_INVITE_MINUTES = 10, LIVE_IDLE_MINUTES = 15;
 const liveTrades = new Map(); // id -> table d'échange
 const userLiveTrade = new Map(); // userId -> id de sa table
@@ -30,7 +31,7 @@ function invitePayload(tr) {
         .setTitle("🔄 Invitation à échanger")
         .setDescription(
           `**${tr.fromName}** voudrait échanger des cartes avec **${tr.toName}**.\n\n` +
-            "Acceptez pour ouvrir la **table d'échange** : chacun y pose les cartes qu'il veut (et de l'argent si besoin), en direct. Rien n'est échangé tant que vous n'avez pas **validé tous les deux**.\n\n" +
+            "Acceptez pour ouvrir la **table d'échange** : chacun y pose les cartes et les boosters qu'il veut (et de l'argent si besoin), en direct. Rien n'est échangé tant que vous n'avez pas **validé tous les deux**.\n\n" +
             `L'invitation expire <t:${Math.floor((tr.at + LIVE_INVITE_MINUTES * MINUTE) / 1000)}:R>.`
         )
         .setThumbnail(tr.toAvatar),
@@ -41,9 +42,60 @@ function invitePayload(tr) {
 }
 const offerList = (tr, side) => {
   const keys = offerOf(tr, side), money = side === "from" ? tr.giveMoney : tr.takeMoney;
-  return [...keys.map((k) => `${RARITIES[cardOfKey(k)?.rarity]?.emoji ?? "▫️"} ${keyLabel(k)}`), ...(money ? [`💶 ${formatEuro(money)}`] : [])].join("\n") || "*Rien pour le moment*";
+  return [...keys.map((k) => `${RARITIES[cardOfKey(k)?.rarity]?.emoji ?? "▫️"} ${keyLabel(k)}`), ...packsText(tr.packs?.[side]), ...(money ? [`💶 ${formatEuro(money)}`] : [])].join("\n") || "*Rien pour le moment*";
 };
-const hasOffer = (tr) => tr.give.length || tr.take.length || tr.giveMoney || tr.takeMoney;
+const packCount = (packs = {}) => Object.values(packs).reduce((a, n) => a + n, 0);
+const hasOffer = (tr) => tr.give.length || tr.take.length || tr.giveMoney || tr.takeMoney || packCount(tr.packs?.from) || packCount(tr.packs?.to);
+// ce qu'un côté donne, pour les journaux
+const sideText = (tr, side) => [...offerOf(tr, side).map(keyLabel), ...packsText(tr.packs?.[side])].join(", ") || "rien";
+
+// --- Boosters dans l'échange ---
+const TRADE_MAX_PACKS = 10;
+const tradablePacks = (userId) => packsOf(userId).filter(([k]) => parsePack(k).type !== "jour");
+function packPickerPayload(tr, userId) {
+  const side = sideOf(tr, userId), mine = tr.packs[side];
+  const options = [];
+  for (const [k, n] of tradablePacks(userId)) {
+    const p = parsePack(k), copies = Math.min(n, TRADE_MAX_PACKS);
+    for (let i = 1; i <= copies && options.length < 25; i++)
+      options.push({
+        label: `${PACKS[p.type].name} · ${GENERATIONS[p.gen].code}${copies > 1 ? ` (${i}/${copies})` : ""}`.slice(0, 100),
+        value: `${k}#${i}`,
+        emoji: PACKS[p.type].emoji,
+        description: `Vous en avez ${n} · valeur ${euro(PACKS[p.type].price)}`.slice(0, 100),
+        default: i <= (mine[k] ?? 0),
+      });
+  }
+  const select = options.length
+    ? new StringSelectMenuBuilder().setCustomId(`carte_lt_pk_${tr.id}`).setPlaceholder("Les boosters que je pose sur la table…").setMinValues(0).setMaxValues(Math.min(TRADE_MAX_PACKS, options.length)).addOptions(options)
+    : disabledSelect(`carte_lt_pk_${tr.id}`, "Vous n'avez aucun booster fermé à échanger");
+  return {
+    ephemeral: true,
+    content: `📦 **Vos boosters sur la table** : ${packsText(mine).join(", ") || "aucun"}\nChoisissez jusqu'à ${TRADE_MAX_PACKS} boosters fermés (le cadeau du jour ne s'échange pas).`,
+    embeds: [],
+    components: [
+      new ActionRowBuilder().addComponents(select),
+      new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`carte_lt_pkclear_${tr.id}`).setLabel("Retirer tous mes boosters").setEmoji("🧹").setStyle(ButtonStyle.Secondary).setDisabled(!packCount(mine))),
+    ],
+  };
+}
+{
+  // un booster posé doit toujours être dans l'inventaire
+  const problem = tradeProblem;
+  tradeProblem = (tr) => {
+    const p = problem(tr);
+    if (p) return p;
+    for (const [side, userId, name] of [["from", tr.from, tr.fromName], ["to", tr.to, tr.toName]])
+      for (const [k, n] of Object.entries(tr.packs?.[side] ?? {})) if ((load().packs[userId]?.[k] ?? 0) < n) return `${name} ne possède plus **${packLabel(k)}${n > 1 ? ` ×${n}` : ""}**.`;
+    return null;
+  };
+}
+function movePacks(from, to, packs = {}) {
+  for (const [k, n] of Object.entries(packs)) {
+    for (let i = 0; i < n; i++) if (!takePack(from, k)) return;
+    addPacks(to, k, n);
+  }
+}
 async function livePayloadTrade(tr, extra = "") {
   const open = tr.status === "live";
   const embed = new EmbedBuilder()
@@ -51,7 +103,7 @@ async function livePayloadTrade(tr, extra = "") {
     .setTitle(tr.status === "done" ? "🤝 Échange conclu !" : open ? `🔄 Table d'échange — ${tr.fromName} ⇄ ${tr.toName}` : `🔄 ${(TRADE_STATUS[tr.status] ?? TRADE_STATUS.cancelled)[0].charAt(0)}${(TRADE_STATUS[tr.status] ?? TRADE_STATUS.cancelled)[0].slice(1).toLowerCase()}`)
     .setDescription(
       (open
-        ? "**🃏 Choisir mes cartes** pour poser ou retirer vos cartes · **💶 Argent** pour ajouter de l'argent · **✅ Valider** quand l'offre vous convient.\n" +
+        ? "**🃏 Choisir mes cartes** pour poser ou retirer vos cartes · **📦 Boosters** pour poser des boosters fermés · **💶 Argent** pour ajouter de l'argent · **✅ Valider** quand l'offre vous convient.\n" +
           `${tr.ready.from ? "✅" : "⌛"} ${tr.fromName} · ${tr.ready.to ? "✅" : "⌛"} ${tr.toName} — *toute modification annule les validations.*`
         : "") + (extra ? `\n\n${extra}` : "") || null
     )
@@ -67,6 +119,7 @@ async function livePayloadTrade(tr, extra = "") {
       ? [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`carte_lt_pick_${tr.id}`).setLabel("Choisir mes cartes").setEmoji("🃏").setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`carte_lt_packs_${tr.id}`).setLabel("Boosters").setEmoji("📦").setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`carte_lt_money_${tr.id}`).setLabel("Argent").setEmoji("💶").setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`carte_lt_ok_${tr.id}`).setLabel("Valider").setEmoji("✅").setStyle(ButtonStyle.Success).setDisabled(!hasOffer(tr)),
             new ButtonBuilder().setCustomId(`carte_lt_x_${tr.id}`).setLabel("Annuler l'échange").setStyle(ButtonStyle.Danger)
@@ -130,15 +183,17 @@ async function executeLiveTrade(client, tr) {
   if (problem) return problem;
   for (const k of tr.give) moveKey(tr.from, tr.to, k);
   for (const k of tr.take) moveKey(tr.to, tr.from, k);
+  movePacks(tr.from, tr.to, tr.packs?.from);
+  movePacks(tr.to, tr.from, tr.packs?.to);
   bump("trades");
   for (const u of [tr.from, tr.to]) {
     questProgress(u, "trade");
     ustat(u, "trades");
   }
-  pairAlert(tr.from, tr.to, "échanges", `${tr.give.map(keyLabel).join(", ") || "rien"} contre ${tr.take.map(keyLabel).join(", ") || "rien"}`).catch(() => null);
+  pairAlert(tr.from, tr.to, "échanges", `${sideText(tr, "from")} contre ${sideText(tr, "to")}`).catch(() => null);
   save();
   require("./logs")
-    .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`**${pseudo(tr.from)}** donne : ${tr.give.map(keyLabel).join(", ") || "rien"}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n**${pseudo(tr.to)}** donne : ${tr.take.map(keyLabel).join(", ") || "rien"}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
+    .sendLogEmbed("achats", new EmbedBuilder().setColor(0x16a34a).setTitle("🔄 Échange de cartes conclu").setDescription(`**${pseudo(tr.from)}** donne : ${sideText(tr, "from")}${tr.giveMoney ? ` + ${formatEuro(tr.giveMoney)}` : ""}\n**${pseudo(tr.to)}** donne : ${sideText(tr, "to")}${tr.takeMoney ? ` + ${formatEuro(tr.takeMoney)}` : ""}`).setTimestamp())
     .catch(() => null);
   await checkSeriesRewards(client, tr.from);
   await checkSeriesRewards(client, tr.to);
@@ -155,7 +210,7 @@ async function inviteLiveTrade(client, user, fromName, target, toName) {
   if (sen) return sen;
   if (userLiveTrade.has(user.id)) return "Vous avez déjà un échange en cours : terminez-le ou annulez-le d'abord.";
   if (userLiveTrade.has(target.id)) return `${toName} est déjà en train d'échanger avec quelqu'un.`;
-  const tr = { ...newDraft(user, target, fromName, toName), id: Date.now().toString(36), status: "invite", live: false, ready: { from: false, to: false }, filter: {} };
+  const tr = { ...newDraft(user, target, fromName, toName), id: Date.now().toString(36), status: "invite", live: false, ready: { from: false, to: false }, filter: {}, packs: { from: {}, to: {} } };
   delete tr.gf;
   delete tr.tf;
   const invite = await sendInvite(client, target.id, invitePayload(tr), "echanges");
@@ -195,7 +250,7 @@ async function handleLiveTradeInteraction(interaction, client) {
     await interaction.update(err ? { content: errText(err), components: interaction.message.components } : inviteSentPayload(interaction.user.id, toName));
     return true;
   }
-  const m = /^carte_lt_(yes|no|x|pick|money|mf|ok|ser|cards|clear)_(\w+)$/.exec(id ?? "");
+  const m = /^carte_lt_(yes|no|x|pick|money|mf|ok|ser|cards|clear|packs|pk|pkclear)_(\w+)$/.exec(id ?? "");
   if (!m) return false;
   const [, action, tid] = m;
   const tr = liveTrades.get(tid);
@@ -275,6 +330,22 @@ async function handleLiveTradeInteraction(interaction, client) {
     await refreshLive(tr, busy ? `⚠️ ${busy}` : `✏️ **${side === "from" ? tr.fromName : tr.toName}** a modifié son offre.`);
     return true;
   }
+  if (action === "packs") {
+    tr.packs ??= { from: {}, to: {} };
+    await interaction.reply(packPickerPayload(tr, userId));
+    return true;
+  }
+  if (action === "pk" || action === "pkclear") {
+    tr.packs ??= { from: {}, to: {} };
+    const next = {};
+    if (action === "pk") for (const v of interaction.values) if (v.includes("#")) next[v.split("#")[0]] = (next[v.split("#")[0]] ?? 0) + 1;
+    tr.packs[side] = next;
+    offerChanged(tr);
+    const busy = tradeProblem(tr);
+    await interaction.update(packPickerPayload(tr, userId));
+    await refreshLive(tr, busy ? `⚠️ ${busy}` : `📦 **${side === "from" ? tr.fromName : tr.toName}** a modifié ses boosters.`);
+    return true;
+  }
   if (action === "money") {
     const current = side === "from" ? tr.giveMoney : tr.takeMoney;
     await interaction.showModal(
@@ -304,7 +375,7 @@ async function handleLiveTradeInteraction(interaction, client) {
   }
   if (action === "ok") {
     if (!hasOffer(tr)) {
-      await interaction.reply({ content: "❌ La table est vide : posez au moins une carte ou de l'argent.", ephemeral: true });
+      await interaction.reply({ content: "❌ La table est vide : posez au moins une carte, un booster ou de l'argent.", ephemeral: true });
       return true;
     }
     tr.ready[side] = !tr.ready[side];
