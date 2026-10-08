@@ -514,16 +514,16 @@ async function handleStoryInteraction(interaction, client) {
   load();
   const sv = storySave(userId);
   // rendu long (images) : on accuse réception tout de suite
-  const show = async (payloadPromise, fresh = false) => {
+  const show = async (makePayload, fresh = false) => {
     if (fresh || isCmd || id === "carte_hs") {
       if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
     } else if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-    const payload = await payloadPromise;
+    const payload = await makePayload(); // préparé après l'accusé de réception : jamais de « interaction expirée »
     delete payload.ephemeral;
     await interaction.editReply(payload);
   };
   if (isCmd || id === "carte_hs") {
-    await show(storyResume(userId, name), true);
+    await show(() => storyResume(userId, name), true);
     return true;
   }
   if (id === "carte_hs_help") {
@@ -531,7 +531,7 @@ async function handleStoryInteraction(interaction, client) {
     return true;
   }
   if (id === "carte_hs_start") {
-    await show(sv.scene ? storyScenePayload(userId, name) : storyGo(userId, name, STORY_START));
+    await show(() => sv.scene ? storyScenePayload(userId, name) : storyGo(userId, name, STORY_START));
     return true;
   }
   if (id === "carte_hs_journal") {
@@ -539,7 +539,7 @@ async function handleStoryInteraction(interaction, client) {
     return true;
   }
   if (id === "carte_hs_back") {
-    await show(storyResume(userId, name));
+    await show(() => storyResume(userId, name));
     return true;
   }
   if (id === "carte_hs_reset") {
@@ -560,7 +560,7 @@ async function handleStoryInteraction(interaction, client) {
     fresh.extra = extra;
     save();
     storyDuels.delete(userId);
-    await show(storyCoverPayload(userId));
+    await show(() => storyCoverPayload(userId));
     return true;
   }
   if (id === "carte_hs_buy") {
@@ -572,7 +572,7 @@ async function handleStoryInteraction(interaction, client) {
     sv.extra++;
     sv.tickets++;
     save();
-    await show(sv.pending ? storyGo(userId, name, sv.pending, [`🕯️ Vous rallumez la bougie (−${STORY_EXTRA_COST} ✨).`]) : storyScenePayload(userId, name));
+    await show(() => sv.pending ? storyGo(userId, name, sv.pending, [`🕯️ Vous rallumez la bougie (−${STORY_EXTRA_COST} ✨).`]) : storyScenePayload(userId, name));
     return true;
   }
   // choix d'une scène
@@ -580,7 +580,7 @@ async function handleStoryInteraction(interaction, client) {
   if (ch) {
     const [, sceneId, idxText] = ch, scene = STORY[sceneId];
     if (!scene || sv.scene !== sceneId) {
-      await show(storyResume(userId, name, ["⏩ Cette page est déjà tournée : voici où vous en êtes."]));
+      await show(() => storyResume(userId, name, ["⏩ Cette page est déjà tournée : voici où vous en êtes."]));
       return true;
     }
     const notes = [], S = storyCtx(userId, notes, name);
@@ -612,7 +612,7 @@ async function handleStoryInteraction(interaction, client) {
     }
     sv.choices++;
     c.fx?.(S);
-    await show(storyGo(userId, name, typeof c.to === "function" ? c.to(S) : c.to, notes));
+    await show(() => storyGo(userId, name, typeof c.to === "function" ? c.to(S) : c.to, notes));
     return true;
   }
   // épreuve : carte choisie
@@ -620,7 +620,7 @@ async function handleStoryInteraction(interaction, client) {
   if (tm) {
     const [, sceneId, idxText] = tm, scene = STORY[sceneId];
     if (!scene || sv.scene !== sceneId) {
-      await show(storyScenePayload(userId, name));
+      await show(() => storyScenePayload(userId, name));
       return true;
     }
     const notes = [], S = storyCtx(userId, notes, name);
@@ -632,7 +632,7 @@ async function handleStoryInteraction(interaction, client) {
     notes.push(`🎲 **${c.test.label}** avec ${f ? `**${f.name}**` : "vos seules mains"} — ${Math.round(p * 100)} % de chances : **${ok ? "réussite !" : "échec…"}**`);
     c.fx?.(S);
     (ok ? c.test.okFx : c.test.koFx)?.(S);
-    await show(storyGo(userId, name, ok ? c.test.ok : c.test.ko, notes, { banner: ok ? ["RÉUSSITE", "#16a34a"] : ["ÉCHEC", "#dc2626"] }));
+    await show(() => storyGo(userId, name, ok ? c.test.ok : c.test.ko, notes, { banner: ok ? ["RÉUSSITE", "#16a34a"] : ["ÉCHEC", "#dc2626"] }));
     return true;
   }
   // duel : carte choisie, puis manches
@@ -640,7 +640,7 @@ async function handleStoryInteraction(interaction, client) {
   if (dm) {
     const [, sceneId, idxText] = dm, scene = STORY[sceneId];
     if (!scene || sv.scene !== sceneId) {
-      await show(storyScenePayload(userId, name));
+      await show(() => storyScenePayload(userId, name));
       return true;
     }
     const S = storyCtx(userId, [], name), c = sceneChoices(scene, S)[Number(idxText)];
@@ -650,14 +650,14 @@ async function handleStoryInteraction(interaction, client) {
     if (!key) d.card.card = findCard("p_pigeon") ?? Object.values(STORY_CARDS)[0];
     duelNextBoss(d);
     storyDuels.set(userId, d);
-    await show(storyDuelPayload(userId));
+    await show(() => storyDuelPayload(userId));
     return true;
   }
   const da = /^carte_hs_da_(attack|guard|ruse)$/.exec(id);
   if (da) {
     const d = storyDuels.get(userId);
     if (!d || sv.scene !== d.sceneId) {
-      await show(storyScenePayload(userId, name, ["⏩ Ce duel est terminé."]));
+      await show(() => storyScenePayload(userId, name, ["⏩ Ce duel est terminé."]));
       return true;
     }
     duelResolve(d, da[1]);
@@ -665,7 +665,7 @@ async function handleStoryInteraction(interaction, client) {
     if (!over) {
       d.round++;
       duelNextBoss(d);
-      await show(storyDuelPayload(userId));
+      await show(() => storyDuelPayload(userId));
       return true;
     }
     storyDuels.delete(userId);
@@ -675,7 +675,7 @@ async function handleStoryInteraction(interaction, client) {
     const scene = STORY[d.sceneId], S = storyCtx(userId, notes, name), c = sceneChoices(scene, S)[d.idx];
     c.fx?.(S);
     (win ? c.duel.okFx : c.duel.koFx)?.(S);
-    await show(storyGo(userId, name, win ? d.ok : d.ko, notes, { banner: win ? ["VICTOIRE", "#16a34a"] : ["DÉFAITE", "#dc2626"] }));
+    await show(() => storyGo(userId, name, win ? d.ok : d.ko, notes, { banner: win ? ["VICTOIRE", "#16a34a"] : ["DÉFAITE", "#dc2626"] }));
     return true;
   }
   // énigme : réponse
@@ -683,7 +683,7 @@ async function handleStoryInteraction(interaction, client) {
   if (rm) {
     const [, sceneId, idxText] = rm, scene = STORY[sceneId];
     if (!scene || sv.scene !== sceneId) {
-      await show(storyScenePayload(userId, name));
+      await show(() => storyScenePayload(userId, name));
       return true;
     }
     const notes = [], S = storyCtx(userId, notes, name), c = sceneChoices(scene, S)[Number(idxText)];
@@ -694,18 +694,18 @@ async function handleStoryInteraction(interaction, client) {
       sv.choices++;
       notes.push(`🧩 « ${interaction.fields.getTextInputValue("answer").slice(0, 40)} »… **c'est la bonne réponse !**`);
       c.riddle.okFx?.(S);
-      await show(storyGo(userId, name, c.riddle.ok, notes, { banner: ["RÉSOLU", "#16a34a"] }));
+      await show(() => storyGo(userId, name, c.riddle.ok, notes, { banner: ["RÉSOLU", "#16a34a"] }));
       return true;
     }
     if (tries >= 3) {
       sv.choices++;
       notes.push("🧩 Trois essais, trois échecs… il va falloir trouver une autre solution.");
       c.riddle.koFx?.(S);
-      await show(storyGo(userId, name, c.riddle.ko, notes, { banner: ["ÉCHEC", "#dc2626"] }));
+      await show(() => storyGo(userId, name, c.riddle.ko, notes, { banner: ["ÉCHEC", "#dc2626"] }));
       return true;
     }
     save();
-    await show(storyScenePayload(userId, name, [`🧩 Ce n'est pas ça… (essai ${tries}/3)${tries >= 2 && c.riddle.hint ? `\n> 💡 *${c.riddle.hint}*` : ""}`]));
+    await show(() => storyScenePayload(userId, name, [`🧩 Ce n'est pas ça… (essai ${tries}/3)${tries >= 2 && c.riddle.hint ? `\n> 💡 *${c.riddle.hint}*` : ""}`]));
     return true;
   }
   return false;
