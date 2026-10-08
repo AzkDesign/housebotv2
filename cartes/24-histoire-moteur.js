@@ -178,7 +178,7 @@ async function storyScenePayload(userId, name, notes = [], opts = {}) {
             .setLabel(label.slice(0, 80))
             .setStyle(locked ? ButtonStyle.Secondary : c.style === "danger" ? ButtonStyle.Danger : c.style === "success" ? ButtonStyle.Success : ButtonStyle.Primary)
             .setDisabled(Boolean(locked || cost))
-            .setEmoji(c.emoji ?? "▶️");
+            .setEmoji(c.emoji && /\p{Extended_Pictographic}/u.test(c.emoji) ? c.emoji : "▶️"); // Discord refuse les symboles qui ne sont pas des emojis (🂡…)
         })
       )
     );

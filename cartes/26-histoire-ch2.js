@@ -104,7 +104,7 @@ SC("c2_04", {
   choices: [
     {
       label: "Jouer une partie contre elle",
-      emoji: "🂡",
+      emoji: "🃏",
       test: {
         label: "Battre Velours au blackjack",
         diff: 62,
