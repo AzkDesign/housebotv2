@@ -2846,20 +2846,29 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
 }
 
 // la manche animée ; trop lourde pour Discord, elle est refaite plus petite ; en cas de pépin, l'ancienne animation
+// Jamais l'ancienne animation pour une question de poids : elle garde toutes ses images en mémoire (plus de
+// 120 Mo) et a déjà fait tuer le bot par Railway. Un GIF un peu lourd part tel quel (Discord accepte 10 Mo),
+// sinon il est refait plus petit. L'ancienne animation ne sert qu'en cas de vraie erreur.
+const AN_HARD_MAX = 8 * 1024 * 1024;
 async function clashGif(b, res, hp0, pre) {
   const bg = arenaBackground(AN_BW, AN_BH); // le décor (et les objets posés) avant toute attente
   try {
-    // taille de départ selon la longueur prévue de la manche (environ 95 ko par image en pleine taille)
+    // taille de départ selon la longueur prévue de la manche (environ 110 ko par image en pleine taille)
     const frames = 17 + res.events.reduce((n, ev) => n + (ev.kind === "strike" ? (ev.type === "special" ? 62 + (ev.mult !== 1 ? 13 : 0) + (ev.mult > 1 ? 18 : 0) : 27) : { ko: 21, enter: 11, counter: 17, switch: 12 }[ev.kind] ?? 5), 0);
     const finale = res.events.some((ev) => ev.kind === "strike" && ev.type === "special" && ev.to <= 0) ? 50 : 0;
-    let scale = Math.min(AN_SCALE, Math.max(0.5, Math.sqrt((AN_MAX_BYTES * 0.9) / ((frames + finale) * 95000))));
+    let scale = Math.min(AN_SCALE, Math.max(0.42, Math.sqrt((AN_MAX_BYTES * 0.9) / ((frames + finale) * 110000))));
     let out = await animeClashGif(b, res, hp0, pre, bg, scale);
-    if (out.buffer.length > AN_MAX_BYTES) {
-      scale = Math.max(0.5, scale * Math.sqrt(AN_MAX_BYTES / out.buffer.length) * 0.94);
+    for (let tries = 0; out.buffer.length > AN_MAX_BYTES && tries < 2; tries++) {
+      // un peu au-dessus de la cible mais acceptable : on garde
+      if (out.buffer.length <= AN_HARD_MAX && tries > 0) break;
+      const next = Math.max(0.32, scale * Math.sqrt(AN_MAX_BYTES / out.buffer.length) * 0.85);
+      if (next >= scale - 0.01) break;
+      scale = next;
       out = await animeClashGif(b, res, hp0, pre, bg, scale);
     }
-    if (out.buffer.length <= AN_MAX_BYTES) return out;
-    console.error(`Animation de combat trop lourde (${Math.round(out.buffer.length / 1024)} ko) : animation classique`);
+    if (out.buffer.length <= AN_HARD_MAX) return out;
+    console.error(`Animation de combat trop lourde (${Math.round(out.buffer.length / 1024)} ko) : manche sans animation`);
+    return null;
   } catch (err) {
     console.error("Animation de combat (anime):", err.stack ?? err.message);
   }
