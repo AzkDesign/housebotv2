@@ -253,7 +253,7 @@ async function tdBracket(t, W0 = 1800) {
     const x = left ? margin + r * colW + (colW - plateW) / 2 : W - margin - (r + 1) * colW + (colW - plateW) / 2;
     return { x, y: top + ((kk + 0.5) * areaH) / half - matchH / 2, w: plateW, side: left ? -1 : 1 };
   };
-  const live = (r, m) => t.started?.[r] && !t.closed?.[r] && !m.winner && m.a && m.b;
+  const live = (r, m) => !m.winner && m.opened && m.a && m.b;
   // en-têtes des tours
   ctx.textAlign = "center";
   for (let r = 0; r < R - 1; r++)
@@ -265,7 +265,7 @@ async function tdBracket(t, W0 = 1800) {
       spaced(ctx, roundShort(t, r), x, 26, 3);
       ctx.font = "12px CardText";
       ctx.fillStyle = "#94a3b8";
-      ctx.fillText(tourDayLabel(t.slots[r]), x, 44);
+      ctx.fillText(tourRoundStatus(t, r), x, 44);
     }
   // liaisons : dorées quand le vainqueur avance
   for (let r = 0; r < R - 1; r++)
@@ -321,7 +321,7 @@ async function tdBracket(t, W0 = 1800) {
   spaced(ctx, "FINALE", W / 2, f.y - 14, 6);
   ctx.font = "12px CardText";
   ctx.fillStyle = "#94a3b8";
-  ctx.fillText(tourDayLabel(t.slots[R - 1]), W / 2, f.y + matchH + 24);
+  ctx.fillText(tourRoundStatus(t, R - 1), W / 2, f.y + matchH + 24);
   return c;
 }
 
@@ -333,7 +333,7 @@ async function tdRegistration(t, W = 1800) {
   const c = createCanvas(W, H), ctx = c.getContext("2d");
   ctx.drawImage(tdStage(W, H), 0, 0);
   const open = t?.phase === "inscriptions";
-  tdTitle(ctx, W, 150, "Tournoi du week-end", 76, open ? `Inscriptions ouvertes jusqu'à ${tourDayLabel(t.close)} · élimination directe · finale dimanche à 20 h` : "Inscriptions chaque vendredi à midi · finale le dimanche à 20 h");
+  tdTitle(ctx, W, 150, "Tournoi du week-end", 76, open ? `Inscriptions ouvertes jusqu'à ${tourDayLabel(t.close)} · élimination directe · coup d'envoi dimanche à 20 h` : "Inscriptions chaque vendredi à midi · coup d'envoi le dimanche à 20 h");
   // les récompenses, sur un podium
   const px = 90, py = 280, pw = 520;
   roundRect(ctx, px, py, pw, 470, 24);
@@ -526,8 +526,8 @@ async function drawTournamentHD(t) {
   const sub = done
     ? `${t.players.length} joueurs · ${R} tours · champion : ${pseudo(t.champion)}`
     : live
-      ? `${roundName(t, r)} en cours · ${t.players.length} joueurs · finale dimanche à 20 h`
-      : `${t.players.length} joueurs · élimination directe · finale dimanche à 20 h`;
+      ? `${roundName(t, r)} en cours · ${t.players.length} joueurs · matchs enchaînés`
+      : `${t.players.length} joueurs · élimination directe · matchs enchaînés`;
   tdTitle(ctx, BW, 140, done ? "Champion du week-end" : "Tournoi du week-end", 72, sub);
   if (done) await tdPodium(ctx, t, BW, 230);
   ctx.drawImage(bracket, 0, 220 + podiumH);
@@ -547,8 +547,8 @@ async function tdRoundPoster(t, r) {
   const W = 1300, rowH = 96, H = 300 + Math.max(1, matches.length) * rowH + 40;
   const c = createCanvas(W, H), ctx = c.getContext("2d");
   ctx.drawImage(tdStage(W, H), 0, 0);
-  const final = r === t.rounds.length - 1, end = t.slots[r] + TOUR_ROUND_HOURS * 3600000;
-  tdTitle(ctx, W, 150, final ? "Grande finale" : roundName(t, r), 74, `C'est parti ! Matchs jusqu'à ${tourDayLabel(end).replace(/^\S+ à /, "")} · cliquez sur « Jouer mon match »`);
+  const final = r === t.rounds.length - 1;
+  tdTitle(ctx, W, 150, final ? "Grande finale" : roundName(t, r), 74, `C'est parti ! ${TOUR_MATCH_MIN} min par match · cliquez sur « Jouer mon match »`);
   const av = await tdAvatars(matches.flatMap((m) => [m.a, m.b]));
   matches.forEach((m, k) => {
     const y = 250 + k * rowH, cx = W / 2;

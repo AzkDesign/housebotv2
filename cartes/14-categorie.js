@@ -9,7 +9,7 @@ const CARD_CHANNELS = [
   ["arene", "⚔️・arène", "⚔️ Défis, combats en direct (un fil par combat), défi de la semaine et fin de saison"],
   ["boutique", "🛍️・boutique", "🛍️ La boutique de styles : dos de cartes, effets d'ouverture de booster et décors d'Arène"],
   ["pass", "🎟️・pass-de-combat", "🎟️ Le pass de combat du mois : votre progression, le Pass Duo de votre équipe et les classements de la saison"],
-  ["tournoi", "🏆・tournoi", "🏆 Le tournoi du week-end : inscriptions le vendredi midi, élimination directe, finale le dimanche à 20 h"],
+  ["tournoi", "🏆・tournoi", "🏆 Le tournoi du week-end : inscriptions le vendredi midi, élimination directe, coup d'envoi le dimanche à 20 h"],
   ["echanges", "🔄・échanges-et-marché", "🔄 Tables d'échange en direct (chacun pose ses cartes, puis les deux valident) et grosses ventes du marché"],
   ["histoire", "📖・mode-histoire", "📖 Les Secrets de la Maison : une enquête illustrée où vos choix changent tout. Cliquez sur « Ouvrir le livre » !"],
   ["iles", "🏝️・île", "🏝️ L'île de la Maison : gardez-la avec vos cartes (10 ✨ toutes les 10 min)… et défendez-la contre les autres membres"],
