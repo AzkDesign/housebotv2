@@ -253,7 +253,7 @@ async function tdBracket(t, W0 = 1800) {
     const x = left ? margin + r * colW + (colW - plateW) / 2 : W - margin - (r + 1) * colW + (colW - plateW) / 2;
     return { x, y: top + ((kk + 0.5) * areaH) / half - matchH / 2, w: plateW, side: left ? -1 : 1 };
   };
-  const live = (r, m) => !m.winner && m.opened && m.a && m.b;
+  const live = (r, m) => tourMatchLive(t, m);
   // en-têtes des tours
   ctx.textAlign = "center";
   for (let r = 0; r < R - 1; r++)

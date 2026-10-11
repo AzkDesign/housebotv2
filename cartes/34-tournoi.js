@@ -41,7 +41,11 @@ function roundName(t, r) {
   return left === 1 ? "Finale" : left === 2 ? "Demi-finales" : left === 3 ? "Quarts de finale" : left === 4 ? "Huitièmes de finale" : "Seizièmes de finale";
 }
 const tourDeadline = (m) => m.opened + TOUR_MATCH_MIN * MINUTE;
-const tourRoundStatus = (t, r) => (t.closed[r] ? "terminé" : t.started[r] ? "en cours" : "à suivre");
+// coup d'envoi des matchs (avant lui, aucun match n'est ouvert)
+const tourStart = (t) => t.start ?? parisAt(...TOUR_START);
+const tourLive = (t) => Date.now() >= tourStart(t);
+const tourMatchLive = (t, m) => !m.winner && m.a && m.b && m.opened >= tourStart(t);
+const tourRoundStatus = (t, r) => (t.closed[r] ? "terminé" : !tourLive(t) ? (r === 0 ? "dimanche 20 h" : "à suivre") : t.started[r] ? "en cours" : "à suivre");
 const roundShort = (t, r) => ({ Finale: "FINALE", "Demi-finales": "DEMIES", "Quarts de finale": "QUARTS", "Huitièmes de finale": "1/8", "Seizièmes de finale": "1/16" })[roundName(t, r)];
 
 // --- Tableau ---
@@ -65,6 +69,7 @@ function tourDraw(t) {
     if (!m.a || !m.b) Object.assign(m, { winner: m.a ?? m.b, how: "exempt" });
   });
   t.seeds = seeds;
+  t.start = parisAt(...TOUR_START);
   t.started = [];
   t.closed = [];
   t.phase = "rounds";
@@ -81,9 +86,9 @@ function tourPropagate(t) {
 }
 // le match en cours d'un joueur (ouvert, pas encore décidé)
 function tourMatchOf(t, userId) {
-  if (!t || t.phase !== "rounds") return null;
+  if (!t || t.phase !== "rounds" || !tourLive(t)) return null;
   for (let r = 0; r < t.rounds.length; r++) {
-    const k = t.rounds[r].findIndex((m) => !m.winner && m.opened && (m.a === userId || m.b === userId));
+    const k = t.rounds[r].findIndex((m) => tourMatchLive(t, m) && (m.a === userId || m.b === userId));
     if (k >= 0) return { r, k, m: t.rounds[r][k] };
   }
   return null;
@@ -125,12 +130,20 @@ async function tournamentTick(client) {
         .catch(() => null);
   }
   if (t.phase !== "rounds") return;
+  if (t.start == null) {
+    t.start = tourStart(t);
+    save();
+  }
+  if (now < t.start) return; // rien ne s'ouvre avant le coup d'envoi
   for (let r = 0; r < t.rounds.length; r++) {
     // un match s'ouvre dès que ses deux joueurs sont connus : les joueurs sont prévenus
-    const opening = t.rounds[r].filter((m) => !m.winner && m.a && m.b && !m.opened);
+    // (un match ouvert trop tôt est rouvert au coup d'envoi, avec un nouveau message)
+    const opening = t.rounds[r].filter((m) => !m.winner && m.a && m.b && !(m.opened >= t.start));
     for (const m of opening) {
+      const early = m.opened != null || m.notified;
       m.opened = now;
-      if (!m.notified)
+      if (early) Object.assign(m, { ready: {}, showed: {} }); // une présence avant le coup d'envoi ne compte pas
+      if (!m.notified || early)
         for (const [me, foe] of [[m.a, m.b], [m.b, m.a]])
           client.users
             .fetch(me)
@@ -143,8 +156,8 @@ async function tournamentTick(client) {
       tourDirty = true;
     }
     // premier match ouvert du tour : affiche dans le salon
-    if (opening.length && !t.started[r]) {
-      t.started[r] = true;
+    if (opening.length && !(t.posted ??= [])[r]) {
+      t.started[r] = t.posted[r] = true;
       save();
       const poster = await tdRoundPoster(t, r).catch(() => null);
       await chan("tournoi")
@@ -157,7 +170,7 @@ async function tournamentTick(client) {
     }
     // délai écoulé : forfaits et tirages au sort
     for (const m of t.rounds[r]) {
-      if (m.winner || !m.opened || now < tourDeadline(m) || (m.battle && battles.has(m.battle))) continue; // un match se termine encore
+      if (!tourMatchLive(t, m) || now < tourDeadline(m) || (m.battle && battles.has(m.battle))) continue; // un match se termine encore
       const sa = !!m.showed[m.a], sb = !!m.showed[m.b];
       if (sa !== sb) Object.assign(m, { winner: sa ? m.a : m.b, how: "forfait" });
       else Object.assign(m, { winner: Math.random() < 0.5 ? m.a : m.b, how: "tirage" });
@@ -360,7 +373,7 @@ async function drawTournament(t) {
         ctx.stroke();
       }
       roundRect(ctx, x, y, boxW, boxH, 9);
-      ctx.fillStyle = live && !m.winner && m.opened ? "rgba(22,101,52,0.55)" : "rgba(15,23,42,0.85)";
+      ctx.fillStyle = live && tourMatchLive(t, m) ? "rgba(22,101,52,0.55)" : "rgba(15,23,42,0.85)";
       ctx.fill();
       ctx.strokeStyle = m.winner ? "rgba(251,191,36,0.75)" : "rgba(148,163,184,0.4)";
       ctx.lineWidth = 1.5;
@@ -413,7 +426,7 @@ async function tournamentPayload() {
   else if (t.phase === "inscriptions") desc = `✍️ **Inscriptions ouvertes** jusqu'à ${tourWhen(t.close)} (${tourRel(t.close)}).\n**${t.players.length} / ${tourMax()}** inscrits · il faut au moins ${TOUR_MIN} joueurs.\n\nLe tableau est tiré selon le classement de l'Arène : les mieux classés peuvent être exemptés du premier tour.`;
   else if (t.phase === "rounds") {
     const r = t.closed.filter(Boolean).length;
-    desc = `⚔️ **${roundName(t, Math.min(r, t.rounds.length - 1))}** en cours. Les matchs s'enchaînent : chaque match s'ouvre dès que les deux adversaires sont connus et doit être joué dans les **${TOUR_MATCH_MIN} minutes**. Qualifiés : cliquez sur **Jouer mon match** — le combat démarre quand les deux joueurs sont prêts.`;
+    desc = !tourLive(t) ? `⏳ Le tableau est tiré ! Coup d'envoi <t:${Math.floor(tourStart(t) / 1000)}:F> (${tourRel(tourStart(t))}) : chaque match devra être joué dans les **${TOUR_MATCH_MIN} minutes**, et les suivants s'enchaînent.` : `⚔️ **${roundName(t, Math.min(r, t.rounds.length - 1))}** en cours. Les matchs s'enchaînent : chaque match s'ouvre dès que les deux adversaires sont connus et doit être joué dans les **${TOUR_MATCH_MIN} minutes**. Qualifiés : cliquez sur **Jouer mon match** — le combat démarre quand les deux joueurs sont prêts.`;
   } else desc = `🏆 **${pseudo(t.champion)}** remporte le tournoi !\n🥈 ${pseudo(t.podium.finalist)}${t.podium.semis.length ? ` · 🥉 ${t.podium.semis.map(pseudo).join(", ")}` : ""}\n\nProchain tournoi : vendredi à midi.`;
   return {
     embeds: [new EmbedBuilder().setColor(0xf59e0b).setTitle("🏆 Tournoi du week-end").setDescription(desc).setImage("attachment://tournoi.jpg")],
@@ -469,7 +482,7 @@ function tourMePayload(userId) {
       text = `⚔️ **${roundName(t, cur.r)}** contre **${pseudo(foe)}**, à jouer avant <t:${Math.floor(end / 1000)}:t> (${tourRel(end)}).${cur.m.ready[foe] > Date.now() - TOUR_READY_MIN * MINUTE ? "\n🟢 Votre adversaire est prêt : lancez le match !" : ""}`;
     } else {
       const nr = t.rounds.findIndex((round) => round.some((m) => !m.winner && (m.a === userId || m.b === userId)));
-      text = nr >= 0 ? `✅ Qualifié ! Prochain match : **${roundName(t, nr).toLowerCase()}**, il s'ouvre dès que votre adversaire est connu.` : "✅ Qualifié ! En attente des autres matchs.";
+      text = nr >= 0 ? `✅ Qualifié ! Prochain match : **${roundName(t, nr).toLowerCase()}**, ${tourLive(t) ? "il s'ouvre dès que votre adversaire est connu" : `à partir du coup d'envoi <t:${Math.floor(tourStart(t) / 1000)}:t> (${tourRel(tourStart(t))})`}.` : "✅ Qualifié ! En attente des autres matchs.";
     }
   }
   return { content: `🏆 **Tournoi du week-end**\n${text}`, ephemeral: true };
