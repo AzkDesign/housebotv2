@@ -183,6 +183,19 @@ async function registerSlashCommands(client, token) {
       .setDescription("Vos boosters de cartes, votre collection et vos statistiques")
       .addUserOption((o) => o.setName("membre").setDescription("Voir l'inventaire d'un autre membre"))
       .toJSON(),
+    new SlashCommandBuilder()
+      .setName("convocation")
+      .setDescription("Convoquer un membre dans le Bureau de la Chef Chloé (Direction uniquement)")
+      .addUserOption((o) => o.setName("membre").setDescription("Le membre convoqué").setRequired(true))
+      .addStringOption((o) => o.setName("heure").setDescription("Heure du rendez-vous, ex. 14h30").setRequired(true).setMaxLength(8))
+      .addStringOption((o) => o.setName("motif").setDescription("Le motif de la convocation").setRequired(true).setMaxLength(300))
+      .addStringOption((o) =>
+        o
+          .setName("jour")
+          .setDescription("Jour du rendez-vous (demain par défaut)")
+          .addChoices({ name: "Demain", value: "demain" }, { name: "Aujourd'hui", value: "aujourdhui" }, { name: "Après-demain", value: "apres_demain" })
+      )
+      .toJSON(),
   ];
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -195,7 +208,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir et /generation enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir, /generation et /convocation enregistrées");
 }
 
 module.exports = { registerSlashCommands };
