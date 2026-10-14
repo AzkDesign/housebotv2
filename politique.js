@@ -202,6 +202,7 @@ const LAWS = {
 
 function lawEffect(key, param) {
   const law = LAWS[key];
+  if (!law) return load().laws?.[key]?.text ?? ""; // loi libre écrite par le maire
   return typeof law.effect === "function" ? law.effect(param ?? law.param?.default) : law.effect;
 }
 
@@ -218,11 +219,12 @@ function listLaws() {
   return Object.entries(load().laws ?? {}).map(([key, l]) => ({ key, ...l, ...LAWS[key] }));
 }
 
-function enactLaw(key, param, how) {
+// extra : nom, emoji et texte d'une loi libre
+function enactLaw(key, param, how, extra = {}) {
   const s = load();
   s.laws ??= {};
   s.lawCounter = (s.lawCounter ?? 0) + 1;
-  s.laws[key] = { param: param ?? null, number: s.lawCounter, since: Date.now(), how };
+  s.laws[key] = { ...extra, param: param ?? null, number: s.lawCounter, since: Date.now(), how };
   save();
   return s.laws[key];
 }
