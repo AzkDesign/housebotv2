@@ -204,6 +204,21 @@ async function registerSlashCommands(client, token) {
       .addStringOption((o) => o.setName("preuves").setDescription("Éléments du dossier (facultatif)").setMaxLength(400))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("enchere")
+      .setDescription("Mettre quelque chose aux enchères : le plus offrant l'emporte")
+      .addStringOption((o) => o.setName("objet").setDescription("Ce que vous vendez").setRequired(true).setMaxLength(80))
+      .addIntegerOption((o) => o.setName("prix").setDescription("Mise à prix (€)").setRequired(true).setMinValue(1).setMaxValue(10_000_000))
+      .addIntegerOption((o) =>
+        o
+          .setName("duree")
+          .setDescription("Durée de la vente")
+          .setRequired(true)
+          .addChoices({ name: "1 heure", value: 1 }, { name: "6 heures", value: 6 }, { name: "12 heures", value: 12 }, { name: "24 heures", value: 24 }, { name: "48 heures", value: 48 }, { name: "72 heures", value: 72 })
+      )
+      .addStringOption((o) => o.setName("description").setDescription("Quelques mots sur l'objet").setMaxLength(300))
+      .addAttachmentOption((o) => o.setName("image").setDescription("Une photo de l'objet"))
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("casier")
       .setDescription("Voir le casier judiciaire d'un membre")
       .addUserOption((o) => o.setName("membre").setDescription("Le membre (vous par défaut)"))
@@ -220,7 +235,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir, /generation, /convocation, /proces et /casier enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir, /generation, /convocation, /proces, /casier et /enchere enregistrées");
 }
 
 module.exports = { registerSlashCommands };
