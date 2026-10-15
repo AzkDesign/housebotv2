@@ -526,6 +526,24 @@ async function setupProces(client) {
   console.log("Tribunal prêt");
 }
 
+// sentence en cours de choix par le juge : « affaire:juge » -> peines
+const sentenceDrafts = new Map();
+function sentenceRows(tr, picked) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`proc_vsel_${tr.no}`)
+        .setPlaceholder("Sentence prononcée…")
+        .setMinValues(1)
+        .setMaxValues(4)
+        .addOptions(Object.entries(SANCTIONS).map(([k, sc]) => ({ label: sc.label, value: k, emoji: sc.emoji, description: sc.desc, default: picked.includes(k) })))
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`proc_vgo_${tr.no}`).setLabel(`Prononcer : ${picked.map((k) => SANCTIONS[k].label).join(" + ")}`.slice(0, 80)).setEmoji("⚖️").setStyle(ButtonStyle.Danger)
+    ),
+  ];
+}
+
 // --- Interactions ---
 async function handleProcesInteraction(interaction, client) {
   if (interaction.isChatInputCommand?.() && interaction.commandName === "casier") {
@@ -618,7 +636,7 @@ async function handleProcesInteraction(interaction, client) {
   }
 
   const id = interaction.customId;
-  const m = typeof id === "string" ? /^proc_(delib|classer|vote|verdict|vsel|vm|tig)_(\d+)(?:_(\w+))?$/.exec(id) : null;
+  const m = typeof id === "string" ? /^proc_(delib|classer|vote|verdict|vsel|vgo|vm|tig)_(\d+)(?:_(\w+))?$/.exec(id) : null;
   if (!m) return false;
   const [, action, no, extra] = m;
   const tr = load().trials[no];
@@ -678,6 +696,7 @@ async function handleProcesInteraction(interaction, client) {
   if (action === "verdict") {
     if (!judge || interaction.user.id === tr.accusedId) return interaction.reply({ content: "⛔ Seul le juge (ou la Direction) rend le verdict.", ephemeral: true }).then(() => true);
     const t = tally(tr), choice = juryChoice(tr);
+    sentenceDrafts.set(`${tr.no}:${interaction.user.id}`, choice);
     const summary = t.voters
       ? Object.entries(SANCTIONS)
           .map(([k, s]) => `${s.emoji} ${s.label} : **${t.counts[k]}**`)
@@ -685,23 +704,22 @@ async function handleProcesInteraction(interaction, client) {
       : "*Aucun juré n'a voté.*";
     await interaction.reply({
       ephemeral: true,
-      content: `⚖️ **Votes du jury** (${t.voters} juré${t.voters > 1 ? "s" : ""}) :\n${summary}\n\nLa décision du jury est présélectionnée. Confirmez la sentence (vous pouvez l'ajuster) :`,
-      components: [
-        new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`proc_vsel_${tr.no}`)
-            .setPlaceholder("Sentence prononcée…")
-            .setMinValues(1)
-            .setMaxValues(4)
-            .addOptions(Object.entries(SANCTIONS).map(([k, s]) => ({ label: s.label, value: k, emoji: s.emoji, description: s.desc, default: choice.includes(k) })))
-        ),
-      ],
+      content: `⚖️ **Votes du jury** (${t.voters} juré${t.voters > 1 ? "s" : ""}) :\n${summary}\n\nLa décision du jury est présélectionnée : ajustez-la si besoin dans le menu, puis cliquez sur **Prononcer**.`,
+      components: sentenceRows(tr, choice),
     });
     return true;
   }
+  // le menu mémorise seulement le choix (Discord ne réagit pas si l'on garde la présélection)
   if (action === "vsel") {
     let picked = interaction.values;
     if (picked.includes("acquitte")) picked = ["acquitte"];
+    sentenceDrafts.set(`${tr.no}:${interaction.user.id}`, picked);
+    await interaction.update({ components: sentenceRows(tr, picked) });
+    return true;
+  }
+  if (action === "vgo") {
+    if (!judge || interaction.user.id === tr.accusedId) return interaction.reply({ content: "⛔ Seul le juge (ou la Direction) rend le verdict.", ephemeral: true }).then(() => true);
+    const picked = sentenceDrafts.get(`${tr.no}:${interaction.user.id}`) ?? juryChoice(tr);
     const flags = picked.map((k) => FLAG[k]).join("");
     const rows = [];
     if (picked.includes("amende")) rows.push(new TextInputBuilder().setCustomId("amount").setLabel("Montant de l'amende (€)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(12).setPlaceholder("Ex. : 5000"));
