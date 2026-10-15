@@ -196,6 +196,18 @@ async function registerSlashCommands(client, token) {
           .addChoices({ name: "Demain", value: "demain" }, { name: "Aujourd'hui", value: "aujourdhui" }, { name: "Après-demain", value: "apres_demain" })
       )
       .toJSON(),
+    new SlashCommandBuilder()
+      .setName("proces")
+      .setDescription("Ouvrir un procès contre un membre devant le jury de la Fondation (Direction uniquement)")
+      .addUserOption((o) => o.setName("membre").setDescription("L'accusé(e)").setRequired(true))
+      .addStringOption((o) => o.setName("accusation").setDescription("Ce qui lui est reproché").setRequired(true).setMaxLength(400))
+      .addStringOption((o) => o.setName("preuves").setDescription("Éléments du dossier (facultatif)").setMaxLength(400))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName("casier")
+      .setDescription("Voir le casier judiciaire d'un membre")
+      .addUserOption((o) => o.setName("membre").setDescription("Le membre (vous par défaut)"))
+      .toJSON(),
   ];
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -208,7 +220,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir, /generation et /convocation enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir, /generation, /convocation, /proces et /casier enregistrées");
 }
 
 module.exports = { registerSlashCommands };

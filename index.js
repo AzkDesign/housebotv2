@@ -81,6 +81,7 @@ const { handleProfilCommand } = require("./profil");
 const { setupEspaces, handleEspacesInteraction, isProtectedChannel, publishMixiteAnnouncement } = require("./espaces");
 const { publishV3Announcement, publishV3Video, publishRecruitmentAnnouncement, publishSecurityAlert, publishSecurityEnd } = require("./annonce");
 const { setupConvocations, handleConvocationInteraction } = require("./convocations");
+const { setupProces, handleProcesInteraction } = require("./proces");
 const { setupLogs } = require("./logs");
 const { handleRelayMessage, handleRelayInteraction } = require("./relais");
 const { startInactivityWatcher } = require("./tickets");
@@ -574,6 +575,7 @@ client.once(Events.ClientReady, async () => {
   await step("Cartes de la Maison", () => setupCartes(client));
   await step("Guide de la Maison", () => setupGuide(client));
   await step("Convocations", () => setupConvocations(client));
+  await step("Tribunal", () => setupProces(client));
   await step("annonce V3", () => publishV3Announcement(client));
   await step("vidéo V3", () => publishV3Video(client));
   await step("annonce recrutement", () => publishRecruitmentAnnouncement(client));
@@ -609,6 +611,7 @@ async function onInteraction(interaction) {
   }
   if (await handleRelayInteraction(interaction, client)) return;
   if (await handleConvocationInteraction(interaction, client)) return;
+  if (await handleProcesInteraction(interaction, client)) return;
   if (await handleStarInteraction(interaction, client)) return;
   if (await handleLoisInteraction(interaction, client)) return;
   if (await handleCartesInteraction(interaction, client)) return;
