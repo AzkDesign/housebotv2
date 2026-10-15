@@ -289,7 +289,7 @@ async function handleCartesInteraction(interaction, client) {
     }
     if (ch.mise) {
       if (changeBalance(ch.from.id, -ch.mise, `Mise de combat contre ${ch.toName}`) === null) {
-        await interaction.reply({ content: `❌ ${ch.fromName} n'a plus assez d'argent pour la mise.`, ephemeral: true });
+        await interaction.reply({ content: `❌ ${ch.fromName} n'a plus assez de pièces pour la mise.`, ephemeral: true });
         return true;
       }
       if (changeBalance(ch.to.id, -ch.mise, `Mise de combat contre ${ch.fromName}`) === null) {
@@ -337,13 +337,13 @@ async function handleCartesInteraction(interaction, client) {
           new ModalBuilder()
             .setCustomId(`carte_bt_bf_${bid}_${side}`)
             .setTitle(`Parier sur ${b.players[side].name}`.slice(0, 45))
-            .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("mise").setLabel("Montant du pari (100 € minimum)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10)))
+            .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("mise").setLabel("Montant du pari (100 pièces minimum)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10)))
         );
         return true;
       }
       const amount = parseAmount(interaction.fields.getTextInputValue("mise"));
       if (!Number.isFinite(amount) || amount < 100 || amount > 1000000) {
-        await interaction.reply({ content: "❌ Pari invalide : entre 100 € et 1 000 000 €.", ephemeral: true });
+        await interaction.reply({ content: "❌ Pari invalide : entre 100 et 1 000 000 pièces.", ephemeral: true });
         return true;
       }
       if (b.bets.some((x) => x.userId === userId && x.side !== side)) {
@@ -587,7 +587,7 @@ async function handleCartesInteraction(interaction, client) {
     const key = id.slice("carte_mk_pf_".length), card = cardOfKey(key);
     const price = parseAmount(interaction.fields.getTextInputValue("prix"));
     if (!card || !Number.isFinite(price) || price < 10 || price > 100000000) {
-      await interaction.reply({ content: "❌ Prix invalide : entrez un montant entre 10 € et 100 000 000 €.", ephemeral: true });
+      await interaction.reply({ content: "❌ Prix invalide : entrez un montant entre 10 et 100 000 000 pièces.", ephemeral: true });
       return true;
     }
     if (load().market.filter((l) => l.seller === userId).length >= MARKET_MAX) {
@@ -694,10 +694,10 @@ async function handleCartesInteraction(interaction, client) {
       await interaction.showModal(
         new ModalBuilder()
           .setCustomId("carte_tr_mf")
-          .setTitle("Argent dans l'échange")
+          .setTitle("Pièces dans l'échange")
           .addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("give").setLabel("Argent que vous donnez (€)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(d.giveMoney ? String(d.giveMoney) : "")),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("take").setLabel(`Argent que vous demandez à ${d.toName}`.slice(0, 45)).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(d.takeMoney ? String(d.takeMoney) : ""))
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("give").setLabel("Pièces que vous donnez").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(d.giveMoney ? String(d.giveMoney) : "")),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("take").setLabel(`Pièces que vous demandez à ${d.toName}`.slice(0, 45)).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(d.takeMoney ? String(d.takeMoney) : ""))
           )
       );
       return true;
@@ -705,7 +705,7 @@ async function handleCartesInteraction(interaction, client) {
     if (id === "carte_tr_mf") {
       const give = parseAmount(interaction.fields.getTextInputValue("give") || "0"), take = parseAmount(interaction.fields.getTextInputValue("take") || "0");
       if (![give, take].every((v) => Number.isFinite(v) && v >= 0 && v <= 100000000)) {
-        await interaction.reply({ content: "❌ Montant invalide (entre 0 et 100 000 000 €).", ephemeral: true });
+        await interaction.reply({ content: "❌ Montant invalide (entre 0 et 100 000 000 pièces).", ephemeral: true });
         return true;
       }
       if (give > readBalance(userId)) {
@@ -1213,7 +1213,7 @@ async function cacheMember(member) {
     role,
     joinedAt: member.joinedTimestamp,
     messages,
-    balance: readBalance(member.id) ?? 0,
+    balance: realReadBalance(member.id) ?? 0, // la « fortune » d'une carte de membre : ses vrais euros
   };
   memberCache.set(member.id, info);
   load().memberArchive[member.id] = info;

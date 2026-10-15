@@ -1052,9 +1052,10 @@ async function inventoryPayload(user, own) {
     .setColor(0xe9c46a)
     .setTitle(`🎒 Inventaire de ${user.displayName ?? user.username}`)
     .setDescription(
-      packs.length
-        ? `**Boosters en réserve**\n${packs.map(([k, n]) => `${packLabel(k)} — **×${n}**`).join("\n")}`
-        : "*Aucun booster en réserve.* Achetez-en dans le salon des cartes ou dans la boutique."
+      `**${formatEuro(readBalance(userId))}** · ✨ **${(load().dust[userId] ?? 0).toLocaleString("fr-FR")}** poussières\n\n` +
+        (packs.length
+          ? `**Boosters en réserve**\n${packs.map(([k, n]) => `${packLabel(k)} — **×${n}**`).join("\n")}`
+          : "*Aucun booster en réserve.* Achetez-en dans le salon des cartes ou dans la boutique.")
     )
     .setImage("attachment://inventaire.jpg")
     .setFooter({ text: `${G.name} — ${G.title} · les boosters ne périment jamais` });

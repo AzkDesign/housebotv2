@@ -112,12 +112,15 @@ function coinIcon(ctx, x, y, r) {
   ctx.beginPath();
   ctx.arc(x, y, r * 0.78, 0, TAU);
   ctx.stroke();
+  // une pièce de la Maison : un petit losange au centre
   ctx.fillStyle = "#78350f";
-  ctx.font = `${Math.round(r * 1.1)}px CardTitle`;
-  const align = ctx.textAlign;
-  ctx.textAlign = "center";
-  ctx.fillText("€", x, y + r * 0.38);
-  ctx.textAlign = align;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r * 0.42);
+  ctx.lineTo(x + r * 0.3, y);
+  ctx.lineTo(x, y + r * 0.42);
+  ctx.lineTo(x - r * 0.3, y);
+  ctx.closePath();
+  ctx.fill();
 }
 // fond commun : velours, guillochis, cadre doré et coins ornés
 function velvet(ctx, W, H) {
@@ -388,7 +391,7 @@ function priceModal(key) {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId("prix")
-          .setLabel(`Prix de vente en € (cote : ${euro(coteOf(key))})`.slice(0, 45))
+          .setLabel(`Prix en pièces (cote : ${euro(coteOf(key))})`.slice(0, 45))
           .setPlaceholder(`Par exemple ${Math.round(coteOf(key))}`)
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
@@ -665,7 +668,7 @@ async function draftPayload(d) {
     .setDescription(
       "**1.** Choisissez les cartes que vous **donnez** (jusqu'à 5)\n" +
         `**2.** Choisissez les cartes que vous **demandez** à ${d.toName} (jusqu'à 5)\n` +
-        "**3.** Ajoutez de l'argent si besoin avec 💶\n" +
+        "**3.** Ajoutez des pièces si besoin avec 🪙\n" +
         "**4.** Envoyez : la proposition s'affiche dans le salon des cartes et l'autre membre a 24 h pour répondre."
     )
     .setImage("attachment://echange.jpg");
@@ -678,7 +681,7 @@ async function draftPayload(d) {
       new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId("carte_tr_tf").setPlaceholder(`Cartes de ${d.toName} : série`.slice(0, 150)).addOptions(seriesOptions(d.tf))),
       new ActionRowBuilder().addComponents(cardSelect("carte_tr_take", `Cartes que je demande à ${d.toName}…`.slice(0, 150), ownedKeys(d.to, d.tf), d.take)),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("carte_tr_money").setLabel("Argent").setEmoji("💶").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("carte_tr_money").setLabel("Pièces").setEmoji("🪙").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("carte_tr_send").setLabel("Envoyer la proposition").setEmoji("✉️").setStyle(ButtonStyle.Success).setDisabled(!d.give.length && !d.take.length && !d.giveMoney && !d.takeMoney),
         new ButtonBuilder().setCustomId("carte_tr_cancel").setLabel("Abandonner").setStyle(ButtonStyle.Danger)
       ),
@@ -701,8 +704,8 @@ function tradeProblem(tr) {
   if (a) return `${tr.fromName} ne possède plus **${keyLabel(a)}**.`;
   const b = need(tr.to, tr.take);
   if (b) return `${tr.toName} ne possède plus **${keyLabel(b)}**.`;
-  if (tr.giveMoney && readBalance(tr.from) < tr.giveMoney) return `${tr.fromName} n'a plus assez d'argent.`;
-  if (tr.takeMoney && readBalance(tr.to) < tr.takeMoney) return `${tr.toName} n'a pas assez d'argent.`;
+  if (tr.giveMoney && readBalance(tr.from) < tr.giveMoney) return `${tr.fromName} n'a plus assez de pièces.`;
+  if (tr.takeMoney && readBalance(tr.to) < tr.takeMoney) return `${tr.toName} n'a pas assez de pièces.`;
   return null;
 }
 function tradeButtons(id) {
@@ -714,7 +717,7 @@ function tradeButtons(id) {
 }
 function tradeEmbed(tr, extra = "") {
   const [label] = TRADE_STATUS[tr.status] ?? TRADE_STATUS.pending;
-  const list = (keys, money) => [...keys.map((k) => `${RARITIES[cardOfKey(k)?.rarity]?.emoji ?? "▫️"} ${keyLabel(k)}`), ...(money ? [`💶 ${formatEuro(money)}`] : [])].join("\n") || "*Rien*";
+  const list = (keys, money) => [...keys.map((k) => `${RARITIES[cardOfKey(k)?.rarity]?.emoji ?? "▫️"} ${keyLabel(k)}`), ...(money ? [`${formatEuro(money)}`] : [])].join("\n") || "*Rien*";
   return new EmbedBuilder()
     .setColor(parseInt((TRADE_STATUS[tr.status] ?? TRADE_STATUS.pending)[1].slice(1), 16))
     .setTitle(`🔄 ${label.charAt(0) + label.slice(1).toLowerCase()}`)

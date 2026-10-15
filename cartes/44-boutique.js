@@ -1,6 +1,6 @@
 
 // --- Boutique de styles : dos de cartes, effets d'ouverture de booster, décors d'Arène ---
-// Des cosmétiques seulement (aucun effet sur la force des cartes). Payés en poussière d'étoile ou en euros ;
+// Des cosmétiques seulement (aucun effet sur la force des cartes). Payés en poussière d'étoile ou en pièces ;
 // quelques-uns sont limités (Halloween) ou exclusifs (champion du tournoi). Une vitrine change chaque semaine.
 const SHOP_ITEMS = [
   // dos de cartes (inspirés des protège-cartes : fond, motif, grande créature)
@@ -62,7 +62,7 @@ function shopFeatured() {
 const SHOP_PROMO = 0.25;
 const shopPrice = (it) => (shopFeatured().includes(it) ? Math.round(it.price * (1 - SHOP_PROMO)) : it.price);
 const priceText = (it, p = shopPrice(it)) => (it.cur === "euro" ? formatEuro(p) : `${p.toLocaleString("fr-FR")} ✨`);
-const priceCanvas = (it, p = shopPrice(it)) => (it.cur === "euro" ? `${p.toLocaleString("fr-FR")} €` : `${p.toLocaleString("fr-FR")} poussières`);
+const priceCanvas = (it, p = shopPrice(it)) => (it.cur === "euro" ? `${p.toLocaleString("fr-FR")} pièces` : `${p.toLocaleString("fr-FR")} poussières`);
 
 // --- Dos de cartes ---
 const backCache2 = new Map();

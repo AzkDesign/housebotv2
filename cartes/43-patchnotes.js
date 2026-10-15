@@ -2,6 +2,27 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.14",
+    color: 0xf59e0b,
+    parts: [
+      [
+        "🪙 Les pièces : la monnaie du jeu de cartes",
+        "Le jeu de cartes a maintenant **sa propre monnaie : les pièces 🪙**, séparée des **euros** de la Maison.\n" +
+          "• Quêtes, séries complètes, pass, tournoi, combats gagnés : tout rapporte des **pièces**.\n" +
+          "• Boosters, marché, échanges, mises et paris de l'Arène, pass Premium, boutique de styles : tout se paie en **pièces**.\n" +
+          "• Vos **euros** ne bougent plus avec les cartes : ils restent pour la vraie économie de la Maison.\n" +
+          "• 🎁 Chaque joueur reçoit **2 000 🪙** pour démarrer. Votre solde s'affiche dans `/inventaire`.",
+      ],
+      [
+        "🆕 Et aussi dans la Maison",
+        "• ⚽ **Paris sportifs** sur les vrais matchs (Ligue 1, Ligue des champions, équipe de France…), en euros, de 10 à 500 € par pari.\n" +
+          "• 🔨 **Enchères** : vendez au plus offrant avec `/enchere`.\n" +
+          "• ⚖️ **Tribunal** : `/proces` devant le jury de la Fondation, et `/casier`.",
+      ],
+    ],
+    footer: "Bon jeu ! 🪙",
+  },
+  {
     version: "1.13",
     color: 0x2563eb,
     parts: [

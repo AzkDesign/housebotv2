@@ -1,7 +1,7 @@
 
 // --- Pass de combat : une saison par mois, 30 paliers, une voie gratuite et une voie Premium ---
 // L'XP se gagne en jouant (boosters, combats, échanges, île, Clash, tournoi…), avec un plafond par jour.
-// Les récompenses : poussière d'étoile, boosters, euros et ressources du Clash. Aucune carte n'est créée.
+// Les récompenses : poussière d'étoile, boosters, pièces et ressources du Clash. Aucune carte n'est créée.
 const PASS_TIERS = 30, PASS_TIER_XP = 400, PASS_DAY_CAP = 1200, PASS_PRICE = 8000, PASS_PAGE = 10;
 const PASS_XP = {
   // actions suivies par les quêtes
@@ -123,14 +123,19 @@ function passIcon(ctx, r, x, y, s, lit) {
     iconCrystal(ctx, x + s * 0.4, y, s * 0.5);
   } else if (r.money) {
     const g = ctx.createRadialGradient(x - s * 0.2, y - s * 0.2, 1, x, y, s * 0.7);
-    g.addColorStop(0, "#ecfccb");
-    g.addColorStop(0.5, "#84cc16");
-    g.addColorStop(1, "#365314");
+    g.addColorStop(0, "#fff7d6");
+    g.addColorStop(0.5, "#f59e0b");
+    g.addColorStop(1, "#92400e");
     disc(ctx, x, y, s * 0.65, g);
-    ctx.fillStyle = "#1a2e05";
-    ctx.textAlign = "center";
-    ctx.font = `${Math.round(s * 0.7)}px CardTitle`;
-    ctx.fillText("€", x, y + s * 0.25);
+    // une pièce de la Maison : un losange au centre
+    ctx.fillStyle = "#78350f";
+    ctx.beginPath();
+    ctx.moveTo(x, y - s * 0.3);
+    ctx.lineTo(x + s * 0.22, y);
+    ctx.lineTo(x, y + s * 0.3);
+    ctx.lineTo(x - s * 0.22, y);
+    ctx.closePath();
+    ctx.fill();
   } else {
     glow(ctx, x, y, s * 1.2, "#c4b5fd", 0.4);
     sparkle(ctx, x, y, s * 0.55, "#ede9fe");
@@ -320,7 +325,7 @@ const PASS_HELP = () =>
         `• Échange : ${PASS_XP.trade} · vente au marché : ${PASS_XP.market} · carte sauvage : ${PASS_XP.wild}\n` +
         `• Quêtes réclamées : ${PASS_XP.quests} · conquête de l'île : ${PASS_XP.islands}\n` +
         `• Clash : ${PASS_XP.clashStars} par étoile, ${PASS_XP.clashBuild} par chantier · tournoi gagné : ${PASS_XP.tourneyWins}\n\n` +
-        `**Récompenses** : poussière d'étoile, boosters (Standard, Premium, Prestige), euros, or et essence pour le Clash.\n` +
+        `**Récompenses** : poussière d'étoile, boosters (Standard, Premium, Prestige), pièces 🪙, or et essence pour le Clash.\n` +
         `⭐ **Premium** (${formatEuro(PASS_PRICE)}) : une 2ᵉ voie bien plus riche, valable toute la saison, y compris pour les paliers déjà atteints.\n` +
         "À la fin du mois, les récompenses débloquées et pas encore réclamées sont versées automatiquement."
     );

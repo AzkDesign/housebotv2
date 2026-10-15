@@ -253,7 +253,7 @@ async function panelMessage() {
             `👑 **Prestige** — 4 cartes **sans commune** dont une **épique** garantie · **${formatEuro(boosterPrice("prestige"))}**${soldes}${stockShort("prestige")}\n` +
             `🎁 **Booster gratuit** — ${daily} chaque jour\n\n` +
             "🎒 Les boosters achetés vont dans votre **inventaire** (`/inventaire`) : ouvrez-les tout de suite ou gardez-les. Seuls les boosters de la génération en cours sont vendus.\n" +
-            "🏪 **Marché** (`/marche`) : achetez et vendez des cartes entre membres · 🔄 **Échanges** (`/echange`) : proposez cartes et argent contre cartes.\n" +
+            "🏪 **Marché** (`/marche`) : achetez et vendez des cartes entre membres · 🔄 **Échanges** (`/echange`) : proposez cartes, boosters et pièces contre cartes.\n" +
             "⚔️ **Arène** (`/combat`) : combats de cartes en direct, avec mises, paris et classement.\n" +
             "🎯 **Quêtes du jour** (`/quetes`) · ❔ **Guide complet** (`/aide-cartes`)\n" +
             (activeSeason() ? `${PACKS[SEASONAL[activeSeason()].pack].emoji} **${SEASONAL[activeSeason()].name} — ${SEASONAL[activeSeason()].title}** : booster **${PACKS[SEASONAL[activeSeason()].pack].name}** en édition limitée (${SEASONAL[activeSeason()].dates}) · **${formatEuro(boosterPrice(SEASONAL[activeSeason()].pack))}**\n` : "") +

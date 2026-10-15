@@ -16,7 +16,8 @@ const {
   PermissionFlagsBits,
 } = require("discord.js");
 const { createCanvas, loadImage, GlobalFonts, Path2D } = require("@napi-rs/canvas");
-const { changeBalance, readBalance, formatEuro, refreshRichestLeaderboard, isGerant } = require("./economie");
+// Les euros du serveur ne servent plus au jeu de cartes (seulement à la « fortune » des cartes de membres)
+const { readBalance: realReadBalance, refreshRichestLeaderboard, isGerant } = require("./economie");
 const { lawActive, lawParam } = require("./politique");
 const { findOrCreateChannel, findOrCreateRole } = require("./salons");
 const { deleteLater, MINUTE } = require("./nettoyage");
@@ -184,6 +185,40 @@ const SHINY_CHANCE = 1 / 250;
 
 const SECTOR_EMOJI = { transport: "🚕", restauration: "🍽️", garage: "🔧", beaute: "💆", evenementiel: "🎉", securite: "🛡️", media: "📸", immobilier: "🏢", commerce: "🛍️" };
 
+// --- Pièces 🪙 : la monnaie du jeu de cartes ---
+// Séparée des euros du serveur : boosters, marché, échanges, combats, paris de l'Arène, quêtes, pass, tournoi,
+// boutique de styles… tout se gagne et se paie en pièces. Les euros restent pour la vraie économie de la Maison.
+const COIN = "🪙";
+const COINS_START = 2000; // pièces offertes au lancement (joueurs existants) et à chaque nouveau joueur
+function readBalance(userId) {
+  return load().coins[userId] ?? 0;
+}
+// même usage que l'ancien changeBalance des euros : renvoie le nouveau solde, ou null si le solde serait négatif
+function changeBalance(userId, delta, label = "—", opts = {}) {
+  const st = load();
+  const after = Math.round(((st.coins[userId] ?? 0) + delta) * 100) / 100;
+  if (after < 0) return null;
+  st.coins[userId] = after;
+  save();
+  return after;
+}
+function formatEuro(n) {
+  const v = Math.round(Number(n) || 0);
+  return `${v.toLocaleString("fr-FR")} ${COIN}`;
+}
+// les polices des images n'ont pas l'emoji 🪙 : dans un dessin, il devient « pièces »
+{
+  const proto = Object.getPrototypeOf(createCanvas(1, 1).getContext("2d"));
+  for (const fn of ["fillText", "strokeText", "measureText"]) {
+    const orig = proto[fn];
+    if (typeof orig !== "function" || orig.__coin) continue;
+    proto[fn] = function (text, ...rest) {
+      return orig.call(this, typeof text === "string" && text.includes(COIN) ? text.replace(/\s?🪙/g, " pièces") : text, ...rest);
+    };
+    proto[fn].__coin = true;
+  }
+}
+
 // --- Données ---
 let state = null;
 function load() {
@@ -215,6 +250,12 @@ function load() {
   state.achievements ??= {}; // succès débloqués et titre choisi
   state.showcase ??= {}; // vitrine : trois cartes exposées
   state.arenaWeekly ??= {}; // défi d'Arène de la semaine
+  state.coins ??= {}; // userId -> pièces 🪙
+  // lancement des pièces : chaque joueur qui a déjà des cartes reçoit sa mise de départ (une seule fois)
+  if (!state.coinsSince) {
+    state.coinsSince = Date.now();
+    for (const id of Object.keys(state.inv)) state.coins[id] = (state.coins[id] ?? 0) + COINS_START;
+  }
   CURRENT_GEN = state.currentGen ?? 1; // userId -> { « g1_standard »: nombre de boosters fermés }
   return state;
 }

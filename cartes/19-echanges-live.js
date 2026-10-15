@@ -1,7 +1,7 @@
 
 // --- Échanges en direct ---
 // 1. Un membre invite qui il veut. 2. L'invité accepte : la table d'échange s'ouvre dans le salon des échanges.
-// 3. Chacun y pose ses propres cartes (et de l'argent), la table se met à jour en direct pour tout le monde.
+// 3. Chacun y pose ses propres cartes (et des pièces), la table se met à jour en direct pour tout le monde.
 // 4. Les deux valident : l'échange se fait. Toute modification annule les validations (impossible de changer l'offre au dernier moment).
 // Les boosters fermés s'échangent aussi (sauf le cadeau du jour, gratuit).
 const LIVE_INVITE_MINUTES = 10, LIVE_IDLE_MINUTES = 15;
@@ -31,7 +31,7 @@ function invitePayload(tr) {
         .setTitle("🔄 Invitation à échanger")
         .setDescription(
           `**${tr.fromName}** voudrait échanger des cartes avec **${tr.toName}**.\n\n` +
-            "Acceptez pour ouvrir la **table d'échange** : chacun y pose les cartes et les boosters qu'il veut (et de l'argent si besoin), en direct. Rien n'est échangé tant que vous n'avez pas **validé tous les deux**.\n\n" +
+            "Acceptez pour ouvrir la **table d'échange** : chacun y pose les cartes et les boosters qu'il veut (et des pièces si besoin), en direct. Rien n'est échangé tant que vous n'avez pas **validé tous les deux**.\n\n" +
             `L'invitation expire <t:${Math.floor((tr.at + LIVE_INVITE_MINUTES * MINUTE) / 1000)}:R>.`
         )
         .setThumbnail(tr.toAvatar),
@@ -42,7 +42,7 @@ function invitePayload(tr) {
 }
 const offerList = (tr, side) => {
   const keys = offerOf(tr, side), money = side === "from" ? tr.giveMoney : tr.takeMoney;
-  return [...keys.map((k) => `${RARITIES[cardOfKey(k)?.rarity]?.emoji ?? "▫️"} ${keyLabel(k)}`), ...packsText(tr.packs?.[side]), ...(money ? [`💶 ${formatEuro(money)}`] : [])].join("\n") || "*Rien pour le moment*";
+  return [...keys.map((k) => `${RARITIES[cardOfKey(k)?.rarity]?.emoji ?? "▫️"} ${keyLabel(k)}`), ...packsText(tr.packs?.[side]), ...(money ? [`${formatEuro(money)}`] : [])].join("\n") || "*Rien pour le moment*";
 };
 const packCount = (packs = {}) => Object.values(packs).reduce((a, n) => a + n, 0);
 const hasOffer = (tr) => tr.give.length || tr.take.length || tr.giveMoney || tr.takeMoney || packCount(tr.packs?.from) || packCount(tr.packs?.to);
@@ -103,7 +103,7 @@ async function livePayloadTrade(tr, extra = "") {
     .setTitle(tr.status === "done" ? "🤝 Échange conclu !" : open ? `🔄 Table d'échange — ${tr.fromName} ⇄ ${tr.toName}` : `🔄 ${(TRADE_STATUS[tr.status] ?? TRADE_STATUS.cancelled)[0].charAt(0)}${(TRADE_STATUS[tr.status] ?? TRADE_STATUS.cancelled)[0].slice(1).toLowerCase()}`)
     .setDescription(
       (open
-        ? "**🃏 Choisir mes cartes** pour poser ou retirer vos cartes · **📦 Boosters** pour poser des boosters fermés · **💶 Argent** pour ajouter de l'argent · **✅ Valider** quand l'offre vous convient.\n" +
+        ? "**🃏 Choisir mes cartes** pour poser ou retirer vos cartes · **📦 Boosters** pour poser des boosters fermés · **🪙 Pièces** pour ajouter des pièces · **✅ Valider** quand l'offre vous convient.\n" +
           `${tr.ready.from ? "✅" : "⌛"} ${tr.fromName} · ${tr.ready.to ? "✅" : "⌛"} ${tr.toName} — *toute modification annule les validations.*`
         : "") + (extra ? `\n\n${extra}` : "") || null
     )
@@ -120,7 +120,7 @@ async function livePayloadTrade(tr, extra = "") {
           new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`carte_lt_pick_${tr.id}`).setLabel("Choisir mes cartes").setEmoji("🃏").setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId(`carte_lt_packs_${tr.id}`).setLabel("Boosters").setEmoji("📦").setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId(`carte_lt_money_${tr.id}`).setLabel("Argent").setEmoji("💶").setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`carte_lt_money_${tr.id}`).setLabel("Pièces").setEmoji("🪙").setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`carte_lt_ok_${tr.id}`).setLabel("Valider").setEmoji("✅").setStyle(ButtonStyle.Success).setDisabled(!hasOffer(tr)),
             new ButtonBuilder().setCustomId(`carte_lt_x_${tr.id}`).setLabel("Annuler l'échange").setStyle(ButtonStyle.Danger)
           ),
@@ -163,7 +163,7 @@ async function endLiveTrade(tr, status, why = "") {
   else if (!tr.live) await tr.message?.edit({ content: `🔄 Invitation de **${tr.fromName}** à **${tr.toName}** : ${status === "refused" ? "refusée" : status === "expired" ? "expirée" : "annulée"}.`, embeds: [], components: [], allowedMentions: { parse: [] } }).catch(() => null);
   deleteLater(tr.message, MINUTE);
 }
-// l'échange lui-même (cartes, argent, statistiques)
+// l'échange lui-même (cartes, pièces, statistiques)
 async function executeLiveTrade(client, tr) {
   let problem = tradeProblem(tr);
   const label = `Échange de cartes entre ${tr.fromName} et ${tr.toName}`;
@@ -351,15 +351,15 @@ async function handleLiveTradeInteraction(interaction, client) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId(`carte_lt_mf_${tr.id}`)
-        .setTitle("Argent dans l'échange")
-        .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("amount").setLabel("Argent que vous donnez (€, 0 pour retirer)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(current ? String(current) : "")))
+        .setTitle("Pièces dans l'échange")
+        .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("amount").setLabel("Pièces que vous donnez (0 pour retirer)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(12).setValue(current ? String(current) : "")))
     );
     return true;
   }
   if (action === "mf") {
     const amount = parseAmount(interaction.fields.getTextInputValue("amount") || "0");
     if (!Number.isFinite(amount) || amount < 0 || amount > 100000000) {
-      await interaction.reply({ content: "❌ Montant invalide (entre 0 et 100 000 000 €).", ephemeral: true });
+      await interaction.reply({ content: "❌ Montant invalide (entre 0 et 100 000 000 pièces).", ephemeral: true });
       return true;
     }
     if (amount > readBalance(userId)) {
@@ -370,12 +370,12 @@ async function handleLiveTradeInteraction(interaction, client) {
     else tr.takeMoney = amount;
     offerChanged(tr);
     await interaction.deferUpdate();
-    await refreshLive(tr, `💶 **${side === "from" ? tr.fromName : tr.toName}** ${amount ? `ajoute ${formatEuro(amount)}` : "retire son argent"}.`);
+    await refreshLive(tr, `🪙 **${side === "from" ? tr.fromName : tr.toName}** ${amount ? `ajoute ${formatEuro(amount)}` : "retire ses pièces"}.`);
     return true;
   }
   if (action === "ok") {
     if (!hasOffer(tr)) {
-      await interaction.reply({ content: "❌ La table est vide : posez au moins une carte, un booster ou de l'argent.", ephemeral: true });
+      await interaction.reply({ content: "❌ La table est vide : posez au moins une carte, un booster ou des pièces.", ephemeral: true });
       return true;
     }
     tr.ready[side] = !tr.ready[side];
