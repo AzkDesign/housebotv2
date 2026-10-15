@@ -867,3 +867,5 @@ async function casinoBanner(jackpot, open) {
 }
 
 module.exports = { slotsGif, slotsGrid, rouletteGif, blackjackImage, fortuneWheelGif, crashImage, raceGif, casinoBanner, WHEEL_ORDER };
+// Le Grand Casino de la Maison : les nouveaux dessins (casino-design.js) remplacent ceux-ci, avec les mêmes paramètres.
+Object.assign(module.exports, require("./casino-design"));

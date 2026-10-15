@@ -124,6 +124,28 @@ function vipPayload(userId) {
   };
 }
 
+// la fiche VIP avec sa carte de membre en métal
+async function vipCardPayload(userId, name) {
+  const p = vipPayload(userId);
+  delete p.ephemeral; // réponse déjà différée en éphémère
+  const s = statsOf(userId), vip = vipOf(userId), next = VIP[VIP.indexOf(vip) + 1];
+  const img = await V.vipCard({
+    name,
+    level: vip.name,
+    wageredText: formatEuro(s.wagered),
+    next: next?.name ?? null,
+    nextText: next ? formatEuro(next.min) : "",
+    pct: next ? Math.min(1, (s.wagered - vip.min) / (next.min - vip.min)) : 1,
+    wheel: vip.wheel,
+    cashback: Math.round(vip.cashback * 100),
+    games: s.games,
+    bestText: formatEuro(s.best),
+  }).catch(() => null);
+  if (!img) return p;
+  p.embeds[0].setImage("attachment://carte-vip.png");
+  return { ...p, files: [new AttachmentBuilder(img, { name: "carte-vip.png" })], attachments: [] };
+}
+
 // --- Roue de la fortune (gratuite, une fois par jour) ---
 const WHEEL = [
   { label: "10 €", amount: 10, weight: 30, color: "#059669" },
@@ -225,7 +247,16 @@ async function refundEscrow(client) {
   }
   save();
 }
+// bannière « Grand Casino » en tête de chaque salle (sauf quand la fusée vole : son image la remplace)
+const HEADERS = {};
+function withHeader(key, payload) {
+  const buf = HEADERS[key];
+  if (!buf || payload.files?.length) return payload;
+  payload.embeds[0].setImage(`attachment://salle-${key}.jpg`);
+  return { ...payload, files: [new AttachmentBuilder(buf, { name: `salle-${key}.jpg` })] };
+}
 async function upsertBoard(key, payload) {
+  payload = withHeader(key, payload);
   const ch = chanOf(key);
   if (!ch) return null;
   const st = load();
@@ -474,12 +505,14 @@ async function handleLiveInteraction(interaction, client) {
   if (typeof id !== "string" || !id.startsWith("casino_x_")) return false;
   const userId = interaction.user.id;
   if (id === "casino_x_vip") {
-    await interaction.reply(vipPayload(userId));
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply(await vipCardPayload(userId, interaction.member?.displayName ?? interaction.user.username));
     return true;
   }
   if (id === "casino_x_cashback") {
+    await interaction.deferUpdate();
     const paid = claimCashback(userId);
-    await interaction.update({ ...vipPayload(userId), content: paid ? `💸 Cashback versé : **+${formatEuro(paid)}** !` : "💸 Rien à récupérer pour cette semaine." });
+    await interaction.editReply({ ...(await vipCardPayload(userId, interaction.member?.displayName ?? interaction.user.username)), content: paid ? `💸 Cashback versé : **+${formatEuro(paid)}** !` : "💸 Rien à récupérer pour cette semaine." });
     return true;
   }
   // tout le reste demande l'accès au casino et qu'il soit ouvert
@@ -614,6 +647,7 @@ async function setupLive(client) {
   load();
   await refundEscrow(client);
   await setupChannels(client);
+  for (const k of ["roulette", "crash", "courses"]) HEADERS[k] = await V.tableHeader(k).catch(() => null);
   const refreshAll = async () => {
     if (!live.roulette) await upsertBoard("roulette", rouletteBoard());
     if (!live.crash) await upsertBoard("crash", crashBoard());
