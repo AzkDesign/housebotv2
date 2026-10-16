@@ -121,4 +121,6 @@ async function setupCartes(client) {
   console.log("Cartes de la Maison prêtes");
 }
 
-module.exports = { setupCartes, handleCartesInteraction, grantEventCard, getCollectionSummary, drawCard, cardsGuideTopics, SERIES, RARITIES };
+// porte-monnaie du jeu de cartes (affiché dans /solde)
+const cardWallet = (userId) => ({ coins: load().coins[userId] ?? 0, dust: load().dust[userId] ?? 0 });
+module.exports = { setupCartes, handleCartesInteraction, grantEventCard, getCollectionSummary, drawCard, cardsGuideTopics, cardWallet, SERIES, RARITIES };

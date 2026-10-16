@@ -237,6 +237,13 @@ async function handleSolde(interaction) {
     .filter(([, amount]) => amount > 0)
     .sort((a, b) => b[1] - a[1]);
   const position = ranked.findIndex(([userId]) => userId === interaction.user.id);
+  // monnaies du jeu de cartes : pièces et poussière d'étoile (séparées des euros)
+  let wallet = null;
+  try {
+    wallet = require("./cartes").cardWallet(interaction.user.id);
+  } catch {
+    wallet = null;
+  }
 
   const embed = new EmbedBuilder()
     .setColor(0xd4af37)
@@ -244,7 +251,10 @@ async function handleSolde(interaction) {
     .setThumbnail(interaction.user.displayAvatarURL({ size: 128 }))
     .setDescription(
       `**${pseudo(interaction.user.id)}**\n\n💶 **${formatEuro(balance)}**` +
-        (position >= 0 ? `\n🏆 Classement : **${position + 1}ᵉ** fortune de la Maison` : "")
+        (position >= 0 ? `\n🏆 Classement : **${position + 1}ᵉ** fortune de la Maison` : "") +
+        (wallet
+          ? `\n\n🃏 **Jeu de cartes**\n🪙 **${Math.floor(wallet.coins).toLocaleString("fr-FR")}** pièces\n✨ **${Math.floor(wallet.dust).toLocaleString("fr-FR")}** poussières d'étoile`
+          : "")
     )
     .setTimestamp();
 
