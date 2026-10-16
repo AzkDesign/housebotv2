@@ -12,6 +12,10 @@ const CH_BLUE = "#0b2a6b", CH_ROYAL = "#1d4ed8", CH_SKY = "#93c5fd", CH_GOLD = "
 {
   const sync = syncMemberCards;
   syncMemberCards = async (guild) => {
+    // la liste des cartes est figée (génération 2) : Charlotte y est ajoutée à la demande du staff
+    const roster = load().cardRoster;
+    if (roster?.members && !roster.members.includes(CHARLOTTE_ID)) roster.members.push(CHARLOTTE_ID);
+    if (load().cardPending?.members?.[CHARLOTTE_ID]) delete load().cardPending.members[CHARLOTTE_ID];
     await sync(guild);
     const member = await guild.members.fetch(CHARLOTTE_ID).catch(() => null);
     if (member) {
