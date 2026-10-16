@@ -333,6 +333,7 @@ async function tdRegistration(t, W = 1800) {
   const last = t?.champion ?? t?.last?.champion ?? load().tournamentPrevChampion ?? null;
   const champCard = last ? findCard(`mb_${last}`) : null;
   const bigShow = t?.phase !== "inscriptions" && champCard;
+  if (!champCard && last) console.log(`Tournoi : pas de carte de membre pour le dernier champion (${last})`);
   // pendant les inscriptions, l'image s'allonge si besoin pour garder la place de la carte du champion
   const H = Math.max(840, 260 + Math.max(gridH + 130, 470) + 60, champCard && !bigShow ? 300 + 50 + gridH + 16 + 280 + 34 : 0);
   const c = createCanvas(W, H), ctx = c.getContext("2d");
@@ -467,7 +468,7 @@ async function tdRegistration(t, W = 1800) {
 let tdChampionLabel = () => "DERNIER CHAMPION";
 async function tdChampionShowcase(ctx, id, card, x, y, h, xMax, big) {
   const w = Math.round((h * 600) / 840);
-  const img = await drawCreatureCard(card, true, 0.3).catch(() => null);
+  const img = await drawCreatureCard(card, true, 0.3).catch((err) => (console.error("Tournoi (carte du champion):", err.stack ?? err.message), null));
   if (!img) return;
   ctx.save();
   ctx.globalCompositeOperation = "screen";
@@ -572,7 +573,7 @@ async function tdPodium(ctx, t, W, y0) {
   (semis ?? []).slice(0, 2).forEach((id, k, arr) => person(id, W / 2 + 300 + (arr.length > 1 ? (k ? 62 : -62) : 0), base - 90 - (arr.length > 1 ? 44 : 56) - 70, arr.length > 1 ? 44 : 56, "#d97706", "DEMI-FINALE", bronze));
   // la carte de membre du champion, à droite du podium
   const card = champion ? findCard(`mb_${champion}`) : null;
-  const cimg = card ? await drawCreatureCard(card, true, 0.3).catch(() => null) : null;
+  const cimg = card ? await drawCreatureCard(card, true, 0.3).catch((err) => (console.error("Tournoi (carte du champion):", err.stack ?? err.message), null)) : null;
   if (cimg && W >= 1700) {
     const h = 430, w = Math.round((h * 600) / 840), x = W - w - 70, y = y0 + 70;
     ctx.save();

@@ -29,8 +29,16 @@ const CH_BLUE = "#0b2a6b", CH_ROYAL = "#1d4ed8", CH_SKY = "#93c5fd", CH_GOLD = "
     }
     const st = load(), s = (st.userStats[CHARLOTTE_ID] ??= {});
     if (!(s.tourneyWins >= 1)) s.tourneyWins = 1;
-    // elle a gagné le dernier tournoi : si l'historique ne le dit pas, elle est affichée comme dernière championne
-    if (!st.tournament?.champion && !st.tournament?.last?.champion) st.tournamentPrevChampion ??= CHARLOTTE_ID;
+    // elle a gagné le dernier tournoi : on l'inscrit une fois pour toutes comme dernière championne
+    // (un tournoi terminé ensuite garde son vrai champion)
+    if (!st.charlotteChampionSet) {
+      st.charlotteChampionSet = Date.now();
+      st.tournamentPrevChampion = CHARLOTTE_ID;
+      const t = st.tournament;
+      if (t && t.phase !== "rounds" && t.phase !== "done") t.last = { champion: CHARLOTTE_ID, key: t.last?.key ?? null };
+      tourDirty = true;
+    }
+    console.log(`Carte de Charlotte : ${findCard(`mb_${CHARLOTTE_ID}`) ? "prête" : "introuvable"} · dernier champion du tournoi : ${st.tournament?.champion ?? st.tournament?.last?.champion ?? st.tournamentPrevChampion ?? "aucun"}`);
     const style = styleOf(CHARLOTTE_ID);
     if (!style.owned.includes("back_champion")) style.owned.push("back_champion");
     save();
