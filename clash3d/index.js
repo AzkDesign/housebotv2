@@ -26,7 +26,7 @@ function spawn() {
     if (m.frame) {
       // image intermédiaire d'une bataille
       try {
-        p.onFrame?.(m.idx, m.frame);
+        p.onFrame?.(m.idx, m.frame, m.meta);
       } catch (err) {
         p.frameError ??= err;
       }
@@ -55,6 +55,11 @@ function spawn() {
 function local(kind, job, onFrame) {
   const R = require("./rendu");
   if (kind === "base") return R.renderBase(job);
+  if (kind === "coin") {
+    let n = 0;
+    for (const f of require("./piece").coinFrames(job)) onFrame?.(n++, f.data, { delay: f.delay, phase: f.phase, coin: f.coin });
+    return { count: n };
+  }
   if (kind === "battle") {
     let n = 0;
     return R.renderBattle(job, onFrame ? (data) => onFrame(n++, data) : null).then((r) => ({ ...r, count: n || r.frames.length }));
@@ -92,6 +97,8 @@ module.exports = {
   renderBase: (job) => run("base", job, 60000),
   // images d'une bataille : onFrame(index, RGBA) reçoit chaque image dès qu'elle est prête ; résultat { stats, count }
   renderBattle: (job, onFrame) => run("battle", job, 180000, onFrame),
+  // pile ou face : onFrame(index, RGBA, { delay, phase, coin: [x, y, rayon] }) ; job : { w, h, result (0 face, 1 pile), seed }
+  renderCoin: (job, onFrame) => run("coin", job, 60000, onFrame),
   // petites icônes 3D (pièce, cristal, trophée…)
   renderIcons: (job) => run("icons", job, 30000),
   // petit nettoyage mémoire après un getImageData (voir memoire.js)

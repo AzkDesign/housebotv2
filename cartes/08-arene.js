@@ -59,7 +59,8 @@ const aliveBench = (p) => p.team.map((f, i) => ({ f, i })).filter(({ f, i }) => 
 
 // --- Moteur de résolution d'une manche ---
 // Triangle : la Garde bat l'Attaque, l'Attaque interrompt le Spécial, le Spécial brise la Garde.
-// Ordre des coups : les attaques frappent avant les spéciaux, puis la carte la plus chanceuse frappe en premier.
+// Ordre des coups : les attaques frappent avant les spéciaux ; à coup égal, le joueur qui a l'initiative
+// (pile ou face au début du combat, puis chacun son tour) frappe le premier — sinon la carte la plus chanceuse.
 // Une carte mise K.O. avant son tour ne frappe pas. La garde s'use si on la répète.
 const GUARD_DECAY = [0.5, 0.7, 0.9]; // part des dégâts encaissés en garde : 1re, 2e, 3e garde consécutive
 function resolveRoundState(b) {
@@ -83,10 +84,12 @@ function resolveRoundState(b) {
   });
   const startIdx = b.players.map((p) => p.active);
   // 2. les coups, dans l'ordre d'initiative
+  const first = initiativeOf(b);
   const order = [0, 1]
     .filter((i) => acts[i].type === "attack" || acts[i].type === "special")
     .sort((x, y) => {
       if (acts[x].type !== acts[y].type) return acts[x].type === "attack" ? -1 : 1;
+      if (first !== null) return x === first ? -1 : 1;
       return activeOf(b.players[y]).luck - activeOf(b.players[x]).luck || Math.random() - 0.5;
     });
   const struck = [false, false], interrupted = [false, false], broken = [false, false];
@@ -1397,6 +1400,8 @@ async function livePayload(b) {
     .setDescription(
       `⏱️ **Choisissez votre action** — fin de la manche <t:${Math.floor(b.deadline / 1000)}:R>\n` +
         `${A.choice ? "✅" : "⌛"} ${A.name} · ${B.choice ? "✅" : "⌛"} ${B.name}\n` +
+        (initiativeOf(b) !== null ? `🪙 Initiative : **${b.players[initiativeOf(b)].name}** frappe en premier à coup égal
+` : "") +
         `*Les choix restent secrets jusqu'à la révélation. Sans réponse, la carte se met en garde.*` +
         (b.mise ? `\n💰 Mise : **${formatEuro(b.mise)}** chacun` : "")
     )
@@ -1441,7 +1446,7 @@ const RULES_EMBED = () =>
         "🛡️ **Garde** — encaisse 50 % d'une attaque, **contre-attaque** et recharge **+2 ⚡**. Elle s'use : 70 % à la 2e garde d'affilée, 90 % à la 3e.\n" +
         `💥 **Spécial** — coûte ${SPECIAL_COST} ⚡ : gros dégâts, impossible à esquiver, et **brise la garde** (qui ne protège plus que 15 %).\n` +
         "🔄 **Changer** — envoie une autre carte de l'équipe *avant* les coups.\n\n" +
-        "**Triangle** : la Garde bat l'Attaque, l'Attaque bat le Spécial, le Spécial bat la Garde. Entre deux coups identiques, la carte la plus **chanceuse** frappe la première ; une carte mise K.O. avant son tour ne frappe pas.\n" +
+        "**Triangle** : la Garde bat l'Attaque, l'Attaque bat le Spécial, le Spécial bat la Garde. Entre deux coups identiques, le joueur qui a l'**initiative** frappe le premier : un **pile ou face** la donne à la manche 1, puis elle passe d'un joueur à l'autre à chaque manche. Une carte mise K.O. avant son tour ne frappe pas.\n" +
         "**La Maison** progresse : Apprenti → Confirmé → Expert → Maître (un niveau toutes les 3 victoires contre elle).\n\n" +
         `**Énergie** : +1 ⚡ par manche (max ${MAX_ENERGY}). **Critique** et **esquive** dépendent de la CHANCE.\n` +
         ASTRE_RULES + "\n" +
@@ -1474,6 +1479,12 @@ async function startBattle(client, a, bUser, opts) {
   if (players[1].isAI) {
     players[1].ready = true;
   }
+  // pile ou face : tiré tout de suite, l'animation se calcule pendant le choix des équipes
+  b.coin = Math.random() < 0.5 ? 0 : 1;
+  b.coinGif = coinTossGif(b).catch((err) => {
+    console.error("Pile ou face (animation):", err.message);
+    return null;
+  });
   battles.set(id, b);
   for (const p of players) if (!p.isAI) userBattle.set(p.id, id);
   escrow(b);
@@ -1546,7 +1557,17 @@ async function autoTeams(client, b) {
   await beginRounds(client, b);
 }
 async function beginRounds(client, b) {
+  if (b.phase !== "team") return;
   clearTimeout(b.timer);
+  // pile ou face avant la première manche ; le panneau du combat redescend ensuite sous l'animation
+  b.phase = "toss";
+  await showCoinToss(b).catch((err) => console.error("Pile ou face:", err.message));
+  if (b.phase !== "toss") return;
+  const panel = await b.channel?.send({ content: "⏳ La manche 1 commence…" }).catch(() => null);
+  if (panel) {
+    b.message?.delete().catch(() => null);
+    b.message = panel;
+  }
   b.phase = "choose";
   b.round = 0;
   await nextRound(client, b);

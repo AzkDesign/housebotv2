@@ -3,7 +3,8 @@
 // Une bataille rend la main entre deux images (mémoire du canvas) : un autre rendu peut passer entre-temps.
 const { parentPort } = require("worker_threads");
 const R = require("./rendu");
-const { nettoyer } = require("./memoire");
+const P = require("./piece");
+const { nettoyer, respirer } = require("./memoire");
 
 parentPort.on("message", async (m) => {
   try {
@@ -19,6 +20,15 @@ parentPort.on("message", async (m) => {
         parentPort.postMessage({ id: m.id, frame, idx: n++ }, [frame.buffer]);
       });
       parentPort.postMessage({ id: m.id, ok: true, result: { frames: [], stats: r.stats, count: n } });
+    } else if (m.kind === "coin") {
+      // pile ou face : mêmes envois image par image, avec la durée et la position de la pièce
+      let n = 0;
+      for (const f of P.coinFrames(m.job)) {
+        const frame = new Uint8ClampedArray(f.data);
+        parentPort.postMessage({ id: m.id, frame, idx: n++, meta: { delay: f.delay, phase: f.phase, coin: f.coin } }, [frame.buffer]);
+        await respirer();
+      }
+      parentPort.postMessage({ id: m.id, ok: true, result: { count: n } });
     } else if (m.kind === "icons") {
       const r = R.renderIcons(m.job);
       const list = Object.fromEntries(Object.entries(r).map(([k, v]) => [k, { ...v, data: new Uint8ClampedArray(v.data) }]));
