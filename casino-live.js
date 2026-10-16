@@ -559,7 +559,7 @@ async function handleLiveInteraction(interaction, client) {
       return true;
     }
     await interaction.showModal(
-      betModal("casino_x_crm", "🚀 Monter à bord", "Mise (€)", new TextInputBuilder().setCustomId("auto").setLabel("Encaissement automatique (ex. 2,5) — facultatif").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(6))
+      betModal("casino_x_crm", "🚀 Monter à bord", "Mise (€)", new TextInputBuilder().setCustomId("auto").setLabel("Encaissement auto (ex. 2,5) — facultatif").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(6))
     );
     return true;
   }

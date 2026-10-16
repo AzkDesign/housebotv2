@@ -329,14 +329,15 @@ async function tdBracket(t, W0 = 1800) {
 async function tdRegistration(t, W = 1800) {
   const list = t?.phase === "inscriptions" ? t.players : [], max = tourMax(), cols = 4, cardW = 250, cardH = 74, gapX = 18, gapY = 16;
   const rows = Math.ceil(max / cols), gridW = cols * cardW + (cols - 1) * gapX, gridH = rows * (cardH + gapY);
-  const H = Math.max(840, 260 + Math.max(gridH + 130, 470) + 60);
-  const c = createCanvas(W, H), ctx = c.getContext("2d");
-  ctx.drawImage(tdStage(W, H), 0, 0);
-  const open = t?.phase === "inscriptions";
   // le dernier champion et sa carte de membre (vitrine) ; sinon, son avatar en bas
   const last = t?.champion ?? t?.last?.champion ?? load().tournamentPrevChampion ?? null;
   const champCard = last ? findCard(`mb_${last}`) : null;
-  const bigShow = !open && champCard;
+  const bigShow = t?.phase !== "inscriptions" && champCard;
+  // pendant les inscriptions, l'image s'allonge si besoin pour garder la place de la carte du champion
+  const H = Math.max(840, 260 + Math.max(gridH + 130, 470) + 60, champCard && !bigShow ? 300 + 50 + gridH + 16 + 280 + 34 : 0);
+  const c = createCanvas(W, H), ctx = c.getContext("2d");
+  ctx.drawImage(tdStage(W, H), 0, 0);
+  const open = t?.phase === "inscriptions";
   tdTitle(ctx, W, 150, "Tournoi du week-end", 76, open ? `Inscriptions ouvertes jusqu'à ${tourDayLabel(t.close)} · élimination directe · coup d'envoi dimanche à 20 h` : "Inscriptions chaque vendredi à midi · coup d'envoi le dimanche à 20 h");
   // les récompenses, sur un podium
   const px = 90, py = 280, pw = 520;
@@ -445,7 +446,7 @@ async function tdRegistration(t, W = 1800) {
   // le dernier champion : sa carte en grand hors inscriptions, en petit sous la liste des inscrits
   const below = gy + 50 + gridH + 16, room = H - 34 - below;
   if (bigShow) await tdChampionShowcase(ctx, last, champCard, gx, gy + 58, 420, gx + gridW, true);
-  else if (champCard && room >= 220) await tdChampionShowcase(ctx, last, champCard, gx, below, Math.min(300, room), gx + gridW, false);
+  else if (champCard) await tdChampionShowcase(ctx, last, champCard, gx, below, Math.min(300, Math.max(220, room)), gx + gridW, false);
   else if (!open && last) {
     const crown = await tdFluent("Crown"), img = await tdAvatar(last);
     const cx = gx + gridW / 2, cy = gy + 50 + gridH + 70;
@@ -569,6 +570,26 @@ async function tdPodium(ctx, t, W, y0) {
   if (crown) ctx.drawImage(crown, W / 2 - 52, cy - 82 - 86, 104, 104);
   if (finalist) person(finalist, W / 2 - 300, base - 120 - 60 - 70, 60, "#cbd5e1", "FINALISTE", silver);
   (semis ?? []).slice(0, 2).forEach((id, k, arr) => person(id, W / 2 + 300 + (arr.length > 1 ? (k ? 62 : -62) : 0), base - 90 - (arr.length > 1 ? 44 : 56) - 70, arr.length > 1 ? 44 : 56, "#d97706", "DEMI-FINALE", bronze));
+  // la carte de membre du champion, à droite du podium
+  const card = champion ? findCard(`mb_${champion}`) : null;
+  const cimg = card ? await drawCreatureCard(card, true, 0.3).catch(() => null) : null;
+  if (cimg && W >= 1700) {
+    const h = 430, w = Math.round((h * 600) / 840), x = W - w - 70, y = y0 + 70;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    glow(ctx, x + w / 2, y + h / 2, h * 0.75, "#fbbf24", 0.3);
+    ctx.restore();
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.65)";
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 10;
+    ctx.drawImage(cimg, x, y, w, h);
+    ctx.restore();
+    ctx.textAlign = "center";
+    ctx.font = "15px CardEngrave";
+    ctx.fillStyle = "#fbbf24";
+    spaced(ctx, "SA CARTE", x + w / 2, y - 16, 4);
+  }
 }
 
 // --- L'image du salon du tournoi ---
