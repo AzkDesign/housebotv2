@@ -17,6 +17,15 @@ const CH_BLUE = "#0b2a6b", CH_ROYAL = "#1d4ed8", CH_SKY = "#93c5fd", CH_GOLD = "
     if (member) {
       await cacheMember(member).catch(() => null);
       await grantWelcome(member, true).catch(() => null);
+    } else {
+      // pas (ou plus) sur le serveur : son compte Discord donne quand même son nom et sa vraie photo de profil
+      const user = await guild.client?.users.fetch(CHARLOTTE_ID).catch(() => null);
+      if (user) {
+        const old = load().memberArchive[CHARLOTTE_ID] ?? {};
+        const info = { stars: 0, role: null, joinedAt: null, messages: 0, ...old, name: user.globalName ?? user.username, avatar: user.displayAvatarURL({ extension: "png", size: 512 }), balance: realReadBalance(CHARLOTTE_ID) ?? 0 };
+        memberCache.set(CHARLOTTE_ID, info);
+        load().memberArchive[CHARLOTTE_ID] = info;
+      }
     }
     const st = load(), s = (st.userStats[CHARLOTTE_ID] ??= {});
     if (!(s.tourneyWins >= 1)) s.tourneyWins = 1;
