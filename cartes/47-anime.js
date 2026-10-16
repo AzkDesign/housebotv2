@@ -31,7 +31,7 @@ const AN_GIF = require(path.join(__dirname, "gif-encodeur.js"));
 function anEncoder(w, h) {
   let worker = null;
   try {
-    worker = new (require("worker_threads").Worker)(path.join(__dirname, "gif-encodeur.js"));
+    worker = new (require("worker_threads").Worker)(path.join(__dirname, "gif-encodeur.js"), { resourceLimits: { maxYoungGenerationSizeMb: 12 } });
   } catch (err) {
     console.error("Encodeur GIF (worker) :", err.message);
   }
@@ -54,9 +54,10 @@ function anEncoder(w, h) {
   });
   done.catch(() => null);
   return {
-    scene(frames) {
+    // transfer : les tampons des images partent au worker sans copie (inutilisables ensuite ici)
+    scene(frames, transfer = false) {
       if (failure) throw failure;
-      worker.postMessage({ type: "scene", frames, w, h });
+      worker.postMessage({ type: "scene", frames, w, h }, transfer ? frames.map((f) => f.data.buffer) : []);
     },
     async finish() {
       worker.postMessage({ type: "finish" });

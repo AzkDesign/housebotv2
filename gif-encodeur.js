@@ -3,6 +3,7 @@
 // Peut aussi être utilisé directement (sans worker) avec encodeScene.
 const { isMainThread, parentPort } = require("worker_threads");
 const { GIFEncoder, quantize, applyPalette } = require("gifenc");
+const { nettoyer } = require("./clash3d/memoire");
 
 // Une palette par scène ; les pixels identiques à l'image précédente deviennent transparents (index 255),
 // ce qui allège beaucoup le GIF dès que la caméra ne bouge pas.
@@ -41,8 +42,11 @@ if (!isMainThread && parentPort) {
   const enc = GIFEncoder();
   parentPort.on("message", (m) => {
     try {
-      if (m.type === "scene") encodeScene(enc, m.frames, m.w, m.h);
-      else if (m.type === "finish") {
+      if (m.type === "scene") {
+        encodeScene(enc, m.frames, m.w, m.h);
+        // les images de la scène ne servent plus : nettoyage dès la fin du message (tas minuscule, ~1 ms)
+        setImmediate(() => nettoyer(true));
+      } else if (m.type === "finish") {
         enc.finish();
         const bytes = enc.bytes();
         parentPort.postMessage({ type: "done", bytes }, [bytes.buffer]);
