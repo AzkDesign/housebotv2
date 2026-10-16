@@ -29,11 +29,15 @@ const CH_BLUE = "#0b2a6b", CH_ROYAL = "#1d4ed8", CH_SKY = "#93c5fd", CH_GOLD = "
     }
     const st = load(), s = (st.userStats[CHARLOTTE_ID] ??= {});
     if (!(s.tourneyWins >= 1)) s.tourneyWins = 1;
+    // elle a gagné le dernier tournoi : si l'historique ne le dit pas, elle est affichée comme dernière championne
+    if (!st.tournament?.champion && !st.tournament?.last?.champion) st.tournamentPrevChampion ??= CHARLOTTE_ID;
     const style = styleOf(CHARLOTTE_ID);
     if (!style.owned.includes("back_champion")) style.owned.push("back_champion");
     save();
     for (const cache of [gifCache, thumbCache]) for (const key of [...cache.keys()]) if (String(key).startsWith(`mb_${CHARLOTTE_ID}`)) cache.delete(key);
   };
+  const label = tdChampionLabel;
+  tdChampionLabel = (id) => (id === CHARLOTTE_ID ? "DERNIÈRE CHAMPIONNE" : label(id));
   const members = memberCards;
   memberCards = (activeOnly = false) => members(activeOnly).map((c) => (c.memberId === CHARLOTTE_ID && !c.duo ? { ...c, text: CH_TEXT } : c));
 }

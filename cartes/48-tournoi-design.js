@@ -333,6 +333,10 @@ async function tdRegistration(t, W = 1800) {
   const c = createCanvas(W, H), ctx = c.getContext("2d");
   ctx.drawImage(tdStage(W, H), 0, 0);
   const open = t?.phase === "inscriptions";
+  // le dernier champion et sa carte de membre (vitrine) ; sinon, son avatar en bas
+  const last = t?.champion ?? t?.last?.champion ?? load().tournamentPrevChampion ?? null;
+  const champCard = last ? findCard(`mb_${last}`) : null;
+  const bigShow = !open && champCard;
   tdTitle(ctx, W, 150, "Tournoi du week-end", 76, open ? `Inscriptions ouvertes jusqu'à ${tourDayLabel(t.close)} · élimination directe · coup d'envoi dimanche à 20 h` : "Inscriptions chaque vendredi à midi · coup d'envoi le dimanche à 20 h");
   // les récompenses, sur un podium
   const px = 90, py = 280, pw = 520;
@@ -399,7 +403,7 @@ async function tdRegistration(t, W = 1800) {
     ctx.fill();
   }
   const avatars = await tdAvatars(list);
-  for (let i = 0; i < max; i++) {
+  for (let i = 0; i < (bigShow ? 0 : max); i++) {
     const x = gx + (i % cols) * (cardW + gapX), y = gy + 50 + Math.floor(i / cols) * (cardH + gapY), id = list[i];
     roundRect(ctx, x, y, cardW, cardH, 14);
     if (id) {
@@ -438,9 +442,11 @@ async function tdRegistration(t, W = 1800) {
       ctx.fillText(open ? "PLACE LIBRE" : "—", x + cardW / 2, y + cardH / 2 + 5);
     }
   }
-  // le dernier champion
-  const last = t?.champion ?? t?.last?.champion;
-  if (!open && last) {
+  // le dernier champion : sa carte en grand hors inscriptions, en petit sous la liste des inscrits
+  const below = gy + 50 + gridH + 16, room = H - 34 - below;
+  if (bigShow) await tdChampionShowcase(ctx, last, champCard, gx, gy + 58, 420, gx + gridW, true);
+  else if (champCard && room >= 220) await tdChampionShowcase(ctx, last, champCard, gx, below, Math.min(300, room), gx + gridW, false);
+  else if (!open && last) {
     const crown = await tdFluent("Crown"), img = await tdAvatar(last);
     const cx = gx + gridW / 2, cy = gy + 50 + gridH + 70;
     tdAvatarDisc(ctx, img, cx - 120, cy, 34, "#fbbf24", last);
@@ -454,6 +460,57 @@ async function tdRegistration(t, W = 1800) {
     ctx.fillText(pseudo(last), cx - 70, cy + 24);
   }
   return c;
+}
+
+// vitrine du dernier champion : sa carte (holo) dans un halo doré, son nom et ses titres
+let tdChampionLabel = () => "DERNIER CHAMPION";
+async function tdChampionShowcase(ctx, id, card, x, y, h, xMax, big) {
+  const w = Math.round((h * 600) / 840);
+  const img = await drawCreatureCard(card, true, 0.3).catch(() => null);
+  if (!img) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  glow(ctx, x + w / 2, y + h / 2, h * 0.8, "#fbbf24", 0.32);
+  ctx.restore();
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.65)";
+  ctx.shadowBlur = 26;
+  ctx.shadowOffsetY = 10;
+  ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+  const tx = x + w + (big ? 46 : 28), tw = xMax - tx, wins = tdTourneyWins(id);
+  const crown = await tdFluent("Crown");
+  let ty = y + (big ? 70 : 40);
+  if (crown) ctx.drawImage(crown, tx, ty - (big ? 64 : 46), big ? 56 : 40, big ? 56 : 40);
+  ctx.textAlign = "left";
+  ctx.font = `${big ? 18 : 14}px CardEngrave`;
+  ctx.fillStyle = "#fbbf24";
+  spacedLeft(ctx, tdChampionLabel(id), tx + (big ? 70 : 52), ty - (big ? 26 : 20), 4);
+  ty += big ? 46 : 30;
+  const name = card.name ?? pseudo(id);
+  ctx.font = `${fitText(ctx, name, tw, big ? 64 : 40, "CardTitle")}px CardTitle`;
+  ctx.fillStyle = "#fff7d6";
+  ctx.fillText(name, tx, ty);
+  ty += big ? 46 : 32;
+  ctx.font = `${big ? 20 : 15}px CardBold`;
+  ctx.fillStyle = "#e2e8f0";
+  ctx.fillText(wins > 1 ? `${wins} tournois remportés` : "A remporté le dernier tournoi", tx, ty);
+  ty += big ? 32 : 24;
+  ctx.font = `${big ? 18 : 14}px CardItalic`;
+  ctx.fillStyle = "#c4b5fd";
+  ctx.fillText("Sa carte porte le sceau du tournoi.", tx, ty);
+  if (big) {
+    ty += 70;
+    roundRect(ctx, tx, ty - 34, Math.min(tw, 520), 56, 16);
+    ctx.fillStyle = "rgba(251,191,36,0.12)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(251,191,36,0.55)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font = "22px CardTitle";
+    ctx.fillStyle = "#fde68a";
+    ctx.fillText("Qui prendra sa couronne ce week-end ?", tx + 20, ty + 2);
+  }
 }
 
 // --- Podium final ---
