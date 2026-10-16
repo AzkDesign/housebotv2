@@ -37,8 +37,8 @@ const LICENCE_PRICE = 1000;
 
 const PANEL_TITLE = "🎰 Casino de la Maison";
 const MIN_BET = 10;
-// Personne ne peut dépasser ce solde grâce au casino (règle affichée sur le panneau).
-const CASINO_CAP = 15000;
+// Plus de plafond de solde au casino (supprimé à la demande du staff) : gains toujours versés en entier.
+const CASINO_CAP = Infinity;
 const JACKPOT_SEED = 1000;
 const JACKPOT_SHARE = 0.02; // part de chaque mise de machine à sous versée au jackpot
 const BLACKJACK_TIMEOUT_MS = 3 * 60 * 1000;
@@ -145,9 +145,6 @@ function playError(member) {
   if (!hasAccess(member)) {
     return "🎟️ Vous n'avez pas encore accès au casino. Cliquez sur **Demander l'accès au casino**.";
   }
-  if (readBalance(member.id) >= CASINO_CAP) {
-    return `🎰 Votre solde atteint le **plafond du casino (${formatEuro(CASINO_CAP)})** : vous ne pouvez plus jouer tant qu'il est au-dessus.`;
-  }
   return null;
 }
 
@@ -236,7 +233,7 @@ function buildPanelEmbed(state) {
         "💎 **Fiche VIP** — misez pour monter de niveau : bonus sur la roue et **cashback** chaque semaine.\n" +
         (liveLine ? `\n🔴 **En direct, à plusieurs** : ${liveLine} — roulette publique, Crash et courses de chevaux.\n` : "") +
         `\n🎟️ Les **entrepreneurs** ont accès directement ; les autres membres doivent **demander l'accès**.\n` +
-        `*Mise minimum : ${formatEuro(MIN_BET)}. Plafond : personne ne peut dépasser ${formatEuro(CASINO_CAP)} grâce au casino. La maison garde toujours un avantage.*`
+        `*Mise minimum : ${formatEuro(MIN_BET)}. La maison garde toujours un avantage.*`
     )
     .addFields({ name: "🏆 Gros gains de la semaine", value: require("./casino-live").weekBestLines() })
     .setImage("attachment://casino.jpg")

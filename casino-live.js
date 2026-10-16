@@ -1,6 +1,6 @@
 // Casino en direct : roulette publique, Crash (la fusée de la Maison), courses de chevaux,
 // roue de la fortune gratuite, niveaux VIP, cashback et classement des gros gains.
-// Toutes les mises passent par les règles du casino (accès, horaires, gel IRF, plafond, lois).
+// Toutes les mises passent par les règles du casino (accès, horaires, gel IRF, lois).
 const fs = require("fs");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder, ChannelType } = require("discord.js");
 const { formatEuro, readBalance, changeBalance } = require("./economie");
