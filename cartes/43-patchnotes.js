@@ -2,6 +2,32 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.17",
+    color: 0x1d4ed8,
+    // la carte de Charlotte, rendue au moment de la publication
+    image: async () => {
+      const card = findCard(`mb_${CHARLOTTE_ID}`);
+      return card ? drawCreatureCard(card, true, 0.3) : null;
+    },
+    parts: [
+      [
+        "✡️ Une carte unique : Charlotte, championne du tournoi",
+        "**Charlotte** a enfin sa carte de membre, et elle ne ressemble à aucune autre : l'**Édition Étoile de David**.\n" +
+          "• Un cadre en **pierre de Jérusalem** et les rayures bleues du **talit**.\n" +
+          "• Son portrait dans une **fenêtre en arc** et une rosace en vitrail, sous une **étoile de David** en or.\n" +
+          "• Les **remparts de la vieille ville** au clair de lune, une **menorah** aux sept flammes qui vacillent, des **branches d'olivier** et des **grenades**.\n" +
+          "• Ses attaques sont écrites sur un **rouleau de parchemin**, avec le symbole **Haï** (חי, « la vie »).\n" +
+          "• Championne du dernier tournoi : sa carte porte le **sceau de championne**, et elle reçoit le dos de carte exclusif **Couronne du champion**.",
+      ],
+      [
+        "🪙 Et aussi",
+        "• **Bureau de change** : dans `/boutique`, achetez des **pièces avec vos euros** (cher, et plafonné à 3 000 pièces par semaine).\n" +
+          "• **`/solde`** affiche maintenant aussi vos **pièces** et votre **poussière d'étoile**.",
+      ],
+    ],
+    footer: "Mazal tov, Charlotte ! 🏆",
+  },
+  {
     version: "1.16",
     color: 0xf59e0b,
     parts: [
