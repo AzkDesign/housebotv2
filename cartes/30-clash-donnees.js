@@ -58,11 +58,15 @@ function newBase(user) {
   };
 }
 const manoirOf = (base) => base.buildings.find((x) => x.type === "manoir")?.level ?? 1;
+// ce que le Manoir garde lui-même : avec les coffres au niveau du Manoir, sa prochaine amélioration tient toujours dans le stock
+const CLASH_MANOIR_STORE = [0, 2000, 5000, 10000, 20000, 50000, 70000];
 // capacité de stockage : le Manoir et les coffres
 function clashCap(base) {
   const L = manoirOf(base);
-  return 600 * L + base.buildings.filter((x) => x.type === "coffre").reduce((a, x) => a + CLASH_BUILDINGS.coffre.store(x.level), 0);
+  return CLASH_MANOIR_STORE[L] + base.buildings.filter((x) => x.type === "coffre").reduce((a, x) => a + CLASH_BUILDINGS.coffre.store(x.level), 0);
 }
+// le prix dépasse ce que les coffres peuvent contenir : il faut d'abord les agrandir
+const clashTooBig = (base, cost) => Object.values(cost).some((v) => v > clashCap(base));
 // production : accumulée au fil du temps jusqu'au plafond
 function clashTick(base) {
   const now = Date.now(), hours = (now - (base.resAt ?? now)) / 3600000;
@@ -134,7 +138,10 @@ function clashCanPay(base, cost) {
 }
 function clashStart(base, opt) {
   if (busyBuilders(base) >= CLASH_BUILDERS) return "Vos deux ouvriers sont déjà occupés.";
-  if (!clashCanPay(base, opt.cost)) return `Il vous manque des ressources (${costText(opt.cost)}).`;
+  if (!clashCanPay(base, opt.cost))
+    return clashTooBig(base, opt.cost)
+      ? `Vos coffres sont trop petits pour ce chantier (${costText(opt.cost)}, vous stockez ${clashCap(base).toLocaleString("fr-FR")} au maximum) : améliorez d'abord un coffre-fort.`
+      : `Il vous manque des ressources (${costText(opt.cost)}).`;
   for (const [k, v] of Object.entries(opt.cost)) base.res[k] -= v;
   if (opt.kind === "new") {
     const id = `b${Date.now().toString(36)}${Math.floor(Math.random() * 99)}`;

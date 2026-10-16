@@ -120,7 +120,7 @@ async function clashHomePayload(userId, note = "") {
               label: `${o.kind === "new" ? "Construire" : "Améliorer"} : ${CLASH_BUILDINGS[o.type].name}${o.kind === "up" ? ` (niveau ${o.to})` : ""}`.slice(0, 100),
               value: o.kind === "new" ? `new:${o.type}` : `up:${o.id}`,
               emoji: CLASH_BUILDINGS[o.type].emoji,
-              description: `${costText(o.cost)} · ${minutesText(o.time)}${clashCanPay(base, o.cost) ? "" : " · pas assez de ressources"}`.slice(0, 100),
+              description: `${costText(o.cost)} · ${minutesText(o.time)}${clashCanPay(base, o.cost) ? "" : clashTooBig(base, o.cost) ? " · coffres trop petits" : " · pas assez de ressources"}`.slice(0, 100),
             }))
           )
       )

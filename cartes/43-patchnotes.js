@@ -2,6 +2,44 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.15",
+    color: 0x7c3aed,
+    // une vraie base rendue en 3D au moment de la publication
+    image: () => {
+      const b = ghostBase(5, 3);
+      b.ghost = false;
+      b.name = "Votre Maison en 3D";
+      b.trophies = 1250;
+      return drawClashBase(b);
+    },
+    parts: [
+      [
+        "🏰 Le Clash de la Maison passe en 3D",
+        "Votre Maison est maintenant une **île flottante au-dessus d'une mer de nuages**.\n" +
+          "• Chaque bâtiment est **modélisé en 3D** et change d'allure à chaque niveau.\n" +
+          "• **Vraies ombres** au soleil, brume, cascade, arbres, chemins pavés et oiseaux.\n" +
+          "• Nouvelle interface : bandeaux dorés, **icônes 3D**, bulles de récolte au-dessus des mines.\n" +
+          "• En repérage, la **portée des défenses** est tracée au sol.",
+      ],
+      [
+        "⚔️ Des attaques en vraie cinématique",
+        "• Intro **« À l'assaut ! »** et ouverture des portails.\n" +
+          "• La **caméra suit vos soldats** ; canons et mortiers se tournent vers leur cible.\n" +
+          "• Les bâtiments détruits tombent en **ruines fumantes**.\n" +
+          "• Quand le **Manoir** tombe : ralenti, zoom et étoile bonus.\n" +
+          "• Bilan final : les étoiles tombent et le butin défile.",
+      ],
+      [
+        "🧰 Correctif : le Manoir niveau 2 enfin accessible",
+        "Impossible de payer le Manoir niveau 2 (2 500 or) avec un stock limité à 1 600 : c'est réparé, comme les niveaux suivants.\n" +
+          "• Le **Manoir garde lui-même une réserve** : 2 000 au niveau 1, jusqu'à 70 000 au niveau 6.\n" +
+          "• Avec vos **coffres-forts au niveau du Manoir**, sa prochaine amélioration tient toujours dans votre stock.\n" +
+          "• Coffres trop petits pour un chantier ? Le jeu vous le dit maintenant clairement.",
+      ],
+    ],
+    footer: "À l'assaut ! ⚔️",
+  },
+  {
     version: "1.14",
     color: 0xf59e0b,
     parts: [
