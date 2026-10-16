@@ -2,6 +2,31 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.16",
+    color: 0xf59e0b,
+    parts: [
+      [
+        "🪙 Pile ou face : qui frappe en premier ?",
+        "Chaque combat de l'Arène commence maintenant par un **lancer de pièce en 3D** !\n" +
+          "• **FACE** 👑 (pièce d'or) pour le joueur qui lance le combat, **PILE** ⭐ (pièce d'argent) pour son adversaire.\n" +
+          "• La pièce s'envole, rebondit et tourne sur la tranche avant de tomber… suspense jusqu'au bout.\n" +
+          "• Le gagnant a l'**initiative** à la manche 1, puis elle **passe d'un joueur à l'autre** à chaque manche.",
+      ],
+      [
+        "⚡ L'initiative au combat",
+        "• À **coup égal** (attaque contre attaque, spécial contre spécial), le joueur qui a l'initiative **frappe le premier**.\n" +
+          "• Une carte mise K.O. avant son tour ne frappe pas : l'initiative peut décider d'un combat serré !\n" +
+          "• Le triangle ne change pas : une attaque frappe toujours avant un spécial.\n" +
+          "• L'initiative de la manche s'affiche sur le panneau du combat.",
+      ],
+      [
+        "🎰 Et aussi",
+        "• **Casino** : le plafond de 15 000 € est supprimé, les gains sont versés en entier.",
+      ],
+    ],
+    footer: "Que la chance soit avec vous ! 🪙",
+  },
+  {
     version: "1.15",
     color: 0x7c3aed,
     // une vraie base rendue en 3D au moment de la publication
