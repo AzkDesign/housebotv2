@@ -255,6 +255,15 @@ function withHeader(key, payload) {
   payload.embeds[0].setImage(`attachment://salle-${key}.jpg`);
   return { ...payload, files: [new AttachmentBuilder(buf, { name: `salle-${key}.jpg` })] };
 }
+// Résultats des manches : un seul à la fois par salle (le nouveau efface l'ancien), et il part après 90 s
+const RESULT_TTL = 90 * 1000;
+const lastResults = {};
+function keepOneResult(key, msg) {
+  if (!msg) return;
+  lastResults[key]?.delete().catch(() => null);
+  lastResults[key] = msg;
+  deleteLater(msg, RESULT_TTL);
+}
 async function upsertBoard(key, payload) {
   payload = withHeader(key, payload);
   const ch = chanOf(key);
@@ -348,7 +357,7 @@ async function rouletteSpin() {
       files: [new AttachmentBuilder(gif, { name: "roulette.gif" })],
     })
     .catch(() => null);
-  deleteLater(msg, 3 * MINUTE);
+  keepOneResult("roulette", msg);
   await upsertBoard("roulette", rouletteBoard());
 }
 
@@ -428,7 +437,7 @@ async function crashFly() {
   const msg = await chanOf("crash")
     ?.send({ embeds: [new EmbedBuilder().setColor(0xb91c1c).setTitle(`💥 La fusée explose à x${c.point.toFixed(2)} !`).setDescription(lines.join("\n").slice(0, 4000)).setImage("attachment://crash.jpg")], files: [new AttachmentBuilder(img, { name: "crash.jpg" })] })
     .catch(() => null);
-  deleteLater(msg, 3 * MINUTE);
+  keepOneResult("crash", msg);
   await upsertBoard("crash", crashBoard());
 }
 
@@ -495,7 +504,7 @@ async function runRace() {
       files: [new AttachmentBuilder(gif, { name: "course.gif" })],
     })
     .catch(() => null);
-  deleteLater(msg, 3 * MINUTE);
+  keepOneResult("courses", msg);
   await upsertBoard("courses", coursesBoard());
 }
 
@@ -642,6 +651,23 @@ async function handleLiveInteraction(interaction, client) {
 
 // --- Démarrage ---
 let lastOpen = null;
+// au démarrage : les anciens messages du bot dans les salles (résultats restés) partent ; le panneau reste
+async function sweepOldResults(client) {
+  const st = load();
+  for (const key of ["roulette", "crash", "courses"]) {
+    const ch = chanOf(key);
+    if (!ch) continue;
+    const msgs = await ch.messages.fetch({ limit: 100 }).catch(() => null);
+    const old = [...(msgs?.values() ?? [])].filter((m) => m.author?.id === client.user.id && m.id !== st.boards[key]);
+    if (!old.length) continue;
+    // suppression groupée (moins de 14 jours), sinon une par une
+    const recent = old.filter((m) => Date.now() - m.createdTimestamp < 13 * 24 * HOUR);
+    if (recent.length > 1) await ch.bulkDelete(recent.map((m) => m.id), true).catch(() => null);
+    else for (const m of recent) await m.delete().catch(() => null);
+    for (const m of old.filter((x) => !recent.includes(x))) await m.delete().catch(() => null);
+    console.log(`Casino en direct : ${old.length} ancien(s) message(s) retiré(s) de la salle ${key}`);
+  }
+}
 async function setupLive(client) {
   clientRef = client;
   load();
@@ -654,6 +680,7 @@ async function setupLive(client) {
     if (!live.courses) await upsertBoard("courses", coursesBoard());
   };
   await refreshAll().catch((err) => console.error("Casino en direct:", err.message));
+  await sweepOldResults(client).catch((err) => console.error("Casino en direct (nettoyage):", err.message));
   lastOpen = C().getSchedule().open;
   setInterval(() => {
     const open = C().getSchedule().open;
@@ -662,7 +689,6 @@ async function setupLive(client) {
       refreshAll().catch(() => null);
     }
   }, MINUTE).unref?.();
-  void HOUR;
 }
 const liveChannelsLine = () => {
   const st = load();
