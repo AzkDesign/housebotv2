@@ -84,6 +84,7 @@ const { setupConvocations, handleConvocationInteraction } = require("./convocati
 const { setupProces, handleProcesInteraction } = require("./proces");
 const { setupParis, handleParisInteraction } = require("./paris");
 const { setupEncheres, handleEncheresInteraction } = require("./encheres");
+const { setupBourse, handleBourseInteraction } = require("./bourse");
 const { setupLogs } = require("./logs");
 const { handleRelayMessage, handleRelayInteraction } = require("./relais");
 const { startInactivityWatcher } = require("./tickets");
@@ -579,6 +580,7 @@ client.once(Events.ClientReady, async () => {
   await step("Convocations", () => setupConvocations(client));
   await step("Tribunal", () => setupProces(client));
   await step("Enchères", () => setupEncheres(client));
+  await step("Bourse", () => setupBourse(client));
   await step("Paris sportifs", () => setupParis(client));
   await step("annonce V3", () => publishV3Announcement(client));
   await step("vidéo V3", () => publishV3Video(client));
@@ -618,6 +620,7 @@ async function onInteraction(interaction) {
   if (await handleProcesInteraction(interaction, client)) return;
   if (await handleParisInteraction(interaction, client)) return;
   if (await handleEncheresInteraction(interaction, client)) return;
+  if (await handleBourseInteraction(interaction, client)) return;
   if (await handleStarInteraction(interaction, client)) return;
   if (await handleLoisInteraction(interaction, client)) return;
   if (await handleCartesInteraction(interaction, client)) return;
