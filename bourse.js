@@ -1,5 +1,5 @@
 // La Bourse de la Maison : on achète des parts des entreprises du serveur et on les revend quand on veut.
-// - Chaque entreprise active est cotée. Le cours bouge toutes les 5 minutes : il suit le vrai chiffre d'affaires
+// - Chaque entreprise active est cotée. Le cours bouge chaque minute : il suit le vrai chiffre d'affaires
 //   (un client servi fait monter l'action), revient doucement vers sa « juste valeur », avec un peu de hasard.
 // - Chaque achat fait monter le cours, chaque vente le fait baisser (comme un vrai carnet d'ordres).
 // - Frais de 1 % à l'achat et à la vente (versés au Trésor) : impossible de s'enrichir en achetant et revendant aussitôt.
@@ -25,14 +25,14 @@ const { changeBalance, readBalance, isFrozen, formatEuro, addToTreasury } = requ
 
 const ANNOUNCE_CHANNEL_ID = "1509983723892903966"; // le salon est rangé à côté des annonces
 const CHANNEL_NAME = "📈・bourse";
-const TICK = 5 * 60000;
-const HISTORY_KEEP = 7 * 24 * 12; // 7 jours de relevés toutes les 5 minutes
+const TICK = 60000; // un relevé par minute : le marché vit en direct
+const HISTORY_KEEP = 24 * 60; // 24 h de relevés minute par minute (plus un relevé par heure sur 7 jours)
 const FEE = 0.01;
 const MAX_PER_COMPANY = 25000; // € investis au maximum par entreprise et par joueur
 const MIN_ORDER = 10;
 const LIQUIDITY = 60000; // plus il y a d'argent échangé, plus le cours bouge
 const MAX_IMPACT = 0.06; // un seul ordre ne fait pas bouger le cours de plus de 6 %
-const SIGMA = 0.008; // hasard à chaque relevé
+const SIGMA = 0.0036; // hasard à chaque relevé
 const STATE_FILE = require("./data").dataFile("bourse-state.json");
 
 const FONT_DIR = path.join(__dirname, "assets", "fonts");
@@ -120,11 +120,14 @@ function tick() {
     s.lastRev = co.totalRevenue ?? 0;
     let p = s.price * (1 + Math.min(0.05, earned / 40000));
     // retour lent vers la juste valeur, et un peu de hasard
-    p += (fair - p) * 0.01;
+    p += (fair - p) * 0.002;
     p *= Math.exp(SIGMA * gauss());
     s.price = round2(Math.max(1, p));
     s.history.push([now, s.price]);
     if (s.history.length > HISTORY_KEEP) s.history.splice(0, s.history.length - HISTORY_KEEP);
+    s.hourly ??= [];
+    if (!s.hourly.length || now - s.hourly.at(-1)[0] >= 3600000) s.hourly.push([now, s.price]);
+    if (s.hourly.length > 7 * 24) s.hourly.splice(0, s.hourly.length - 7 * 24);
   }
   // entreprise fermée : on rembourse les actionnaires au dernier cours
   const ids = new Set(open.map((c) => String(c.id)));
@@ -321,7 +324,7 @@ function drawBoard() {
   ctx.fillText("Bourse de la Maison", W / 2, 150);
   ctx.font = "17px CardItalic";
   ctx.fillStyle = "#94a3b8";
-  ctx.fillText(`Cours mis à jour toutes les 5 minutes · frais ${Math.round(FEE * 100)} % · ${formatEuro(MAX_PER_COMPANY)} max. par entreprise`, W / 2, 182);
+  ctx.fillText(`Cours en direct, mis à jour chaque minute · frais ${Math.round(FEE * 100)} % · ${formatEuro(MAX_PER_COMPANY)} max. par entreprise`, W / 2, 182);
   // en-têtes
   const y0 = 230;
   ctx.font = "12px CardEngrave";
@@ -383,7 +386,10 @@ function drawChart(co) {
   const s = stockOf(co), W = 1000, H = 520;
   const c = createCanvas(W, H), ctx = c.getContext("2d");
   background(ctx, W, H);
-  const pts = s.history.map(([, p]) => p), ref = pts[0] ?? s.price, ch = pct(s.price, ref), col = ch >= 0 ? UP : DOWN;
+  // 7 jours : un point par heure, puis la dernière heure minute par minute
+  const lastHour = s.history.filter(([t]) => t > Date.now() - 3600000);
+  const pts = [...(s.hourly ?? []).filter(([t]) => t <= Date.now() - 3600000), ...lastHour].map(([, p]) => p);
+  const ref = pts[0] ?? s.price, ch = pct(s.price, ref), col = ch >= 0 ? UP : DOWN;
   tickerBadge(ctx, 64, 62, 30, tickerOf(co), 0);
   ctx.textAlign = "left";
   ctx.font = "34px CardTitle";
@@ -425,8 +431,7 @@ function drawChart(co) {
 // --- Messages ---
 const navRow = () =>
   new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("bourse_buy").setLabel("Acheter").setEmoji("📈").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("bourse_sell").setLabel("Vendre").setEmoji("📉").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("bourse_trade").setLabel("Trader").setEmoji("📈").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("bourse_me").setLabel("Mon portefeuille").setEmoji("💼").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("bourse_chart").setLabel("Graphique").setEmoji("📊").setStyle(ButtonStyle.Secondary)
   );
@@ -442,37 +447,87 @@ async function boardPayload() {
         .setTitle("📈 Bourse de la Maison")
         .setDescription(
           "Achetez des **parts des entreprises** de la Maison et revendez-les quand vous voulez. Le cours suit leur **vrai chiffre d'affaires** : plus elles servent de clients, plus l'action monte.\n" +
+            "Cliquez sur **Trader** : un bureau de trading s'ouvre, et chaque bouton achète ou vend **en un clic**.\n" +
             (best && moves.length > 1 ? `\n🚀 Plus forte hausse : **${best.co.name}** (${pctText(best.ch)}) · 🩸 plus forte baisse : **${worst.co.name}** (${pctText(worst.ch)})` : "")
         )
         .setImage("attachment://bourse.jpg")
-        .setFooter({ text: `Frais de ${Math.round(FEE * 100)} % par ordre · ${MAX_PER_COMPANY.toLocaleString("fr-FR")} € investis au maximum par entreprise` })
+        .setFooter({ text: `Cours en direct (chaque minute) · frais de ${Math.round(FEE * 100)} % par ordre · ${MAX_PER_COMPANY.toLocaleString("fr-FR")} € investis au maximum par entreprise` })
         .setTimestamp(),
     ],
     files: [new AttachmentBuilder(buf, { name: "bourse.jpg" })],
     components: [navRow()],
   };
 }
-function portfolioEmbed(userId) {
+// courbe en caractères (instantanée, sans image)
+const BARS = "▁▂▃▄▅▆▇█";
+function textSpark(points, n = 32) {
+  if (points.length < 2) return BARS[3].repeat(n);
+  const step = Math.max(1, Math.floor(points.length / n)), pts = [];
+  for (let i = Math.max(0, points.length - step * n); i < points.length; i += step) pts.push(points[i]);
+  const lo = Math.min(...pts), hi = Math.max(...pts);
+  return pts.map((v) => BARS[hi - lo < 1e-9 ? 3 : Math.round(((v - lo) / (hi - lo)) * 7)]).join("");
+}
+function positionLine(userId, co, s) {
+  const pos = holdingsOf(userId)[co.id];
+  if (!pos?.qty) return "💼 Vous n'avez **aucune part** de cette entreprise.";
+  const v = round2(pos.qty * s.price), g = round2(v - pos.cost);
+  return `💼 **${qtyText(pos.qty)} part${pos.qty >= 2 ? "s" : ""}** · valeur **${formatEuro(v)}** · ${g >= 0 ? "🟢 +" : "🔴 "}${formatEuro(g)} (${pctText(pct(v, pos.cost))})`;
+}
+// le bureau de trading d'une entreprise : tout se fait en un clic, le même message se met à jour
+function deskPayload(userId, co, note = "") {
+  const s = stockOf(co), ref = dayRef(s), ch = pct(s.price, ref), last2h = s.history.filter(([t]) => t > Date.now() - 2 * 3600000).map(([, p]) => p);
+  const live = tradable(co), pos = holdingsOf(userId)[co.id], cid = co.id;
+  const embed = new EmbedBuilder()
+    .setColor(!live ? 0x64748b : ch >= 0 ? 0x22c55e : 0xef4444)
+    .setTitle(`${ch >= 0 ? "📈" : "📉"} ${tickerOf(co)} · ${co.name} — ${priceText(s.price)}`.slice(0, 256))
+    .setDescription(
+      (note ? `${note}\n\n` : "") +
+        `${ch >= 0 ? "🟢" : "🔴"} **${pctText(ch)}** sur 24 h · juste valeur ${priceText(s.fair ?? s.price)}${live ? "" : " · ⏸️ **cotation suspendue**"}\n` +
+        `\`${textSpark(last2h.length > 1 ? last2h : [ref, s.price])}\` *2 dernières heures*\n\n` +
+        `${positionLine(userId, co, s)}\n💶 Liquidités : **${formatEuro(readBalance(userId) ?? 0)}**`
+    )
+    .setFooter({ text: `Cours en direct · frais ${Math.round(FEE * 100)} % · ${MAX_PER_COMPANY.toLocaleString("fr-FR")} € max. investis par entreprise · 🔄 pour le dernier cours` });
+  const buyRow = new ActionRowBuilder().addComponents(
+    ...[100, 500, 1000, 5000].map((a) => new ButtonBuilder().setCustomId(`bourse_q_b_${cid}_${a}`).setLabel(`+${a.toLocaleString("fr-FR")} €`).setStyle(ButtonStyle.Success).setDisabled(!live)),
+    new ButtonBuilder().setCustomId(`bourse_q_bm_${cid}`).setLabel("Montant…").setEmoji("📈").setStyle(ButtonStyle.Success).setDisabled(!live)
+  );
+  const sellRow = new ActionRowBuilder().addComponents(
+    ...[25, 50, 100].map((p) => new ButtonBuilder().setCustomId(`bourse_q_s_${cid}_${p}`).setLabel(p === 100 ? "Tout vendre" : `Vendre ${p} %`).setStyle(ButtonStyle.Danger).setDisabled(!live || !pos?.qty)),
+    new ButtonBuilder().setCustomId(`bourse_q_sm_${cid}`).setLabel("Quantité…").setEmoji("📉").setStyle(ButtonStyle.Danger).setDisabled(!live || !pos?.qty)
+  );
+  const toolRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`bourse_q_r_${cid}`).setLabel("Actualiser").setEmoji("🔄").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`bourse_q_g_${cid}`).setLabel("Graphique 7 jours").setEmoji("📊").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("bourse_trade").setLabel("Autre entreprise").setEmoji("↩️").setStyle(ButtonStyle.Secondary)
+  );
+  return { content: null, embeds: [embed], components: [buyRow, sellRow, toolRow], files: [], attachments: [] };
+}
+function portfolioPayload(userId) {
   const h = holdingsOf(userId), byId = new Map(companies().map((co) => [String(co.id), co]));
   let value = 0, cost = 0;
-  const lines = [];
+  const lines = [], mine = [];
   for (const [id, pos] of Object.entries(h)) {
-    const s = load().stocks[id];
+    const s = load().stocks[id], co = byId.get(String(id));
     if (!s) continue;
     const v = round2(pos.qty * s.price), g = round2(v - pos.cost);
     value += v;
     cost += pos.cost;
-    lines.push(`**${byId.get(String(id))?.name ?? s.name ?? id}** — ${qtyText(pos.qty)} part${pos.qty >= 2 ? "s" : ""} × ${priceText(s.price)} = **${formatEuro(v)}** (${g >= 0 ? "🟢 +" : "🔴 "}${formatEuro(g)}, ${pctText(pct(v, pos.cost))})`);
+    lines.push(`**${co?.name ?? s.name ?? id}** — ${qtyText(pos.qty)} part${pos.qty >= 2 ? "s" : ""} × ${priceText(s.price)} = **${formatEuro(v)}** (${g >= 0 ? "🟢 +" : "🔴 "}${formatEuro(g)}, ${pctText(pct(v, pos.cost))})`);
+    if (co) mine.push({ co, s, extra: `${qtyText(pos.qty)} part(s)` });
   }
   const g = round2(value - cost);
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(g >= 0 ? 0x22c55e : 0xef4444)
     .setTitle("💼 Mon portefeuille")
     .setDescription(
-      (lines.join("\n") || "*Vous n'avez encore aucune action. Cliquez sur **Acheter** pour investir.*") +
+      (lines.join("\n") || "*Vous n'avez encore aucune action. Cliquez sur **Trader** pour investir.*") +
         `\n\n💶 Liquidités : **${formatEuro(readBalance(userId) ?? 0)}**` +
         (lines.length ? `\n📊 Valeur des actions : **${formatEuro(round2(value))}** · investi : ${formatEuro(round2(cost))} · ${g >= 0 ? "plus-value" : "moins-value"} : **${g >= 0 ? "+" : ""}${formatEuro(g)}**` : "")
     );
+  const rows = [];
+  if (mine.length) rows.push(companySelect("bourse_tradesel", "Ouvrir le bureau d'une de mes actions…", mine));
+  rows.push(navRow());
+  return { content: null, embeds: [embed], components: rows, files: [], attachments: [] };
 }
 function companySelect(customId, placeholder, list) {
   return new ActionRowBuilder().addComponents(
@@ -539,93 +594,139 @@ async function handleBourseInteraction(interaction) {
   if (!isCmd && (typeof id !== "string" || !id.startsWith("bourse_"))) return false;
   const userId = interaction.user.id;
   const findCo = (cid) => companies().find((c) => String(c.id) === String(cid)) ?? null;
+  // depuis un message privé : on le met à jour ; depuis le salon : nouvelle réponse privée
+  const fromPrivate = Boolean(interaction.message?.flags?.has?.(64));
+  const show = (payload) => {
+    if (fromPrivate) return interaction.update(payload);
+    const { attachments, ...rest } = payload;
+    void attachments;
+    return interaction.reply({ ...rest, ephemeral: true });
+  };
   if (isCmd) {
-    await interaction.deferReply({ ephemeral: true });
-    const p = await boardPayload();
-    await interaction.editReply({ ...p, embeds: [p.embeds[0], portfolioEmbed(userId)] });
+    const { attachments, ...p } = portfolioPayload(userId);
+    void attachments;
+    await interaction.reply({ ...p, ephemeral: true });
     return true;
   }
   if (id === "bourse_me") {
-    await interaction.reply({ embeds: [portfolioEmbed(userId)], components: [navRow()], ephemeral: true });
+    await show(portfolioPayload(userId));
     return true;
   }
-  if (id === "bourse_buy") {
-    const list = companies().filter(tradable).map((co) => ({ co, s: stockOf(co) }));
-    if (!list.length) return void (await interaction.reply({ content: "Aucune entreprise n'est cotée pour le moment.", ephemeral: true })) || true;
-    await interaction.reply({ content: `📈 Quelle entreprise voulez-vous acheter ? (vous avez **${formatEuro(readBalance(userId) ?? 0)}**)`, components: [companySelect("bourse_buysel", "Choisir une entreprise…", list)], ephemeral: true });
-    return true;
-  }
-  if (id === "bourse_sell") {
-    const h = holdingsOf(userId);
-    const list = Object.entries(h)
-      .map(([cid, pos]) => ({ co: findCo(cid), pos }))
-      .filter((x) => x.co)
-      .map(({ co, pos }) => ({ co, s: stockOf(co), extra: `${qtyText(pos.qty)} part(s)` }));
-    if (!list.length) return void (await interaction.reply({ content: "💼 Vous n'avez aucune action à vendre.", ephemeral: true })) || true;
-    await interaction.reply({ content: "📉 Quelle action voulez-vous vendre ?", components: [companySelect("bourse_sellsel", "Choisir une action…", list)], ephemeral: true });
-    return true;
-  }
-  if (id === "bourse_chart") {
+  if (id === "bourse_trade" || id === "bourse_chart") {
     const list = companies().map((co) => ({ co, s: stockOf(co) }));
-    if (!list.length) return void (await interaction.reply({ content: "Aucune entreprise n'est cotée pour le moment.", ephemeral: true })) || true;
-    await interaction.reply({ content: "📊 Le graphique de quelle entreprise ?", components: [companySelect("bourse_chartsel", "Choisir une entreprise…", list)], ephemeral: true });
+    if (!list.length) {
+      await show({ content: "Aucune entreprise n'est cotée pour le moment.", embeds: [], components: [] });
+      return true;
+    }
+    await show({
+      content: id === "bourse_trade" ? `📈 Quelle entreprise voulez-vous trader ? (vous avez **${formatEuro(readBalance(userId) ?? 0)}**)` : "📊 Le graphique de quelle entreprise ?",
+      embeds: [],
+      files: [],
+      attachments: [],
+      components: [companySelect(id === "bourse_trade" ? "bourse_tradesel" : "bourse_chartsel", "Choisir une entreprise…", list)],
+    });
+    return true;
+  }
+  if (id === "bourse_tradesel") {
+    const co = findCo(interaction.values[0]);
+    await show(co ? deskPayload(userId, co) : { content: "❌ Entreprise introuvable.", embeds: [], components: [navRow()] });
     return true;
   }
   if (id === "bourse_chartsel") {
     const co = findCo(interaction.values[0]);
-    if (!co) return void (await interaction.update({ content: "❌ Entreprise introuvable.", components: [] })) || true;
+    if (!co) {
+      await show({ content: "❌ Entreprise introuvable.", embeds: [], components: [navRow()] });
+      return true;
+    }
     await interaction.deferUpdate();
     const buf = await drawChart(co).encode("jpeg", 88);
-    await interaction.editReply({ content: null, files: [new AttachmentBuilder(buf, { name: "graphique.jpg" })], components: [] });
+    await interaction.editReply({ content: null, embeds: [], files: [new AttachmentBuilder(buf, { name: "graphique.jpg" })], components: [navRow()] });
     return true;
   }
-  if (id === "bourse_buysel" || id === "bourse_sellsel") {
-    const co = findCo(interaction.values[0]);
-    if (!co) return void (await interaction.update({ content: "❌ Entreprise introuvable.", components: [] })) || true;
-    const s = stockOf(co), buying = id === "bourse_buysel", pos = holdingsOf(userId)[co.id];
-    const input = new TextInputBuilder()
-      .setCustomId("v")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setMaxLength(12)
-      .setLabel(buying ? "Montant à investir (€)" : "Nombre de parts (ou « tout »)")
-      .setPlaceholder(buying ? `Cours : ${priceText(s.price)} · frais 1 %` : `Vous avez ${qtyText(pos?.qty ?? 0)} part(s)`);
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId(`bourse_${buying ? "buymod" : "sellmod"}_${co.id}`)
-        .setTitle(`${buying ? "Acheter" : "Vendre"} : ${co.name}`.slice(0, 45))
-        .addComponents(new ActionRowBuilder().addComponents(input))
-    );
-    return true;
-  }
-  const mod = /^bourse_(buymod|sellmod)_(.+)$/.exec(id);
-  if (mod && interaction.isModalSubmit?.()) {
-    const co = findCo(mod[2]);
-    if (!co) return void (await interaction.reply({ content: "❌ Entreprise introuvable.", ephemeral: true })) || true;
-    const raw = interaction.fields.getTextInputValue("v").trim().toLowerCase().replace(/\s/g, "").replace(",", ".").replace("€", "");
-    if (mod[1] === "buymod") {
-      const r = buy(userId, co, Number(raw));
-      if (r.error) return void (await interaction.reply({ content: r.error, ephemeral: true })) || true;
-      await interaction.reply({
-        content: `✅ Achat de **${qtyText(r.qty)} part(s) de ${co.name}** à ${priceText(r.exec)} (frais ${formatEuro(r.fee)}).\nNouveau cours : **${priceText(r.price)}**.`,
-        embeds: [portfolioEmbed(userId)],
-        ephemeral: true,
-      });
+  const q = /^bourse_q_(bm|sm|b|s|r|g)_(.+?)(?:_(\d+))?$/.exec(id);
+  if (q) {
+    const [, kind, cid, n] = q, co = findCo(cid);
+    if (!co) {
+      await show({ content: "❌ Cette entreprise n'est plus cotée.", embeds: [], components: [navRow()] });
+      return true;
+    }
+    if (kind === "r") {
+      await show(deskPayload(userId, co));
+      return true;
+    }
+    if (kind === "g") {
+      await interaction.deferReply({ ephemeral: true });
+      const buf = await drawChart(co).encode("jpeg", 88);
+      await interaction.editReply({ files: [new AttachmentBuilder(buf, { name: "graphique.jpg" })] });
+      return true;
+    }
+    if (kind === "bm" || kind === "sm") {
+      const buying = kind === "bm", s = stockOf(co), pos = holdingsOf(userId)[co.id];
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId(`bourse_m_${buying ? "b" : "s"}_${co.id}`)
+          .setTitle(`${buying ? "Acheter" : "Vendre"} : ${co.name}`.slice(0, 45))
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId("v")
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(12)
+                .setLabel(buying ? "Montant à investir (€)" : "Nombre de parts (ou « tout »)")
+                .setPlaceholder(buying ? `Cours : ${priceText(s.price)} · frais 1 %` : `Vous avez ${qtyText(pos?.qty ?? 0)} part(s)`)
+            )
+          )
+      );
+      return true;
+    }
+    // achat ou vente en un clic : le bureau se met à jour aussitôt
+    let note;
+    if (kind === "b") {
+      const r = buy(userId, co, Number(n));
+      note = r.error ?? `✅ **+${qtyText(r.qty)} part(s)** achetées à ${priceText(r.exec)} (frais ${formatEuro(r.fee)}).`;
     } else {
       const pos = holdingsOf(userId)[co.id];
-      const qty = raw === "tout" || raw === "all" ? pos?.qty ?? 0 : Number(raw);
-      const r = sell(userId, co, qty);
-      if (r.error) return void (await interaction.reply({ content: r.error, ephemeral: true })) || true;
-      await interaction.reply({
-        content: `✅ Vente de **${qtyText(r.qty)} part(s) de ${co.name}** à ${priceText(r.exec)} : **+${formatEuro(r.net)}** (frais ${formatEuro(r.fee)}). ${r.gain >= 0 ? `🟢 Plus-value : +${formatEuro(r.gain)}` : `🔴 Moins-value : ${formatEuro(r.gain)}`}`,
-        embeds: [portfolioEmbed(userId)],
-        ephemeral: true,
-      });
+      const r = sell(userId, co, pos ? (pos.qty * Number(n)) / 100 : 0);
+      note = r.error ?? `✅ **${qtyText(r.qty)} part(s)** vendues à ${priceText(r.exec)} : **+${formatEuro(r.net)}** (${r.gain >= 0 ? `🟢 +${formatEuro(r.gain)}` : `🔴 ${formatEuro(r.gain)}`}).`;
     }
-    refreshBoard().catch(() => null);
+    await show(deskPayload(userId, co, note));
+    boardSoon();
+    return true;
+  }
+  const m = /^bourse_m_(b|s)_(.+)$/.exec(id);
+  if (m && interaction.isModalSubmit?.()) {
+    const co = findCo(m[2]);
+    const reply = (payload) => (interaction.isFromMessage?.() ? interaction.update(payload) : interaction.reply({ ...payload, attachments: undefined, ephemeral: true }));
+    if (!co) {
+      await reply({ content: "❌ Cette entreprise n'est plus cotée.", embeds: [], components: [] });
+      return true;
+    }
+    const raw = interaction.fields.getTextInputValue("v").trim().toLowerCase().replace(/\s/g, "").replace(",", ".").replace("€", "");
+    let note;
+    if (m[1] === "b") {
+      const r = buy(userId, co, Number(raw));
+      note = r.error ?? `✅ **+${qtyText(r.qty)} part(s)** achetées à ${priceText(r.exec)} (frais ${formatEuro(r.fee)}).`;
+    } else {
+      const pos = holdingsOf(userId)[co.id];
+      const r = sell(userId, co, raw === "tout" || raw === "all" ? pos?.qty ?? 0 : Number(raw));
+      note = r.error ?? `✅ **${qtyText(r.qty)} part(s)** vendues à ${priceText(r.exec)} : **+${formatEuro(r.net)}** (${r.gain >= 0 ? `🟢 +${formatEuro(r.gain)}` : `🔴 ${formatEuro(r.gain)}`}).`;
+    }
+    await reply(deskPayload(userId, co, note));
+    boardSoon();
     return true;
   }
   return false;
 }
+// après des ordres, le tableau du salon suit (au plus une fois toutes les 20 s)
+let boardTimer = null;
+function boardSoon() {
+  if (boardTimer) return;
+  boardTimer = setTimeout(() => {
+    boardTimer = null;
+    refreshBoard().catch(() => null);
+  }, 20000);
+  boardTimer.unref?.();
+}
 
-module.exports = { setupBourse, handleBourseInteraction, drawBoard, drawChart, buy, sell, tick };
+module.exports = { setupBourse, handleBourseInteraction, drawBoard, drawChart, buy, sell, tick, deskPayload, portfolioPayload };

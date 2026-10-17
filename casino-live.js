@@ -362,7 +362,8 @@ async function rouletteSpin() {
 }
 
 // --- Crash : la fusée de la Maison ---
-const CR_WINDOW = 25 * 1000 * FAST, CR_TICK = 1600, CR_RATE = 0.11;
+// la fusée monte un peu moins vite qu'avant (x2 en ~7,7 s) : le temps de réagir
+const CR_WINDOW = 25 * 1000 * FAST, CR_TICK = 900, CR_RATE = 0.09, CR_GRACE = 1200;
 const crashAt = (start, now) => Math.max(1, Math.exp((CR_RATE * (now - start)) / 1000));
 function drawCrashPoint() {
   const u = Math.random();
@@ -411,21 +412,47 @@ function cashOut(b, mult) {
   b.paid = paid;
   return paid;
 }
+// pendant le vol : le multiplicateur en grand (titre et bouton), sans renvoyer d'image — chaque mise à jour est instantanée
+function crashFlightPayload(m) {
+  const c = live.crash;
+  const embed = new EmbedBuilder()
+    .setColor(m >= 5 ? 0xf59e0b : m >= 2 ? 0x22c55e : 0x0ea5e9)
+    .setTitle(`🚀 x${m.toFixed(2)}`)
+    .setDescription("**La fusée monte !** Cliquez sur **Encaisser** : vous êtes payé au multiplicateur de l'instant exact de votre clic.")
+    .addFields({ name: "🎟️ Passagers", value: betsList(c.bets, (b) => `${b.out ? "✅" : "🚀"} **${pseudo(b.userId)}** — ${formatEuro(b.amount)}${b.out ? ` · encaissé à **x${b.out.toFixed(2)}** (+${formatEuro(b.paid ?? 0)})` : ` · vaut **${formatEuro(round2(b.amount * m))}**`}`) })
+    .setFooter({ text: `Derniers vols : ${load().crashHistory.slice(-8).map((h) => `x${h.toFixed(2)}`).join(" · ") || "—"}` });
+  if (HEADERS.crash) embed.setImage("attachment://salle-crash.jpg");
+  return {
+    embeds: [embed],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("casino_x_cr_bet").setLabel("Monter à bord").setEmoji("🎟️").setStyle(ButtonStyle.Primary).setDisabled(true),
+        new ButtonBuilder().setCustomId("casino_x_cr_cash").setLabel(`Encaisser à x${m.toFixed(2)}`).setEmoji("💰").setStyle(ButtonStyle.Success)
+      ),
+    ],
+  };
+}
 async function crashFly() {
   const c = live.crash;
   if (!c || c.phase !== "bet") return;
   c.phase = "fly";
   c.start = Date.now();
   c.point = drawCrashPoint();
+  c.crashTime = c.start + (Math.log(c.point) / CR_RATE) * 1000;
+  const board = await upsertBoard("crash", crashFlightPayload(1));
   while (true) {
     const m = crashAt(c.start, Date.now());
     for (const b of c.bets) if (!b.out && b.auto && b.auto <= Math.min(m, c.point)) cashOut(b, b.auto);
     if (m >= c.point) break;
-    const img = await V.crashImage(m, false, load().crashHistory, c.bets.filter((b) => b.out).map((b) => ({ name: pseudo(b.userId), at: b.out })));
-    await upsertBoard("crash", crashBoard(img));
-    const wait = Math.min(CR_TICK, Math.max(300, (Math.log(c.point) / CR_RATE) * 1000 - (Date.now() - c.start)));
+    // édition légère : seulement le texte et les boutons (la bannière déjà envoyée reste en place)
+    await board?.edit(crashFlightPayload(Math.floor(m * 100) / 100)).catch(() => null);
+    const wait = Math.min(CR_TICK, Math.max(100, c.crashTime - Date.now()));
     await new Promise((r) => setTimeout(r, wait));
   }
+  // explosion : on laisse arriver les clics faits juste avant (le réseau met parfois une seconde)
+  c.phase = "landing";
+  await board?.edit({ ...crashFlightPayload(c.point), embeds: [crashFlightPayload(c.point).embeds[0].setColor(0xb91c1c).setTitle(`💥 x${c.point.toFixed(2)}`).setDescription("**La fusée a explosé !**")], components: [] }).catch(() => null);
+  await new Promise((r) => setTimeout(r, CR_GRACE));
   c.phase = "done";
   const st = load();
   st.crashHistory.push(c.point);
@@ -594,13 +621,18 @@ async function handleLiveInteraction(interaction, client) {
       setTimeout(() => crashFly().catch((err2) => console.error("Crash:", err2.message)), CR_WINDOW);
     }
     live.crash.bets.push({ userId, amount, auto });
-    await interaction.reply({ content: `🎟️ Vous êtes à bord avec **${formatEuro(amount)}**${auto ? ` (encaissement automatique à x${auto.toFixed(2)})` : ""}. Décollage <t:${Math.floor(live.crash.flyAt / 1000)}:R>.`, ephemeral: true });
+    await interaction.reply({
+      content: `🎟️ Vous êtes à bord avec **${formatEuro(amount)}**${auto ? ` (encaissement automatique à x${auto.toFixed(2)})` : ""}. Décollage <t:${Math.floor(live.crash.flyAt / 1000)}:R>.
+Gardez ce bouton sous la main : il encaisse au multiplicateur de l'instant où vous cliquez.`,
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("casino_x_cr_cash").setLabel("Encaisser").setEmoji("💰").setStyle(ButtonStyle.Success))],
+      ephemeral: true,
+    });
     await upsertBoard("crash", crashBoard());
     return true;
   }
   if (id === "casino_x_cr_cash") {
     const c = live.crash, b = c?.bets.find((x) => x.userId === userId);
-    if (!c || c.phase !== "fly" || !b) {
+    if (!c || !["fly", "landing"].includes(c.phase) || !b) {
       await interaction.reply({ content: b ? "🚀 Trop tard…" : "🎟️ Vous n'êtes pas à bord de ce vol.", ephemeral: true });
       return true;
     }
@@ -608,12 +640,14 @@ async function handleLiveInteraction(interaction, client) {
       await interaction.reply({ content: `✅ Déjà encaissé à x${b.out.toFixed(2)}.`, ephemeral: true });
       return true;
     }
-    const m = crashAt(c.start, Date.now());
+    // l'instant du clic (et pas celui où le bot le traite) ; jamais plus de 3 s dans le passé
+    const clickAt = Math.min(Date.now(), Math.max(interaction.createdTimestamp ?? Date.now(), Date.now() - 3000));
+    const m = crashAt(c.start, clickAt);
     if (m >= c.point) {
-      await interaction.reply({ content: "💥 La fusée vient d'exploser… trop tard !", ephemeral: true });
+      await interaction.reply({ content: `💥 La fusée a explosé à x${c.point.toFixed(2)} juste avant votre clic… trop tard !`, ephemeral: true });
       return true;
     }
-    const paid = cashOut(b, Math.floor(m * 100) / 100);
+    const paid = cashOut(b, Math.max(1, Math.floor(m * 100) / 100));
     await interaction.reply({ content: `💰 Encaissé à **x${b.out.toFixed(2)}** : **+${formatEuro(paid)}** !`, ephemeral: true });
     return true;
   }
