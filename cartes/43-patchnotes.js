@@ -2,6 +2,43 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.18",
+    color: 0x7e22ce,
+    // la carte du boss de raid, en version brillante
+    image: () => drawCreatureCard(EVENTS.ev_nyxaros, true, 0.3),
+    parts: [
+      [
+        "🐉 Les raids : Nyxaros, le Dragon des Abysses",
+        "Un boss gigantesque sort des abysses **trois fois par jour** (vers 13 h, 17 h et 21 h) dans le salon 🐉・raids.\n" +
+          "• **5 minutes** pour rejoindre et choisir 3 cartes : il est d'astre 🌑 Ombre, vos cartes ⭐ **Étoile** lui font **double dégâts**.\n" +
+          "• **2 min 30 de combat en direct**, tous ensemble : chacun a son poste de combat privé avec ⚔️ attaque, 💥 coup spécial, 🛡️ esquive et 🔄 changement de carte.\n" +
+          "• Quand il **inspire**, esquivez : son **Souffle des abysses** est dévastateur.\n" +
+          "• S'il tombe : **2 à 8 cartes de capture** selon vos dégâts pour tenter de l'attraper. Sa carte est **mythique**… et parfois **brillante** 🌈.\n" +
+          "• `/raid` : l'heure du prochain raid.",
+      ],
+      [
+        "📈 La Bourse de la Maison",
+        "Achetez des **parts des entreprises** de la Maison dans le salon 📈・bourse (ou `/bourse`) et revendez-les quand vous voulez.\n" +
+          "• Le cours bouge **chaque minute** et suit le **vrai chiffre d'affaires** des entreprises.\n" +
+          "• Bureau de trading : achat et vente **en un clic**, courbe en direct, plus-values de votre portefeuille.\n" +
+          "• 📰 **Rumeurs et annonces** : de 9 h à 23 h, des nouvelles tombent sur les entreprises. Une rumeur fait bouger le cours… puis elle est **confirmée** ou **démentie**. À vous de flairer le bon coup !\n" +
+          "• Frais de 1 % par ordre, 25 000 € investis au maximum par entreprise.",
+      ],
+      [
+        "🎰 Le casino plus fluide",
+        "• **Crash** : le multiplicateur s'affiche en direct, et vous êtes payé au multiplicateur de **l'instant exact de votre clic**. Un bouton « Encaisser » vous attend dans votre confirmation d'embarquement.\n" +
+          "• Roulette, Crash et courses : **un seul résultat** à la fois dans chaque salle, les anciens disparaissent.",
+      ],
+      [
+        "🃏 Et aussi",
+        "• **Une seule carte DUO** par équipe de combat : le choix est maintenant refusé clairement (plus de carte retirée sans prévenir).\n" +
+          "• Le panneau du **tournoi** affiche la carte du dernier champion.\n" +
+          "• Les **impôts** vont désormais **en entier** dans la caisse de la mairie chaque dimanche.",
+      ],
+    ],
+    footer: "À l'assaut du dragon ! 🐉",
+  },
+  {
     version: "1.17",
     color: 0x1d4ed8,
     // la carte de Charlotte, rendue au moment de la publication

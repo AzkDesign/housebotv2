@@ -145,6 +145,117 @@ function tick() {
   save();
 }
 
+// --- Rumeurs et annonces : de 9 h à 23 h, une nouvelle tombe toutes les 45 min à 2 h ---
+// Une rumeur fait bouger le cours tout de suite ; 30 à 90 min plus tard elle est confirmée (le mouvement continue)
+// ou démentie (le cours retombe, et un peu plus). Une annonce officielle fait bouger le cours une seule fois.
+const NEWS_KEEP = 8;
+// [rumeur, version confirmée]
+const RUMORS_UP = [
+  ["{n} serait sur le point de signer un gros contrat avec la Mairie.", "{n} signe un gros contrat avec la Mairie."],
+  ["Un investisseur mystère accumulerait discrètement des parts de {n}.", "Un investisseur mystère détient désormais une grosse part de {n}."],
+  ["{n} préparerait l'ouverture d'un deuxième établissement.", "{n} ouvre un deuxième établissement."],
+  ["{n} aurait battu son record de clients cette semaine, selon une source proche du dossier.", "{n} bat son record de clients cette semaine."],
+  ["{n} serait en discussion pour racheter un concurrent.", "{n} rachète un concurrent."],
+  ["Une célébrité de la Maison aurait été aperçue chez {n}… et aurait adoré.", "La célébrité aperçue chez {n} recommande l'adresse à tout le monde."],
+];
+const RUMORS_DOWN = [
+  ["{n} serait visée par un contrôle fiscal de l'IRF.", "L'IRF ouvre bien un contrôle fiscal chez {n}."],
+  ["Des clients se plaindraient du service chez {n}.", "Les plaintes contre {n} se multiplient."],
+  ["Le patron de {n} aurait passé la nuit au casino… avec la caisse de l'entreprise ?", "Le patron de {n} a bien joué la caisse au casino. Aïe."],
+  ["Plusieurs employés de {n} songeraient à démissionner.", "Plusieurs employés de {n} ont démissionné."],
+  ["{n} aurait perdu son plus gros client.", "{n} perd son plus gros client."],
+  ["Des travaux imprévus pourraient fermer {n} plusieurs jours.", "{n} ferme plusieurs jours pour travaux."],
+];
+const NEWS_UP = [
+  "{n} annonce des résultats au-dessus des attentes.",
+  "{n} lance une nouvelle offre très attendue.",
+  "{n} décroche le label « Entreprise de la semaine ».",
+  "{n} annonce une hausse des salaires : l'équipe est motivée.",
+];
+const NEWS_DOWN = [
+  "{n} annonce une baisse de fréquentation.",
+  "{n} ferme exceptionnellement pour inventaire.",
+  "{n} doit rembourser plusieurs clients mécontents.",
+  "{n} reporte son projet d'agrandissement.",
+];
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+// le nom dans la phrase, avec les contractions du français (« de Le Bistrot » → « du Bistrot »)
+const fill = (t, name) => t.replace("{n}", name).replace(/de Le /g, "du ").replace(/de Les /g, "des ").replace(/à Le /g, "au ").replace(/à Les /g, "aux ").replace(/de ([AEIOUÉÈHaeiouéèh])/g, "d'$1");
+const parisHour = () => Number(new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(new Date()));
+function moveStock(co, change) {
+  const s = stockOf(co);
+  s.price = round2(Math.max(1, s.price * (1 + change)));
+  s.history.push([Date.now(), s.price]);
+  return s.price;
+}
+function pushNews(item) {
+  const st = load();
+  st.news = [...(st.news ?? []), item].slice(-NEWS_KEEP);
+  save();
+  postFlash(item).catch(() => null);
+}
+// le flash dans le salon : il part tout seul au bout de 40 minutes
+async function postFlash(item) {
+  if (!channelRef) return;
+  const icon = { rumeur: "🤫", annonce: "📢", confirme: "✅", dementi: "❌" }[item.kind];
+  const label = { rumeur: "RUMEUR", annonce: "ANNONCE OFFICIELLE", confirme: "RUMEUR CONFIRMÉE", dementi: "RUMEUR DÉMENTIE" }[item.kind];
+  const msg = await channelRef
+    .send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(item.move >= 0 ? 0x22c55e : 0xef4444)
+          .setTitle(`📰 FLASH — ${icon} ${label}`)
+          .setDescription(`${item.text}\n\n**${item.ticker}** ${item.move >= 0 ? "📈" : "📉"} **${pctText(item.move * 100)}** → ${priceText(item.price)}`)
+          .setFooter({ text: item.kind === "rumeur" ? "Vraie ou fausse ? Réponse dans moins de 2 heures…" : "Bourse de la Maison" })
+          .setTimestamp(),
+      ],
+    })
+    .catch(() => null);
+  if (msg) require("./nettoyage").deleteLater(msg, 40 * 60000);
+}
+function newsTick() {
+  const st = load(), now = Date.now();
+  // rumeurs arrivées à échéance : confirmées ou démenties
+  st.rumors ??= [];
+  for (const r of [...st.rumors]) {
+    if (now < r.resolveAt) continue;
+    st.rumors.splice(st.rumors.indexOf(r), 1);
+    const co = companies().find((c) => String(c.id) === String(r.id));
+    if (!co || !tradable(co)) continue;
+    const change = r.truth ? r.dir * (0.04 + Math.random() * 0.06) : -r.dir * (r.jump * 1.2);
+    const price = moveStock(co, change);
+    pushNews({
+      at: now,
+      id: co.id,
+      ticker: tickerOf(co),
+      kind: r.truth ? "confirme" : "dementi",
+      text: r.truth ? `C'est officiel : ${r.ok}` : `${co.name} dément la rumeur : « ${r.text} »`,
+      move: change,
+      price,
+    });
+  }
+  // nouvelle nouvelle : de 9 h à 23 h, quand le moment est venu
+  st.nextNewsAt ??= now + (20 + Math.random() * 40) * 60000;
+  const h = parisHour();
+  if (now < st.nextNewsAt || h < 9 || h >= 23) return save();
+  st.nextNewsAt = now + (45 + Math.random() * 75) * 60000;
+  const list = companies().filter(tradable);
+  if (!list.length) return save();
+  const co = list[Math.floor(Math.random() * list.length)], up = Math.random() < 0.55;
+  if (Math.random() < 0.6) {
+    const [r0, ok0] = pick(up ? RUMORS_UP : RUMORS_DOWN), jump = 0.03 + Math.random() * 0.05, text = fill(r0, co.name);
+    const price = moveStock(co, up ? jump : -jump);
+    st.rumors.push({ id: co.id, dir: up ? 1 : -1, jump, truth: Math.random() < 0.55, text, ok: fill(ok0, co.name), resolveAt: now + (30 + Math.random() * 60) * 60000 });
+    pushNews({ at: now, id: co.id, ticker: tickerOf(co), kind: "rumeur", text, move: up ? jump : -jump, price });
+  } else {
+    const change = (up ? 1 : -1) * (0.02 + Math.random() * 0.04);
+    const price = moveStock(co, change);
+    pushNews({ at: now, id: co.id, ticker: tickerOf(co), kind: "annonce", text: fill(pick(up ? NEWS_UP : NEWS_DOWN), co.name), move: change, price });
+  }
+  save();
+}
+const newsLine = (n) => `${{ rumeur: "🤫", annonce: "📢", confirme: "✅", dementi: "❌" }[n.kind]} <t:${Math.floor(n.at / 1000)}:R> **${n.ticker}** ${pctText(n.move * 100)} — ${n.text}`;
+
 // --- Ordres ---
 function holdingsOf(userId) {
   return (load().holdings[userId] ??= {});
@@ -450,6 +561,7 @@ async function boardPayload() {
             "Cliquez sur **Trader** : un bureau de trading s'ouvre, et chaque bouton achète ou vend **en un clic**.\n" +
             (best && moves.length > 1 ? `\n🚀 Plus forte hausse : **${best.co.name}** (${pctText(best.ch)}) · 🩸 plus forte baisse : **${worst.co.name}** (${pctText(worst.ch)})` : "")
         )
+        .addFields(...((load().news ?? []).length ? [{ name: "📰 Dernières nouvelles", value: [...load().news].reverse().slice(0, 4).map(newsLine).join("\n").slice(0, 1024) }] : []))
         .setImage("attachment://bourse.jpg")
         .setFooter({ text: `Cours en direct (chaque minute) · frais de ${Math.round(FEE * 100)} % par ordre · ${MAX_PER_COMPANY.toLocaleString("fr-FR")} € investis au maximum par entreprise` })
         .setTimestamp(),
@@ -483,7 +595,9 @@ function deskPayload(userId, co, note = "") {
     .setDescription(
       (note ? `${note}\n\n` : "") +
         `${ch >= 0 ? "🟢" : "🔴"} **${pctText(ch)}** sur 24 h · juste valeur ${priceText(s.fair ?? s.price)}${live ? "" : " · ⏸️ **cotation suspendue**"}\n` +
-        `\`${textSpark(last2h.length > 1 ? last2h : [ref, s.price])}\` *2 dernières heures*\n\n` +
+        `\`${textSpark(last2h.length > 1 ? last2h : [ref, s.price])}\` *2 dernières heures*\n` +
+        (load().news ?? []).filter((n) => String(n.id) === String(co.id) && n.at > Date.now() - 6 * 3600000).slice(-2).map((n) => `\n${newsLine(n)}`).join("") +
+        "\n\n" +
         `${positionLine(userId, co, s)}\n💶 Liquidités : **${formatEuro(readBalance(userId) ?? 0)}**`
     )
     .setFooter({ text: `Cours en direct · frais ${Math.round(FEE * 100)} % · ${MAX_PER_COMPANY.toLocaleString("fr-FR")} € max. investis par entreprise · 🔄 pour le dernier cours` });
@@ -583,6 +697,11 @@ async function setupBourse(client) {
       tick();
     } catch (err) {
       console.error("Bourse (cotation):", err.message);
+    }
+    try {
+      newsTick();
+    } catch (err) {
+      console.error("Bourse (rumeurs):", err.message);
     }
     refreshBoard().catch((err) => console.error("Bourse (tableau):", err.message));
   }, TICK).unref?.();
@@ -729,4 +848,4 @@ function boardSoon() {
   boardTimer.unref?.();
 }
 
-module.exports = { setupBourse, handleBourseInteraction, drawBoard, drawChart, buy, sell, tick, deskPayload, portfolioPayload };
+module.exports = { setupBourse, handleBourseInteraction, drawBoard, drawChart, buy, sell, tick, newsTick, deskPayload, portfolioPayload, boardPayload };
