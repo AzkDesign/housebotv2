@@ -60,6 +60,7 @@ function local(kind, job, onFrame) {
     for (const f of require("./piece").coinFrames(job)) onFrame?.(n++, f.data, { delay: f.delay, phase: f.phase, coin: f.coin });
     return { count: n };
   }
+  if (kind === "dragon") return require("./dragon").renderDragon(job);
   if (kind === "battle") {
     let n = 0;
     return R.renderBattle(job, onFrame ? (data) => onFrame(n++, data) : null).then((r) => ({ ...r, count: n || r.frames.length }));
@@ -99,6 +100,8 @@ module.exports = {
   renderBattle: (job, onFrame) => run("battle", job, 180000, onFrame),
   // pile ou face : onFrame(index, RGBA, { delay, phase, coin: [x, y, rayon] }) ; job : { w, h, result (0 face, 1 pile), seed }
   renderCoin: (job, onFrame) => run("coin", job, 60000, onFrame),
+  // Nyxaros, le dragon des raids (image RGBA sur fond transparent)
+  renderDragon: (job) => run("dragon", job, 60000),
   // petites icônes 3D (pièce, cristal, trophée…)
   renderIcons: (job) => run("icons", job, 30000),
   // petit nettoyage mémoire après un getImageData (voir memoire.js)

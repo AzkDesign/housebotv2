@@ -46,7 +46,9 @@ const smooth = (a, b, x) => {
 const fract = (x) => x - Math.floor(x);
 
 // ---------- matériaux ----------
-const PAT = { plain: 0, grass: 1, rock: 2, brick: 3, ashlar: 4, wood: 5, tiles: 6, marble: 7, leaf: 9, cloth: 10, dirt: 11, sand: 12, window: 13, glow: 14, bark: 16, ore: 17, char: 18, water: 19, straw: 21, skin: 22, flame: 23 };
+const PAT = { plain: 0, grass: 1, rock: 2, brick: 3, ashlar: 4, wood: 5, tiles: 6, marble: 7, leaf: 9, cloth: 10, dirt: 11, sand: 12, window: 13, glow: 14, bark: 16, ore: 17, char: 18, water: 19, straw: 21, skin: 22, flame: 23, scales: 24 };
+// hasard 3D (écailles)
+const h3 = (x, y, z) => fract(Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453);
 function material(o) {
   return {
     c: linColor(o.c ?? "#ffffff"),
@@ -431,6 +433,28 @@ function shadePoint(env, mat, px, py, pz, nx, ny, nz, obj) {
   // coordonnée horizontale le long de la face (pour les motifs des murs)
   const ux = Math.abs(nx) > Math.abs(nz) ? pz : px, vertical = Math.abs(ny) < 0.7;
   switch (mat.pat) {
+    case 24: {
+      // écailles de dragon : cellules 3D (Voronoï), sillons sombres entre elles, reflet propre à chaque écaille
+      const k = 6.5 * sc, x = px * k, y = py * k, z = pz * k, cx = Math.floor(x), cy = Math.floor(y), cz = Math.floor(z);
+      let f1 = 9, f2 = 9, hv = 0;
+      for (let i = -1; i <= 1; i++)
+        for (let j = -1; j <= 1; j++)
+          for (let l = -1; l <= 1; l++) {
+            const gx = cx + i, gy = cy + j, gz = cz + l;
+            const dx = gx + h3(gx, gy, gz) - x, dy = gy + h3(gy, gz, gx) - y, dz = gz + h3(gz, gx, gy) - z;
+            const d = dx * dx + dy * dy + dz * dz;
+            if (d < f1) (f2 = f1), (f1 = d), (hv = h3(gx + 0.5, gy, gz));
+            else if (d < f2) f2 = d;
+          }
+      const edge = smooth(0, 0.35, Math.sqrt(f2) - Math.sqrt(f1)), dome = 1 - Math.min(1, Math.sqrt(f1) * 1.2);
+      const kk = (0.35 + 0.65 * edge) * (0.8 + 0.35 * hv) * (0.85 + 0.3 * dome);
+      ar = mat.c[0] * kk + mat.c2[0] * dome * 0.35;
+      ag = mat.c[1] * kk + mat.c2[1] * dome * 0.35;
+      ab = mat.c[2] * kk + mat.c2[2] * dome * 0.35;
+      rough = mat.rough * (1.25 - 0.5 * edge);
+      ao *= 0.7 + 0.3 * edge;
+      break;
+    }
     case 1: {
       // herbe (dessus de l'île) : nuances, touffes, chemins pavés, ombre au pied des bâtiments
       const T = env.terrain;

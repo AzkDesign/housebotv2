@@ -29,6 +29,9 @@ parentPort.on("message", async (m) => {
         await respirer();
       }
       parentPort.postMessage({ id: m.id, ok: true, result: { count: n } });
+    } else if (m.kind === "dragon") {
+      const r = require("./dragon").renderDragon(m.job);
+      parentPort.postMessage({ id: m.id, ok: true, result: r }, [r.data.buffer]);
     } else if (m.kind === "icons") {
       const r = R.renderIcons(m.job);
       const list = Object.fromEntries(Object.entries(r).map(([k, v]) => [k, { ...v, data: new Uint8ClampedArray(v.data) }]));
