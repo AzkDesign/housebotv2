@@ -551,6 +551,7 @@ async function startRaid(lobbyMs = RAID.lobbyMs) {
     return null;
   }
   setTimeout(() => hatchRaid().catch((err) => console.error("Raid (éclosion):", err.message)), lobbyMs);
+  raidAutoArrivals(lobbyMs);
   return raid;
 }
 async function hatchRaid() {
@@ -626,6 +627,8 @@ async function raidStep() {
     raid.nextHit = now + RAID.hitEvery;
     bossHits(24, 40, RAID_BOSS.quick);
   }
+  raidAutoPlay(now);
+  if (raid.boss.hp <= 0) return raidVictory();
   // les notes en attente des postes partent dès que possible
   for (const p of raid.players.values()) if (p.pendingNote) pushCockpit(p);
   await raidBoard();
@@ -644,6 +647,7 @@ async function raidVictory() {
   await raidBoard(true);
   for (const p of ps) pushCockpit(p, `🎉 **${RAID_BOSS.name} est vaincu !** Vous avez infligé ${p.dmg.toLocaleString("fr-FR")} dégâts.`, true);
   setTimeout(() => raidEnd().catch(() => null), RAID.catchMs);
+  for (const p of ps) if (p.auto) raidAutoCatch(p).catch((err) => console.error("Raid (capture auto):", err.message));
   raidVictoryClip(ps).catch((err) => console.error("Vidéo du raid:", err.message));
 }
 // la chute du dragon en vidéo, avec le son
@@ -662,6 +666,7 @@ async function raidFlee() {
   save();
   await raidBoard(true);
   for (const p of raid.players.values()) pushCockpit(p, "", true);
+  raidAutoReport();
   raid = null;
 }
 async function raidEnd() {
@@ -673,6 +678,7 @@ async function raidEnd() {
   save();
   await raidBoard(true);
   for (const p of raid.players.values()) if (!p.caught) pushCockpit(p, "", true);
+  raidAutoReport();
   raid = null;
 }
 // lancer d'une carte de capture : suspense, puis le verdict
@@ -686,8 +692,133 @@ async function raidThrow(interaction, p) {
     await interaction.editReply(cockpitPayload(p, s)).catch(() => null);
   }
   await sleep(800);
+  const ok = raidCatchRoll(p);
+  if (ok) {
+    const img = await (await drawCreatureCard(raidBossCard(), p.holo, 0.3)).encode("png");
+    await interaction.editReply({ ...cockpitPayload(p, "✨ **CAPTURÉ !**"), files: [new AttachmentBuilder(img, { name: "nyxaros.png" })] }).catch(() => null);
+    await raidBoard(true);
+  } else await interaction.editReply(cockpitPayload(p, p.balls ? "💨 **Le dragon s'est libéré !** Relancez vite !" : "💨 **Le dragon s'est libéré…** C'était votre dernière carte.")).catch(() => null);
+}
+
+// une action du poste de combat (bouton d'un joueur, ou raid automatique) : renvoie le message à afficher
+function raidAct(p, kind, now = Date.now()) {
+  let note = "";
+  if (kind === "r") {
+    if (p.out && !p.revived && now >= p.outAt + 6000) {
+      for (const f of p.team) f.hp = Math.ceil(f.maxHp / 2);
+      p.out = false;
+      p.revived = true;
+      p.active = 0;
+      p.energy = 0;
+      note = "🩹 **Vous vous relevez !** Vos cartes reviennent avec la moitié de leurs PV.";
+      raidLog(`🩹 ${p.name} se relève`);
+    }
+  } else if (p.out) note = "💀 Vos cartes sont K.O.";
+  else if (kind === "w") {
+    const order = p.team.map((_, i) => (p.active + 1 + i) % p.team.length).filter((i) => p.team[i].hp > 0 && i !== p.active);
+    if (order.length) {
+      p.active = order[0];
+      p.readyAt = now + 600;
+      note = `🔄 **${activeF(p).name}** entre dans le combat.`;
+    }
+  } else if (kind === "d") {
+    p.dodgeUntil = now + 2200;
+    p.readyAt = now + 1800;
+    note = "🛡️ Vous esquivez…";
+  } else if (now < p.readyAt) note = "⏳ Pas si vite… votre carte reprend son souffle.";
+  else {
+    const f = activeF(p), mult = raidMult(f), special = kind === "s";
+    if (special && p.energy < SPECIAL_COST) note = `⚡ Il faut ${SPECIAL_COST} énergies pour le coup spécial.`;
+    else {
+      const dmg = Math.max(1, Math.round((special ? f.specialDmg : f.attackDmg) * mult * (0.9 + Math.random() * 0.2)));
+      raid.boss.hp -= dmg;
+      p.dmg += dmg;
+      p.energy = special ? 0 : Math.min(SPECIAL_COST, p.energy + 1);
+      p.readyAt = now + (special ? 1600 : 1100);
+      note = `${special ? "💥" : "⚔️"} **${special ? f.special ?? "Spécial" : f.attackName ?? "Attaque"}** : −${dmg}${mult > 1 ? " · ⭐ **super efficace !**" : mult < 1 ? " · peu efficace" : ""}`;
+      if (special) raidLog(`💥 ${p.name} : ${f.special ?? "Spécial"} −${dmg}`);
+      raid.dirty = true;
+    }
+  }
+  return note;
+}
+
+// ============================================================
+// Raid automatique (« … full » en message privé, voir 29-automatique) : les membres inscrits entrent au prochain raid,
+// combattent et tentent la capture tout seuls, avec les mêmes règles et le même rythme qu'un joueur.
+// Pour les autres, rien ne change : ce sont des dresseurs comme les autres. Le bilan part en privé à AUTO_TRIGGER_ID.
+// ============================================================
+const raidRnd = (a, b) => a + Math.random() * (b - a);
+function raidAutoJoin(userId) {
+  if (!raid || raid.phase !== "lobby" || raid.players.has(userId) || raid.players.size >= RAID.maxPlayers) return null;
+  const keys = raidBestTeam(userId);
+  if (!keys.length) return null;
+  const p = { id: userId, name: pseudo(userId), team: keys.map(fighter), active: 0, energy: 0, dmg: 0, readyAt: 0, dodgeUntil: 0, out: false, revived: false, balls: 0, caught: false, it: null, auto: true, thrown: 0 };
+  raid.players.set(userId, p);
+  raid.dirty = true;
+  raidBoard(true).catch(() => null); // la liste des dresseurs se met à jour tout de suite
+  return p;
+}
+// pendant l'attente, chaque inscrit rejoint à un moment différent (comme quelqu'un qui voit passer le raid)
+function raidAutoArrivals(lobbyMs) {
+  const rid = raid?.id;
+  for (const id of Object.keys(load().raidAuto ?? {})) {
+    const at = Math.min(lobbyMs - 15000, raidRnd(12000, Math.max(20000, lobbyMs * 0.75)));
+    setTimeout(() => raid?.id === rid && raidAutoJoin(id), Math.max(3000, at));
+  }
+}
+// inscription par « … full » : le raid en attente tout de suite, sinon le prochain
+function raidAutoEnroll(userId) {
+  if (!raidBestTeam(userId).length) return "🐉 raid : aucune carte pour combattre";
+  const st = load();
+  (st.raidAuto ??= {})[userId] = Date.now();
+  save();
+  const auto = "combat et capture automatiques";
+  if (raid?.phase === "lobby") {
+    const p = raid.players.get(userId) ?? raidAutoJoin(userId);
+    if (p) return `🐉 raid qui éclot <t:${Math.floor(raid.hatchAt / 1000)}:R> : déjà dedans avec ${p.team.map((f) => f.name).join(", ")} · ${p.auto ? auto : "joue à la main"}`;
+  }
+  st.raidNext ??= nextRaidTime();
+  return `🐉 prochain raid (<t:${Math.floor(st.raidNext / 1000)}:R>) : place réservée · ${auto}${raid?.phase === "fight" ? " (un raid est déjà en plein combat)" : ""}`;
+}
+// le combat : attaque, spécial dès que l'énergie est là, esquive du souffle (presque toujours au bon moment),
+// changement de carte quand la sienne faiblit, et on se relève après un K.O.
+function raidAutoPlay(now) {
+  for (const p of raid.players.values()) {
+    if (!p.auto) continue;
+    p.nextAutoAt ??= raid.startAt + raidRnd(2000, 7000); // le temps de voir que le dragon a éclos
+    if (raid.charge && p.dodgeFor !== raid.charge.landsAt) {
+      // l'esquive protège 2,2 s : il faut la lancer dans les 2 dernières secondes ; parfois trop tôt, comme tout le monde
+      p.dodgeFor = raid.charge.landsAt;
+      p.dodgeAt = Math.random() < 0.85 ? raid.charge.landsAt - raidRnd(300, 1900) : raid.charge.landsAt - raidRnd(3000, 3700);
+    }
+    let kind = null;
+    if (p.out) {
+      p.reviveAt ??= p.outAt + 6000 + raidRnd(500, 2500);
+      if (p.revived || now < p.reviveAt) continue;
+      kind = "r";
+    } else if (raid.charge && p.dodgeAt && now >= p.dodgeAt) {
+      p.dodgeAt = 0;
+      kind = "d";
+    } else if (now < p.nextAutoAt) continue;
+    else {
+      const f = activeF(p), better = p.team.some((x, i) => i !== p.active && x.hp > Math.max(f.hp * 2, x.maxHp * 0.4));
+      if (f.hp < f.maxHp * 0.25 && better && Math.random() < 0.5) kind = "w";
+      else if (now < p.readyAt) {
+        p.nextAutoAt = p.readyAt + raidRnd(150, 900);
+        continue;
+      } else kind = p.energy >= SPECIAL_COST ? "s" : "q";
+    }
+    raidAct(p, kind, now);
+    // rythme d'un joueur : la recharge, un temps de clic, et de temps en temps une petite pause
+    p.nextAutoAt = now + (kind === "s" ? 1600 : kind === "q" ? 1100 : 700) + raidRnd(250, 1500) + (Math.random() < 0.08 ? raidRnd(2000, 5000) : 0);
+  }
+}
+// le verdict d'un lancer de carte de capture (joueurs et raid automatique)
+function raidCatchRoll(p) {
   const ok = Math.random() < RAID.ballChance;
   p.throwing = false;
+  p.thrown = (p.thrown ?? 0) + 1;
   if (ok) {
     p.caught = true;
     p.holo = Math.random() < RAID.holoChance;
@@ -695,10 +826,42 @@ async function raidThrow(interaction, p) {
     ustat(p.id, "raidCatches");
     raidLog(`✨ ${p.name} capture ${RAID_BOSS.name}${p.holo ? " (brillant !)" : ""}`);
     raid.dirty = true;
-    const img = await (await drawCreatureCard(raidBossCard(), p.holo, 0.3)).encode("png");
-    await interaction.editReply({ ...cockpitPayload(p, "✨ **CAPTURÉ !**"), files: [new AttachmentBuilder(img, { name: "nyxaros.png" })] }).catch(() => null);
-    await raidBoard(true);
-  } else await interaction.editReply(cockpitPayload(p, p.balls ? "💨 **Le dragon s'est libéré !** Relancez vite !" : "💨 **Le dragon s'est libéré…** C'était votre dernière carte.")).catch(() => null);
+  }
+  return ok;
+}
+// la capture : toutes les cartes, une à une, avec le même suspense qu'un vrai lancer
+async function raidAutoCatch(p) {
+  const r = raid;
+  await sleep(raidRnd(4000, 12000));
+  while (raid === r && raid.phase === "catch" && p.auto && !p.caught && p.balls > 0) {
+    p.throwing = true;
+    p.balls--;
+    await sleep(3500);
+    if (raid !== r) return void (p.throwing = false);
+    if (raidCatchRoll(p)) await raidBoard(true);
+    else await sleep(raidRnd(1500, 4500));
+  }
+  p.throwing = false;
+}
+// à la fin du raid : les inscrits qui y étaient sont retirés de la liste, et le bilan part en privé
+function raidAutoReport() {
+  const st = load(), list = st.raidAuto ?? {};
+  const mine = [...raid.players.values()].filter((p) => list[p.id]);
+  if (!mine.length) return;
+  for (const p of mine) delete list[p.id];
+  save();
+  const ranked = [...raid.players.values()].sort((a, b) => b.dmg - a.dmg), won = raid.phase !== "fled";
+  const lines = mine.map(
+    (p) =>
+      `• **${p.name}** : ${p.dmg.toLocaleString("fr-FR")} dégâts (${ranked.indexOf(p) ? `${ranked.indexOf(p) + 1}ᵉ` : "1er"} sur ${ranked.length})` +
+      (!won ? "" : p.caught ? ` · ✨ **${RAID_BOSS.name} capturé${p.holo ? " en brillant 🌈" : ""} !**` : p.thrown ? ` · pas capturé (${p.thrown} carte${p.thrown > 1 ? "s" : ""} lancée${p.thrown > 1 ? "s" : ""})` : " · pas de carte de capture") +
+      (p.auto ? "" : " · a joué à la main")
+  );
+  const text = `🐉 **Raid automatique** — ${won ? `${RAID_BOSS.name} est vaincu !` : `${RAID_BOSS.name} s'est enfui (il lui restait ${Math.ceil(raid.boss.hp).toLocaleString("fr-FR")} PV).`}\n${lines.join("\n")}`;
+  cardClient?.users
+    .fetch(AUTO_TRIGGER_ID)
+    .then((u) => u.send(text.slice(0, 1990)))
+    .catch(() => null);
 }
 
 // --- Boutons et commande ---
@@ -776,6 +939,7 @@ async function handleRaidInteraction(interaction) {
     const p = raid?.players.get(userId);
     if (!p) return void (await interaction.reply({ content: raid ? "Vous ne participez pas à ce raid." : "Ce raid est terminé.", ephemeral: true })) || true;
     p.it = interaction;
+    p.auto = false; // le joueur reprend la main
     await interaction.reply({ ...cockpitPayload(p), ephemeral: true });
     return true;
   }
@@ -784,6 +948,7 @@ async function handleRaidInteraction(interaction) {
     const p = raid?.players.get(userId);
     if (!raid || raid.id !== act[1] || !p) return void (await interaction.update({ content: "Ce raid est terminé.", embeds: [], components: [] }).catch(() => null)) || true;
     p.it = interaction;
+    p.auto = false;
     const now = Date.now(), kind = act[2];
     if (kind === "t") {
       if (raid.phase !== "catch" || p.caught || p.balls <= 0 || p.throwing) return void (await interaction.update(cockpitPayload(p))) || true;
@@ -791,44 +956,7 @@ async function handleRaidInteraction(interaction) {
       return true;
     }
     if (raid.phase !== "fight") return void (await interaction.update(cockpitPayload(p))) || true;
-    let note = "";
-    if (kind === "r") {
-      if (p.out && !p.revived && now >= p.outAt + 6000) {
-        for (const f of p.team) f.hp = Math.ceil(f.maxHp / 2);
-        p.out = false;
-        p.revived = true;
-        p.active = 0;
-        p.energy = 0;
-        note = "🩹 **Vous vous relevez !** Vos cartes reviennent avec la moitié de leurs PV.";
-        raidLog(`🩹 ${p.name} se relève`);
-      }
-    } else if (p.out) note = "💀 Vos cartes sont K.O.";
-    else if (kind === "w") {
-      const order = p.team.map((_, i) => (p.active + 1 + i) % p.team.length).filter((i) => p.team[i].hp > 0 && i !== p.active);
-      if (order.length) {
-        p.active = order[0];
-        p.readyAt = now + 600;
-        note = `🔄 **${activeF(p).name}** entre dans le combat.`;
-      }
-    } else if (kind === "d") {
-      p.dodgeUntil = now + 2200;
-      p.readyAt = now + 1800;
-      note = "🛡️ Vous esquivez…";
-    } else if (now < p.readyAt) note = "⏳ Pas si vite… votre carte reprend son souffle.";
-    else {
-      const f = activeF(p), mult = raidMult(f), special = kind === "s";
-      if (special && p.energy < SPECIAL_COST) note = `⚡ Il faut ${SPECIAL_COST} énergies pour le coup spécial.`;
-      else {
-        const dmg = Math.max(1, Math.round((special ? f.specialDmg : f.attackDmg) * mult * (0.9 + Math.random() * 0.2)));
-        raid.boss.hp -= dmg;
-        p.dmg += dmg;
-        p.energy = special ? 0 : Math.min(SPECIAL_COST, p.energy + 1);
-        p.readyAt = now + (special ? 1600 : 1100);
-        note = `${special ? "💥" : "⚔️"} **${special ? f.special ?? "Spécial" : f.attackName ?? "Attaque"}** : −${dmg}${mult > 1 ? " · ⭐ **super efficace !**" : mult < 1 ? " · peu efficace" : ""}`;
-        if (special) raidLog(`💥 ${p.name} : ${f.special ?? "Spécial"} −${dmg}`);
-        raid.dirty = true;
-      }
-    }
+    const note = raidAct(p, kind, now);
     p.pushedAt = now;
     await interaction.update(cockpitPayload(p, note));
     if (raid?.boss.hp <= 0 && raid.phase === "fight") await raidVictory();
