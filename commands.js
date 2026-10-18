@@ -219,6 +219,10 @@ async function registerSlashCommands(client, token) {
       .addAttachmentOption((o) => o.setName("image").setDescription("Une photo de l'objet"))
       .toJSON(),
     new SlashCommandBuilder()
+      .setName("emotes")
+      .setDescription("Vos emotes de combat : collection, achats et favorites")
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName("raid")
       .setDescription("Raids des cartes : voir le prochain raid (les gérants peuvent en lancer un tout de suite)")
       .toJSON(),
@@ -243,7 +247,7 @@ async function registerSlashCommands(client, token) {
         console.warn(`Commandes slash (${guild.name}):`, err.message)
       );
   }
-  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir, /generation, /convocation, /proces, /casier, /enchere, /bourse et /raid enregistrées");
+  console.log("Commandes /achat, /report, /niveau, /crédit, /mission, /solde, /argent, /clear, /profil, /inventaire, /album, /marche, /echange, /combat, /arene, /quetes, /aide-cartes, /carte-offrir, /generation, /convocation, /proces, /casier, /enchere, /bourse, /raid et /emotes enregistrées");
 }
 
 module.exports = { registerSlashCommands };
