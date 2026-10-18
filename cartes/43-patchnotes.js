@@ -2,6 +2,37 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.20",
+    color: 0x22c55e,
+    parts: [
+      [
+        "🔄 Les combats survivent aux redémarrages",
+        "Fini le « combat terminé » quand le bot redémarre en plein match !\n" +
+          "• Chaque combat en cours est **sauvegardé à chaque manche** : équipes, PV, énergie, initiative, mises et paris.\n" +
+          "• Au redémarrage, le combat **reprend là où il s'était arrêté**, dans le même fil : les deux joueurs sont mentionnés.\n" +
+          "• Les choix déjà faits sont gardés, et la manche reprise laisse **2 minutes** pour revenir jouer.\n" +
+          "• Les parties classées restent classées, les matchs du tournoi restent dans le tableau.\n" +
+          "• Seul un combat vraiment impossible à reprendre (plus de 3 h d'arrêt, fil supprimé) est annulé, et tout est **remboursé**.",
+      ],
+      [
+        "🏆 Parties classées : on vous dit pourquoi ça ne trouve pas",
+        "• Un autre joueur est dans la file mais **trop loin de votre niveau** ? Le bot vous le dit : son nom, ses points, l'écart, et si vous êtes **trop haut** ou **trop bas** (600 points d'écart au maximum).\n" +
+          "• S'il est à portée, le bot indique **quand le combat se lancera** : l'écart accepté s'élargit avec l'attente.\n" +
+          "• Tout en haut (ou tout en bas) du classement, sans personne à moins de 600 points ? Vous êtes **prévenu dès le lancement** de la recherche.\n" +
+          "• En fin de recherche, le message explique pourquoi personne n'a été trouvé.",
+      ],
+      [
+        "🔊 Et aussi : le son des grands moments",
+        "Quatre moments ont maintenant leur **vidéo avec le son** (cliquez pour l'écouter) :\n" +
+          "• 🏰 **Manoir détruit** au Clash : explosion, fanfare, une cloche par étoile.\n" +
+          "• 🐉 **Victoire en raid** : le rugissement et la chute de Nyxaros.\n" +
+          "• 🎰 **Jackpot** au casino : les rouleaux, les cloches et la pluie de pièces.\n" +
+          "• 👑 **Champion du tournoi** : roulement de tambour et feux d'artifice.",
+      ],
+    ],
+    footer: "Plus aucun combat perdu ! ⚔️",
+  },
+  {
     version: "1.19",
     color: 0xec4899,
     // une vitrine de quelques emotes (classiques, toxiques, amour, exclusive)
@@ -427,7 +458,8 @@ async function publishPatchNotes() {
   if (!ch || ch === channelRef) return;
   const st = load();
   st.patchNotes ??= {};
-  for (const note of [...PATCH_NOTES].sort((a, b) => Number(a.version) - Number(b.version))) {
+  // tri par numéro de version (« 1.20 » vient après « 1.19 », pas avant « 1.3 »)
+  for (const note of [...PATCH_NOTES].sort((a, b) => a.version.localeCompare(b.version, "fr", { numeric: true }))) {
     if (st.patchNotes[note.version]) continue;
     const embeds = note.parts.map(([title, text], i) => {
       const e = new EmbedBuilder().setColor(note.color).setTitle(title).setDescription(text);

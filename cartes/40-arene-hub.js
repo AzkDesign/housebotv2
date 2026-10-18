@@ -130,7 +130,43 @@ async function bossDefeated(client, s, def) {
 // --- File des parties classées ---
 const rankedQueue = new Map(); // userId -> { at, elo, name, user, interaction, notice }
 let rqTimer = null;
-const rqTolerance = (wait) => Math.min(600, 120 + Math.floor(wait / 15000) * 40);
+const RQ_MAX_GAP = 600;
+const rqTolerance = (wait) => Math.min(RQ_MAX_GAP, 120 + Math.floor(wait / 15000) * 40);
+const rqHighLow = (me, foe) => (me > foe ? "trop haut" : "trop bas");
+const rqLeaveRow = () => new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_rk_leave").setLabel("Annuler la recherche").setEmoji("✖️").setStyle(ButtonStyle.Secondary));
+// trop haut ou trop bas au classement : aucun joueur actif à portée d'une partie classée
+function rqReach(userId, elo) {
+  const active = Object.entries(load().arena).filter(([id, x]) => id !== userId && x.w + x.l + x.d > 0);
+  if (!active.length || active.some(([, x]) => Math.abs(x.elo - elo) <= RQ_MAX_GAP)) return "";
+  const [cid, c] = active.sort((a, b) => Math.abs(a[1].elo - elo) - Math.abs(b[1].elo - elo))[0];
+  return (
+    `\n\n⚠️ **Vous êtes ${elo > c.elo ? "tout en haut" : "tout en bas"} du classement** : aucun joueur actif n'est à moins de ${RQ_MAX_GAP} points de vous ` +
+    `(le plus proche, **${pseudo(cid)}**, a ${c.elo} pts : ${Math.abs(c.elo - elo)} points d'écart). La partie classée risque de **ne jamais** vous trouver d'adversaire : ` +
+    "essayez le **boss de la semaine** (il fait aussi monter le rang) ou un **défi amical** !"
+  );
+}
+// où en est la recherche : seul dans la file, adversaire trop loin, ou bientôt à portée
+function rqStatus(id, e) {
+  const head = `🔎 **Recherche d'un adversaire classé…** (${tierOf(e.elo)[1]} · ${e.elo} pts)`;
+  const others = [...rankedQueue.entries()].filter(([o]) => o !== id).map(([, o]) => o);
+  if (!others.length)
+    return { key: "seul", text: `${head}\nVous êtes **seul dans la file** pour l'instant : dès qu'un joueur de votre niveau lance une partie classée, le combat démarre. Vous êtes prévenu ici et en message privé (10 minutes au plus).${e.reach ?? ""}` };
+  const near = others.sort((a, b) => Math.abs(a.elo - e.elo) - Math.abs(b.elo - e.elo))[0], gap = Math.abs(near.elo - e.elo);
+  if (gap > RQ_MAX_GAP)
+    return {
+      key: `loin:${near.user.id}`,
+      far: { name: near.name, elo: near.elo, gap },
+      text: `${head}\n❌ **${near.name}** est aussi dans la file (${near.elo} pts), mais vous êtes **${rqHighLow(e.elo, near.elo)}** pour l'affronter : **${gap} points d'écart**, alors qu'une partie classée en accepte ${RQ_MAX_GAP} au maximum.\nRestez dans la file pour attendre quelqu'un d'autre, ou défiez ${near.name} en **amical**.`,
+    };
+  // l'écart accepté grandit avec l'attente du plus ancien des deux
+  const when = Math.min(e.at, near.at) + Math.ceil(Math.max(0, gap - 120) / 40) * 15000;
+  return { key: `proche:${near.user.id}`, text: `${head}\n⏳ **${near.name}** est dans la file (${near.elo} pts, ${gap} points d'écart). L'écart accepté s'élargit avec l'attente : le combat se lance <t:${Math.ceil(when / 1000) + 4}:R> si personne de plus proche n'arrive.` };
+}
+function rqTimeoutText(e) {
+  if (e.statusKey?.startsWith("loin:") && e.far)
+    return `⌛ **Recherche terminée : aucun adversaire à votre portée.** ${e.far.name} cherchait aussi, mais avec **${e.far.gap} points d'écart** vous êtes ${rqHighLow(e.elo, e.far.elo)} pour une partie classée (${RQ_MAX_GAP} au maximum). Proposez-lui un défi amical, ou réessayez plus tard !`;
+  return `⌛ **Recherche terminée** : personne de votre niveau n'a lancé de partie classée pendant 10 minutes. Réessayez un peu plus tard (ou défiez un membre en amical) !${e.reach ?? ""}`;
+}
 function rqStart(client) {
   if (!rqTimer) rqTimer = setInterval(() => rqTick(client).catch((err) => console.error("File classée:", err.message)), 4000);
 }
@@ -146,7 +182,7 @@ async function rqTick(client) {
   const now = Date.now();
   for (const [id, e] of rankedQueue) {
     if (userBattle.has(id)) await rqLeave(id, "⚔️ Vous êtes entré dans un autre combat : vous quittez la file classée.");
-    else if (now - e.at > RQ_TIMEOUT) await rqLeave(id, "⌛ Personne de votre niveau n'était en ligne. Réessayez un peu plus tard (ou défiez un membre en amical) !");
+    else if (now - e.at > RQ_TIMEOUT) await rqLeave(id, rqTimeoutText(e));
   }
   const list = [...rankedQueue.entries()].sort((a, b) => a[1].at - b[1].at);
   for (let i = 0; i < list.length; i++)
@@ -170,6 +206,14 @@ async function rqTick(client) {
         me.user.send?.(text).catch(() => null);
       }
     }
+  // ceux qui attendent encore : on leur dit pourquoi le combat ne se lance pas
+  for (const [id, e] of rankedQueue) {
+    const st = rqStatus(id, e);
+    if (st.key === e.statusKey) continue;
+    e.statusKey = st.key;
+    if (st.far) e.far = st.far;
+    await e.interaction?.editReply({ content: st.text, embeds: [], files: [], attachments: [], components: [rqLeaveRow()] }).catch(() => null);
+  }
   if (!rankedQueue.size && rqTimer) {
     clearInterval(rqTimer);
     rqTimer = null;
@@ -499,16 +543,13 @@ async function handleArenaHubInteraction(interaction, client) {
     if (fromPublic) await interaction.deferReply({ ephemeral: true });
     else await interaction.deferUpdate();
     const elo = arenaStats(userId).elo;
-    const entry = { at: Date.now(), elo, name, user: interaction.user, interaction };
+    const entry = { at: Date.now(), elo, name, user: interaction.user, interaction, reach: rqReach(userId, elo) };
     rankedQueue.set(userId, entry);
     arenaBoardDirty = true;
-    await interaction.editReply({
-      content: `🔎 **Recherche d'un adversaire classé…** (${tierOf(elo)[1]} · ${elo} pts)\nVous serez prévenu ici et en message privé dès qu'un adversaire de votre niveau est trouvé (10 minutes au plus).`,
-      embeds: [],
-      files: [],
-      attachments: [],
-      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_rk_leave").setLabel("Annuler la recherche").setEmoji("✖️").setStyle(ButtonStyle.Secondary))],
-    });
+    const st = rqStatus(userId, entry);
+    entry.statusKey = st.key;
+    if (st.far) entry.far = st.far;
+    await interaction.editReply({ content: st.text, embeds: [], files: [], attachments: [], components: [rqLeaveRow()] });
     // avis dans l'arène : d'autres joueurs peuvent rejoindre la file
     entry.notice = await chan("arene")
       ?.send({ content: `🔎 **${name}** (${tierOf(elo)[1]} · ${elo} pts) cherche un adversaire en **partie classée** !`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_rk_join").setLabel("Rejoindre la file").setEmoji("🏆").setStyle(ButtonStyle.Success))], allowedMentions: { parse: [] } })
