@@ -944,8 +944,14 @@ async function playSlots(interaction, spins, bet, client) {
   if (jackpotWon) {
     const channel = await client.channels.fetch(CASINO_CHANNEL_ID).catch(() => null);
     require("./feed").post(`💰 **JACKPOT !** **${pseudo(interaction.user.id)}** décroche le jackpot de la machine à sous !`, { stat: "casino" });
+    // le grand moment en vidéo, avec le son (si ffmpeg est là)
+    const M = require("./moments");
+    const clip = channel && M.videoOk() ? await M.jackpotVideo({ name: pseudo(interaction.user.id), amount: jackpotWon, euro: formatEuro }).catch((err) => console.error("Vidéo du jackpot:", err.message)) : null;
     const announce = await channel
-      ?.send(`💰🎰 **JACKPOT !** **${pseudo(interaction.user.id)}** vient de remporter le **JACKPOT** à la machine à sous !`)
+      ?.send({
+        content: `💰🎰 **JACKPOT !** **${pseudo(interaction.user.id)}** vient de remporter le **JACKPOT** à la machine à sous !${clip ? "\n🔊 *Montez le son !*" : ""}`,
+        files: clip ? [new AttachmentBuilder(clip, { name: "jackpot.mp4" })] : [],
+      })
       .catch(() => null);
     deleteLater(announce, HOUR);
     await require("./cartes").grantEventCard(client, interaction.user.id, "ev_jackpot").catch(() => null);

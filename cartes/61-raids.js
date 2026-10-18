@@ -644,6 +644,16 @@ async function raidVictory() {
   await raidBoard(true);
   for (const p of ps) pushCockpit(p, `🎉 **${RAID_BOSS.name} est vaincu !** Vous avez infligé ${p.dmg.toLocaleString("fr-FR")} dégâts.`, true);
   setTimeout(() => raidEnd().catch(() => null), RAID.catchMs);
+  raidVictoryClip(ps).catch((err) => console.error("Vidéo du raid:", err.message));
+}
+// la chute du dragon en vidéo, avec le son
+async function raidVictoryClip(ps) {
+  const M = require("./moments"), ch = chan("raids");
+  if (!ch || !M.videoOk()) return;
+  const podium = [...ps].sort((a, b) => b.dmg - a.dmg).filter((p) => p.dmg > 0).slice(0, 3).map((p) => p.name);
+  const clip = await M.raidVideo({ art: await raidArt().catch(() => null), boss: RAID_BOSS.name.toUpperCase(), podium });
+  const msg = await ch.send({ content: `🎉 **${RAID_BOSS.name} est vaincu !** 🔊 *Montez le son !*`, files: [new AttachmentBuilder(clip, { name: "victoire.mp4" })] }).catch(() => null);
+  deleteLater(msg, 60 * MINUTE);
 }
 async function raidFlee() {
   clearInterval(raid.timer);

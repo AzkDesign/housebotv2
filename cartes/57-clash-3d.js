@@ -723,6 +723,30 @@ async function clashBattleGif3D(base, sim, attackerName, info = {}) {
       },
     });
   }
+  // ---------- le Manoir tombe : la chute et le bilan partent aussi en vidéo avec le son ----------
+  // (les images sont confiées à ffmpeg au fil du rendu : rien n'est gardé en mémoire)
+  let clip = null;
+  const inClip = plan.map((p) => p.scene === "manoir" || p.scene === "bilan"), clipDelay = (p, i) => (i === plan.length - 1 ? 3400 : p.delay);
+  if (plan.some((p) => p.scene === "manoir"))
+    try {
+      const M = require("./moments");
+      if (M.videoOk()) {
+        let at = 0, victoryAt = 0;
+        const starTimes = [], bilan0 = plan.length - OUT;
+        plan.forEach((p, i) => {
+          if (!inClip[i]) return;
+          const o = i - bilan0;
+          if (o === 2) victoryAt = at / 1000;
+          // une étoile se pose (o = 6, 8, 10)
+          if (o >= 6 && o <= 10 && o % 2 === 0 && (o - 6) / 2 < sim.stars) starTimes.push(at / 1000);
+          at += clipDelay(p, i);
+        });
+        clip = M.manoirStream(OW, OH, { dur: at / 1000, victoryAt, starTimes });
+      }
+    } catch (err) {
+      console.error("[clash 3D] vidéo du Manoir :", err.message);
+      clip = null;
+    }
   // ---------- 2. et 3. le fil de rendu calcule les images 3D ; chaque image reçue reçoit ses effets puis part à l'encodeur ----------
   const encoder = anEncoder(OW, OH);
   const oc = createCanvas(OW, OH), octx = oc.getContext("2d"), im = octx.createImageData(OW, OH);
@@ -751,6 +775,7 @@ async function clashBattleGif3D(base, sim, attackerName, info = {}) {
       sceneName = p.scene;
     }
     batch.push({ data: dataOut, delay: p.delay });
+    if (clip && inClip[i]) clip.push(dataOut, clipDelay(p, i)); // copie : le tampon part ensuite à l'encodeur
     if (process.env.CLASH3D_DUMP) dumpFrames.push(dataOut.slice());
     (lastData ??= new Uint8ClampedArray(OW * OH * 4)).set(dataOut);
   };
@@ -760,11 +785,13 @@ async function clashBattleGif3D(base, sim, attackerName, info = {}) {
     res = await CLASH3D.renderBattle({ W: WW, H: WH, rect, data, ss: 2, out: { w: OW, h: OH }, frames: plan.map((p) => ({ states: p.states, troops: p.troops, aims: p.aims, crop: p.crop, t: p.t })) }, onFrame);
   } catch (err) {
     encoder.stop();
+    clip?.abort();
     throw err;
   }
   const tRender = Date.now() - t0;
   if (!lastData) {
     encoder.stop();
+    clip?.abort();
     throw new Error("aucune image reçue du rendu 3D");
   }
   flush();
@@ -787,6 +814,7 @@ async function clashBattleGif3D(base, sim, attackerName, info = {}) {
   const end = c3Canvas(lastData, OW, OH);
   gif.duration = plan.slice(0, -1).reduce((a, x) => a + x.delay, 0) + 1500;
   gif.poster = await end.encode("jpeg", 90);
+  gif.clip = clip ? await clip.end().catch((err) => console.error("[clash 3D] vidéo du Manoir :", err.message)) : null;
   return gif;
 }
 {

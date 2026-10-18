@@ -327,10 +327,10 @@ function clashResultPayload(r, war) {
       new EmbedBuilder()
         .setColor(r.sim.stars ? 0x16a34a : 0xb91c1c)
         .setTitle(`${r.sim.stars ? "🏆 Victoire" : "💀 Défaite"} — ${r.sim.pct} % · ${"⭐".repeat(r.sim.stars) || "aucune étoile"}`)
-        .setDescription(`**Butin** — ${r.loot.or.toLocaleString("fr-FR")} or · ${r.loot.essence.toLocaleString("fr-FR")} essence${war ? "\n🏆 Attaque de guerre : vos étoiles comptent pour votre équipe !" : `\nTrophées : **${r.trophies > 0 ? "+" : ""}${r.trophies}** 🏆`}`)
+        .setDescription(`**Butin** — ${r.loot.or.toLocaleString("fr-FR")} or · ${r.loot.essence.toLocaleString("fr-FR")} essence${war ? "\n🏆 Attaque de guerre : vos étoiles comptent pour votre équipe !" : `\nTrophées : **${r.trophies > 0 ? "+" : ""}${r.trophies}** 🏆`}${r.gif.clip ? "\n\n🔊 **Le Manoir est tombé !** Revivez sa chute avec le son dans la vidéo." : ""}`)
         .setImage(r.gif.poster ? "attachment://bilan.jpg" : "attachment://combat.gif"),
     ],
-    files: [r.gif.poster ? new AttachmentBuilder(r.gif.poster, { name: "bilan.jpg" }) : new AttachmentBuilder(r.gif, { name: "combat.gif" })],
+    files: [r.gif.poster ? new AttachmentBuilder(r.gif.poster, { name: "bilan.jpg" }) : new AttachmentBuilder(r.gif, { name: "combat.gif" }), ...(r.gif.clip ? [new AttachmentBuilder(r.gif.clip, { name: "manoir.mp4" })] : [])],
     attachments: [],
     components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_cl_find").setLabel("Nouvelle attaque").setEmoji("⚔️").setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId("carte_cl").setLabel("Ma Maison").setEmoji("🏰").setStyle(ButtonStyle.Secondary))],
   };

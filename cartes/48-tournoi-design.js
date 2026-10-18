@@ -830,8 +830,13 @@ async function tdVsGif(t, r, a, b) {
   }
   return encodeFrames(shots);
 }
-// le sacre du champion
-async function tdChampionGif(t) {
+// le sacre du champion : le GIF, et la même animation en vidéo avec le son
+async function tdChampionMoment(t) {
+  const shots = await tdChampionShots(t), gif = encodeFrames(shots), M = require("./moments");
+  const clip = M.videoOk() ? await M.championVideo(shots, shots[0].width, shots[0].height).catch((err) => console.error("Vidéo du sacre:", err.message)) : null;
+  return { gif, clip };
+}
+async function tdChampionShots(t) {
   const W = 800, H = 520, champ = t.champion;
   const [img, crown, trophy] = await Promise.all([tdAvatar(champ), tdFluent("Crown"), tdFluent("Trophy")]);
   const stage = tdStage(W, H), shots = [], frames = 44, R = seeded(hashOf(String(champ)));
@@ -904,7 +909,7 @@ async function tdChampionGif(t) {
       }
     shots.push(tdShot(ctx, W, H, f === frames - 1 ? 4000 : f === 17 ? 110 : 60));
   }
-  return encodeFrames(shots);
+  return shots;
 }
 
 // --- La carte de membre d'un champion du tournoi : cadre doré et sceau au trophée ---

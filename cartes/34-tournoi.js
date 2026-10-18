@@ -259,8 +259,17 @@ async function tourFinish(client, t) {
     }
   }
   checkAchievements(champion).catch(() => null);
-  const sacre = await tdChampionGif(t).catch((err) => (console.error("Tournoi (sacre):", err.message), null));
-  if (sacre) await chan("tournoi")?.send({ content: `🏆 **${pseudo(champion)} est sacré champion du tournoi !**`, files: [new AttachmentBuilder(sacre, { name: "champion.gif" })], allowedMentions: { parse: [] } }).catch(() => null);
+  const moment = await tdChampionMoment(t).catch((err) => (console.error("Tournoi (sacre):", err.message), null));
+  const sacre = moment?.gif;
+  // dans le salon du tournoi : la vidéo avec le son (le GIF si ffmpeg manque) ; dans les annonces : le GIF
+  if (sacre)
+    await chan("tournoi")
+      ?.send({
+        content: `🏆 **${pseudo(champion)} est sacré champion du tournoi !**${moment.clip ? " 🔊 *Montez le son !*" : ""}`,
+        files: [moment.clip ? new AttachmentBuilder(moment.clip, { name: "sacre.mp4" }) : new AttachmentBuilder(sacre, { name: "champion.gif" })],
+        allowedMentions: { parse: [] },
+      })
+      .catch(() => null);
   await chan("annonces")
     ?.send({
       files: sacre ? [new AttachmentBuilder(sacre, { name: "champion.gif" })] : [],
