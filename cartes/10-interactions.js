@@ -389,7 +389,7 @@ async function handleCartesInteraction(interaction, client) {
           });
         await interaction.reply({
           ephemeral: true,
-          content: "🃏 Choisissez **jusqu'à 3 cartes** (la première entre en premier dans l'arène). Les plus fortes sont en haut de la liste.",
+          content: "🃏 Choisissez **jusqu'à 3 cartes** (la première entre en premier dans l'arène). Les plus fortes sont en haut de la liste.\n🤝 **Une seule carte DUO** par équipe.",
           components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`carte_bt_ts_${bid}`).setPlaceholder("Mon équipe…").setMinValues(1).setMaxValues(Math.min(3, options.length)).addOptions(options))],
         });
         return true;
@@ -397,6 +397,13 @@ async function handleCartesInteraction(interaction, client) {
       const keys = kind === "auto" ? bestTeam(userId) : interaction.values;
       if (!keys.length) {
         await interaction.reply({ content: "❌ Vous n'avez aucune carte.", ephemeral: true });
+        return true;
+      }
+      // une seule carte DUO par équipe : on le dit au lieu d'en retirer une sans prévenir
+      if (keys.filter((k) => k.startsWith("duo_")).length > 1) {
+        const msg = "❌ **Une seule carte DUO** par équipe : choisissez-en une seule, et complétez avec d'autres cartes.";
+        if (kind === "ts") await interaction.update({ content: msg, components: [] });
+        else await interaction.reply({ content: msg, ephemeral: true });
         return true;
       }
       const confirm = `✅ Équipe prête : ${keys.map(keyLabel).join(", ")}`;

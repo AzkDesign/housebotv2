@@ -393,7 +393,7 @@ function bureauPanel() {
       (s.mayor ? `👑 **${pseudo(s.mayor.userId)}**${s.mayor.adjointId ? ` · 🎖️ **${pseudo(s.mayor.adjointId)}**` : ""}\n\n` : "*Aucun maire en fonction.*\n\n") +
         `${REGIMES[regime()].emoji} **Régime : ${REGIMES[regime()].name}**${curfew() ? " · 🌙 couvre-feu en cours" : ""}\n*${REGIMES[regime()].description}*\n\n` +
         `💰 **Budget : ${formatEuro(s.budget)}**\n` +
-        `Chaque dimanche : ${Math.round(BUDGET_SHARE * 100)} % des recettes de la Maison, moins le salaire du maire (${formatEuro(MAYOR_SALARY)}) et les allocations.\n\n` +
+        `Chaque dimanche : **tous les impôts** de la semaine, plus ${Math.round(BUDGET_SHARE * 100)} % des autres recettes de la Maison, moins le salaire du maire (${formatEuro(MAYOR_SALARY)}) et les allocations.\n\n` +
         "**⚖️ Taux en vigueur**\n" +
         Object.keys(LEVERS).map((k) => `${LEVERS[k].label} : **${formatLever(k, p[k])}**`).join("\n") +
         "\n\n**🤝 Allocations hebdomadaires**\n" +
@@ -732,25 +732,38 @@ async function closeReferendum(client) {
 
 // --- Budget du dimanche ---
 
-// Total net encaissé par la Maison depuis le début (le casino compte pour son résultat).
+// Les impôts vont en entier dans la caisse de la mairie ; le reste des recettes (casino, frais…) pour 30 %.
+const TAX_KEYS = ["taxeHabitation", "impotFortune", "recouvrement", "redressements"];
+function taxTotal() {
+  const t = loadEconomie().treasury;
+  return round2(TAX_KEYS.reduce((a, k) => a + (t[k] ?? 0), 0));
+}
+// Total net encaissé par la Maison depuis le début, hors impôts (le casino compte pour son résultat).
 function treasuryNet() {
   const t = loadEconomie().treasury;
   let total = 0;
-  for (const [k, v] of Object.entries(t)) if (k !== "casinoMises" && k !== "casinoGains") total += v;
+  for (const [k, v] of Object.entries(t)) if (k !== "casinoMises" && k !== "casinoGains" && !TAX_KEYS.includes(k)) total += v;
   return round2(total + (t.casinoMises ?? 0) - (t.casinoGains ?? 0));
 }
 
 async function weeklyBudget(client) {
   const s = load();
-  const net = treasuryNet();
+  const net = treasuryNet(), taxes = taxTotal();
+  // passage à ce calcul : l'ancien total comptait les impôts, on le ramène au total « hors impôts »
+  if (s.lastTaxTotal === undefined && s.lastTreasuryNet !== undefined) s.lastTreasuryNet = Math.min(s.lastTreasuryNet, net);
   const receipts = s.lastTreasuryNet === undefined ? 0 : Math.max(0, round2(net - s.lastTreasuryNet));
+  // les impôts de la semaine vont en entier à la ville, quoi qu'il arrive au casino
+  const taxReceipts = s.lastTaxTotal === undefined ? 0 : Math.max(0, round2(taxes - s.lastTaxTotal));
   s.lastTreasuryNet = net;
+  s.lastTaxTotal = taxes;
   save();
   const lines = [];
 
+  if (taxReceipts > 0) budgetMove(taxReceipts, `Impôts de la semaine (${formatEuro(taxReceipts)})`);
+  lines.push(`🧾 Impôts de la semaine : **+${formatEuro(taxReceipts)}** pour la ville (en entier)`);
   const income = round2(receipts * BUDGET_SHARE);
-  if (income > 0) budgetMove(income, `${Math.round(BUDGET_SHARE * 100)} % des recettes de la semaine (${formatEuro(receipts)})`);
-  lines.push(`📥 Recettes de la Maison : ${formatEuro(receipts)} → **+${formatEuro(income)}** pour la ville`);
+  if (income > 0) budgetMove(income, `${Math.round(BUDGET_SHARE * 100)} % des autres recettes de la semaine (${formatEuro(receipts)})`);
+  lines.push(`📥 Autres recettes de la Maison : ${formatEuro(receipts)} → **+${formatEuro(income)}** pour la ville`);
 
   if (s.mayor) {
     const salary = Math.min(MAYOR_SALARY, s.budget);
@@ -1587,6 +1600,13 @@ async function setupMairie(client) {
   await ensureSetup(client);
   if (state.lastTreasuryNet === undefined) {
     state.lastTreasuryNet = treasuryNet();
+    save();
+  }
+  // suivi des impôts : démarre dès maintenant, pour que les impôts du prochain dimanche aillent bien à la ville
+  if (state.lastTaxTotal === undefined) {
+    state.lastTaxTotal = taxTotal();
+    // l'ancien total des recettes comptait les impôts : on le ramène au total « hors impôts »
+    state.lastTreasuryNet = Math.min(state.lastTreasuryNet, treasuryNet());
     save();
   }
   lastPhase = getPhase().phase;
