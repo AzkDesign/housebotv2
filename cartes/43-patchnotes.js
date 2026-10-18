@@ -2,6 +2,53 @@
 // --- Salon des patch notes : chaque version est publiée une seule fois ---
 const PATCH_NOTES = [
   {
+    version: "1.19",
+    color: 0xec4899,
+    // une vitrine de quelques emotes (classiques, toxiques, amour, exclusive)
+    image: async () => {
+      const ids = ["rire", "cheh", "ptdr", "ez", "jtm", "rose", "goat", "nyxaros"], tile = 200, gap = 18, W = 4 * tile + 5 * gap, H = 150 + 2 * (tile + gap) + 10;
+      const c = createCanvas(W, H), ctx = c.getContext("2d");
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, "#1e1b4b");
+      bg.addColorStop(1, "#4a044e");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.font = "16px CardEngrave";
+      ctx.fillStyle = "#fde68a";
+      spaced(ctx, "NOUVEAU DANS LES COMBATS", W / 2, 48, 5);
+      ctx.font = "58px CardTitle";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText("Les emotes", W / 2, 112);
+      for (const [i, id] of ids.entries()) ctx.drawImage(await emoteTile(emoteOf(id)), gap + (i % 4) * (tile + gap), 140 + Math.floor(i / 4) * (tile + gap), tile, tile);
+      return c;
+    },
+    parts: [
+      [
+        "😄 Les emotes arrivent dans les combats !",
+        "Comme dans Clash Royale : pendant un combat, cliquez sur **😄 Emotes** et envoyez une emote animée à votre adversaire.\n" +
+          "• **53 emotes** : visages en 3D animés, avec larmes, flammes, confettis, cœurs, pluie de billets…\n" +
+          "• **4 offertes** à tout le monde : Rire, Pleurs, Colère et Bien joué.\n" +
+          "• Choisissez vos **8 favorites** : ce sont elles qui s'affichent en combat.\n" +
+          "• Une emote toutes les **6 secondes**, et elle disparaît d'elle-même au bout de 30 s.\n" +
+          "• Contre la Maison… elle répond parfois.",
+      ],
+      [
+        "😈 Toxiques et ❤️ Amour",
+        "• **Toxiques**, pour chambrer : CHEH !, EZ., Skill issue., Tu dors ?, RIP., Poule mouillée !, PTDR, Le GOAT.…\n" +
+          "• **Amour**, pour les déclarations : Je t'aime !, Coup de foudre !, Une rose, Cœur brisé, Câlin !, Je t'adore !…\n" +
+          "• 🔇 **Couper les emotes** : trop chambré ? Un bouton masque les emotes de votre adversaire pendant tout le combat.",
+      ],
+      [
+        "🛍️ Débloquez-les",
+        "• `/emotes` (ou le bouton **😄 Emotes** de la boutique) : toute la collection, chaque emote en mouvement, et vos favorites.\n" +
+          "• Les emotes se débloquent avec la **poussière d'étoile** ✨ (de 400 à 1 500).\n" +
+          "• Deux **exclusives** : 👑 **Le Roi** pour les champions du tournoi, et 🐉 **Rugissement** pour ceux qui ont capturé Nyxaros en raid.",
+      ],
+    ],
+    footer: "CHEH ! 😝",
+  },
+  {
     version: "1.18",
     color: 0x7e22ce,
     // la carte du boss de raid, en version brillante
