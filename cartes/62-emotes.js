@@ -25,7 +25,54 @@ const EMOTES = [
   { id: "couronne", name: "Le Roi", emoji: "👑", face: "Crown", anim: "float", fx: "rays", caption: "Le roi, c'est moi.", color: "#ca8a04", exclusive: "Réservée aux champions du tournoi" },
   { id: "nyxaros", name: "Rugissement", emoji: "🐉", face: "@dragon", anim: "roar", fx: "breath", caption: "ROOOAAAR !", color: "#7e22ce", exclusive: "Réservée aux dresseurs qui ont capturé Nyxaros en raid" },
 ];
-for (const n of ["Thumbs up", "Clapping hands", "Flexed biceps"]) FLUENT_SKIN.add(n);
+// toxiques : pour chambrer l'adversaire (taquin, jamais insultant)
+EMOTES.push(
+  { id: "cheh", name: "Cheh", emoji: "😝", face: "Squinting face with tongue", anim: "wobble", fx: "stars", caption: "CHEH !", color: "#16a34a", price: 500, cat: "toxique" },
+  { id: "ez", name: "EZ", emoji: "😏", face: "Smirking face", anim: "tilt", fx: "glint", caption: "EZ.", color: "#7c3aed", price: 600, cat: "toxique" },
+  { id: "skill", name: "Skill issue", emoji: "🤓", face: "Nerd face", anim: "pump", fx: "sparkle", caption: "Skill issue.", color: "#2563eb", price: 700, cat: "toxique" },
+  { id: "ciao", name: "Ciao", emoji: "👋", face: "Waving hand", anim: "wave", fx: "motion", caption: "Ciao ! Bye bye !", color: "#0891b2", price: 500, cat: "toxique" },
+  { id: "dors", name: "Tu dors ?", emoji: "🥱", face: "Yawning face", anim: "breathe", fx: "zzz", caption: "Tu dors ?", color: "#4f46e5", price: 400, cat: "toxique" },
+  { id: "next", name: "Next", emoji: "🙄", face: "Face with rolling eyes", anim: "tilt", fx: "dots", caption: "Next.", color: "#64748b", price: 500, cat: "toxique" },
+  { id: "serieux", name: "Sérieux ?", emoji: "🧐", face: "Face with monocle", anim: "lean", fx: "question", caption: "Sérieux… ?", color: "#0f766e", price: 500, cat: "toxique" },
+  { id: "honte", name: "La honte", emoji: "🤭", face: "Face with hand over mouth", anim: "laugh", fx: "sweat", caption: "La honte…", color: "#db2777", price: 600, cat: "toxique" },
+  { id: "toutca", name: "C'est tout ?", emoji: "😒", face: "Unamused face", anim: "breathe", fx: "dots", caption: "C'est tout ?", color: "#78716c", price: 500, cat: "toxique" },
+  { id: "rip", name: "RIP", emoji: "💀", face: "Skull", anim: "float", fx: "ghost", caption: "RIP.", color: "#334155", price: 800, cat: "toxique" },
+  { id: "popcorn", name: "Popcorn", emoji: "🍿", face: "Popcorn", anim: "bounce", fx: "popcorn", caption: "Je regarde…", color: "#dc2626", price: 700, cat: "toxique" },
+  { id: "poubelle", name: "Poubelle", emoji: "🗑️", face: "Wastebasket", anim: "shake", fx: "flies", caption: "Ta carte ? Poubelle.", color: "#57534e", price: 900, cat: "toxique" },
+  { id: "escargot", name: "Trop lent", emoji: "🐌", face: "Snail", anim: "crawl", fx: "motion", caption: "Trop lent…", color: "#65a30d", price: 600, cat: "toxique" },
+  { id: "poule", name: "Poule mouillée", emoji: "🐔", face: "Chicken", anim: "bounce", fx: "feathers", caption: "Poule mouillée !", color: "#ea580c", price: 800, cat: "toxique" },
+  { id: "goat", name: "Le GOAT", emoji: "🐐", face: "Goat", anim: "float", fx: "rays", caption: "Le GOAT.", color: "#a16207", price: 1500, cat: "toxique" },
+  { id: "biberon", name: "Biberon", emoji: "🍼", face: "Baby bottle", anim: "tilt", fx: "milk", caption: "Va boire ton biberon.", color: "#0284c7", price: 900, cat: "toxique" },
+  { id: "chut", name: "Chut", emoji: "🤐", face: "Zipper-mouth face", anim: "pop", fx: "sparkle", caption: "Chut.", color: "#475569", price: 500, cat: "toxique" },
+  { id: "ptdr", name: "PTDR", emoji: "🤣", face: "Rolling on the floor laughing", anim: "rolling", fx: "joy", caption: "PTDR", color: "#ca8a04", price: 900, cat: "toxique" },
+  { id: "riche", name: "Trop riche", emoji: "🤑", face: "Money-mouth face", anim: "bounce", fx: "money", caption: "Trop riche.", color: "#15803d", price: 1000, cat: "toxique" },
+);
+// amour : pour les déclarations (et les réconciliations)
+EMOTES.push(
+  { id: "jtm", name: "Je t'aime", emoji: "❤️", face: "Red heart", anim: "heartbeat", fx: "burst", caption: "Je t'aime !", color: "#e11d48", price: 400, cat: "amour" },
+  { id: "beau", name: "Trop beau", emoji: "😍", face: "Smiling face with heart-eyes", anim: "bounce", fx: "hearts", caption: "Trop beau !", color: "#f43f5e", price: 500, cat: "amour" },
+  { id: "moncoeur", name: "Mon cœur", emoji: "💖", face: "Sparkling heart", anim: "heartbeat", fx: "sparkle", caption: "Mon cœur…", color: "#ec4899", price: 600, cat: "amour" },
+  { id: "foudre", name: "Coup de foudre", emoji: "💘", face: "Heart with arrow", anim: "pop", fx: "burst", caption: "Coup de foudre !", color: "#be185d", price: 700, cat: "amour" },
+  { id: "rose", name: "Une rose", emoji: "🌹", face: "Rose", anim: "sway", fx: "petals", caption: "Pour toi.", color: "#9f1239", price: 800, cat: "amour" },
+  { id: "lettre", name: "Lettre d'amour", emoji: "💌", face: "Love letter", anim: "float", fx: "hearts", caption: "Un petit mot…", color: "#f472b6", price: 600, cat: "amour" },
+  { id: "brise", name: "Cœur brisé", emoji: "💔", face: "Broken heart", anim: "sob", fx: "tears", caption: "Tu m'as brisé…", color: "#4c0519", price: 600, cat: "amour" },
+  { id: "brule", name: "Je brûle", emoji: "❤️‍🔥", face: "Heart on fire", anim: "heartbeat", fx: "fire", caption: "Je brûle !", color: "#c2410c", price: 900, cat: "amour" },
+  { id: "calin", name: "Câlin", emoji: "🧸", face: "Teddy bear", anim: "clap", fx: "hearts", caption: "Câlin !", color: "#b45309", price: 700, cat: "amour" },
+  { id: "muah", name: "Muah", emoji: "💋", face: "Kiss mark", anim: "pop", fx: "hearts", caption: "Muah !", color: "#be123c", price: 500, cat: "amour" },
+  { id: "love", name: "Love", emoji: "💞", face: "Revolving hearts", anim: "spin", fx: "sparkle", caption: "Love.", color: "#db2777", price: 600, cat: "amour" },
+  { id: "mignon", name: "Trop mignon", emoji: "🥹", face: "Face holding back tears", anim: "breathe", fx: "tears", caption: "Trop mignon…", color: "#fb7185", price: 500, cat: "amour" },
+  { id: "adore", name: "Je t'adore", emoji: "🫶", face: "Heart hands", anim: "pump", fx: "burst", caption: "Je t'adore !", color: "#e11d48", price: 800, cat: "amour" },
+  { id: "bouquet", name: "Bouquet", emoji: "💐", face: "Bouquet", anim: "sway", fx: "petals", caption: "Des fleurs pour toi", color: "#c026d3", price: 900, cat: "amour" },
+  { id: "chat", name: "Chat amoureux", emoji: "😻", face: "Smiling cat with heart-eyes", anim: "bounce", fx: "hearts", caption: "Miaou !", color: "#f59e0b", price: 700, cat: "amour" },
+);
+for (const e of EMOTES) e.cat ??= e.exclusive ? "exclusive" : "classique";
+const EMOTE_CATS = [
+  ["classique", "Classiques", "😄"],
+  ["toxique", "Toxiques", "😈"],
+  ["amour", "Amour", "❤️"],
+  ["exclusive", "Exclusives", "👑"],
+];
+for (const n of ["Thumbs up", "Clapping hands", "Flexed biceps", "Waving hand", "Heart hands"]) FLUENT_SKIN.add(n);
 const emoteOf = (id) => EMOTES.find((e) => e.id === id) ?? null;
 
 // --- Collection ---
@@ -259,6 +306,114 @@ function emoteFx(ctx, e, q, S) {
       }
       ctx.restore();
       break;
+    case "burst":
+      // des cœurs qui jaillissent tout autour
+      for (let k = 0; k < 10; k++) {
+        const t = (q * 1.4 + k / 10) % 1, a = (k / 10) * TAU + 0.3;
+        heart(ctx, c + Math.cos(a) * (40 + t * 75), c - 10 + Math.sin(a) * (40 + t * 75), 10 + t * 8, k % 2 ? "#fb7185" : "#f43f5e", 1 - t);
+      }
+      break;
+    case "petals":
+      for (let k = 0; k < 14; k++) {
+        const x = 20 + R() * (S - 40), sp = 0.5 + R() * 0.7, y = ((R() * S + q * S * sp) % (S + 20)) - 10, rot = q * TAU * sp + k;
+        ctx.save();
+        ctx.translate(x + Math.sin(q * TAU + k) * 8, y);
+        ctx.rotate(rot);
+        ctx.fillStyle = k % 3 ? "#e11d48" : "#fb7185";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 6, 3.5, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+      break;
+    case "fire":
+      for (let k = 0; k < 14; k++) {
+        const t = (q * 1.6 + k / 14) % 1, x = c - 50 + ((k * 37) % 100) + Math.sin((t + k) * 9) * 6;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.8 * (1 - t);
+        const g = ctx.createRadialGradient(x, c + 30 - t * 120, 1, x, c + 30 - t * 120, 12 - t * 6);
+        g.addColorStop(0, "#fef08a");
+        g.addColorStop(0.5, "#f97316");
+        g.addColorStop(1, "rgba(220,38,38,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, S, S);
+        ctx.restore();
+      }
+      break;
+    case "dots":
+      for (let k = 0; k < 3; k++) {
+        const on = Math.floor(q * 6) % 4 > k;
+        disc(ctx, c + 46 + k * 14, c - 62, 5, on ? "#f8fafc" : "rgba(248,250,252,0.25)");
+      }
+      break;
+    case "ghost":
+      for (let k = 0; k < 4; k++) {
+        const t = (q + k / 4) % 1;
+        ctx.save();
+        ctx.globalAlpha = 0.45 * Math.sin(t * Math.PI);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.beginPath();
+        ctx.ellipse(c - 45 + k * 30, c + 20 - t * 100, 9, 14, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+      break;
+    case "popcorn":
+      for (let k = 0; k < 8; k++) {
+        const t = (q * 1.5 + k / 8) % 1, x = c - 40 + k * 11, y = c + 10 - Math.sin(t * Math.PI) * 80;
+        disc(ctx, x, y, 5, "#fefce8");
+        disc(ctx, x + 3, y - 2, 3.5, "#fde68a");
+      }
+      break;
+    case "flies":
+      for (let k = 0; k < 4; k++) {
+        const a = TAU * (q * 2 + k / 4), x = c + Math.cos(a) * (60 + k * 6), y = c - 40 + Math.sin(a * 1.5) * 18;
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = "#e2e8f0";
+        ctx.beginPath();
+        ctx.ellipse(x - 3, y - 4, 4, 2.5, -0.5, 0, TAU);
+        ctx.ellipse(x + 3, y - 4, 4, 2.5, 0.5, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+        disc(ctx, x, y, 3, "#0f172a");
+      }
+      break;
+    case "feathers":
+      for (let k = 0; k < 10; k++) {
+        const x = 20 + R() * (S - 40), y = ((R() * S + q * S * 0.6) % (S + 20)) - 10;
+        ctx.save();
+        ctx.translate(x + Math.sin(q * TAU * 2 + k) * 10, y);
+        ctx.rotate(Math.sin(q * TAU + k) * 0.8);
+        ctx.fillStyle = k % 2 ? "#fff7ed" : "#fed7aa";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 3.5, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+      break;
+    case "milk":
+      for (let k = 0; k < 5; k++) {
+        const t = (q + k / 5) % 1;
+        drop(ctx, c - 40 + k * 20, c + 40 + t * 50, 6, "#f8fafc", 1 - t);
+      }
+      break;
+    case "money":
+      for (let k = 0; k < 12; k++) {
+        const x = 15 + R() * (S - 30), sp = 0.6 + R() * 0.6, y = ((R() * S + q * S * sp) % (S + 20)) - 10;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(Math.sin(q * TAU + k) * 0.6);
+        if (k % 2) {
+          ctx.fillStyle = "#16a34a";
+          ctx.fillRect(-9, -5, 18, 10);
+          ctx.fillStyle = "#86efac";
+          ctx.fillRect(-3, -3, 6, 6);
+        } else disc(ctx, 0, 0, 6, "#facc15");
+        ctx.restore();
+      }
+      break;
     case "breath":
       for (let k = 0; k < 10; k++) {
         const t = (q * 1.5 + k / 10) % 1;
@@ -305,6 +460,16 @@ function emotePose(anim, q) {
     case "salute": return [0, 0, -0.08 * Math.abs(s2), 1, 1];
     case "float": return [0, 6 * s, 0.05 * s, 1, 1];
     case "roar": return [3 * Math.sin(TAU * q * 8), 0, -0.05 + 0.03 * s4, 1.05 + 0.04 * Math.abs(s2), 1.05 + 0.04 * Math.abs(s2)];
+    case "wave": return [0, 0, 0.35 * Math.sin(TAU * q * 3), 1, 1];
+    case "heartbeat": {
+      // double battement de cœur : boum-boum… boum-boum
+      const ph = (q * 2) % 1, beat = ph < 0.12 ? Math.sin((ph / 0.12) * Math.PI) : ph > 0.2 && ph < 0.32 ? 0.7 * Math.sin(((ph - 0.2) / 0.12) * Math.PI) : 0;
+      return [0, 0, 0, 1 + 0.14 * beat, 1 + 0.14 * beat];
+    }
+    case "rolling": return [12 * Math.sin(TAU * q), -6 * Math.abs(s2), TAU * q, 1, 1];
+    case "crawl": return [-40 + 80 * q, 0, 0, 1 + 0.06 * Math.abs(s4), 1 - 0.05 * Math.abs(s4)];
+    case "sway": return [4 * s, 0, 0.14 * s, 1, 1];
+    case "spin": return [0, 3 * s, 0.25 * s, 1 + 0.04 * Math.abs(s2), 1 + 0.04 * Math.abs(s2)];
   }
   return [0, 0, 0, 1, 1];
 }
@@ -376,9 +541,15 @@ async function emoteGif(e) {
 }
 
 // --- La collection (/emotes) ---
+const emoteTiles = new Map();
+async function emoteTile(e) {
+  if (!emoteTiles.has(e.id)) emoteTiles.set(e.id, await emoteFrame(e, 0.3, await emoteFace(e)));
+  return emoteTiles.get(e.id);
+}
 async function drawEmoteCollection(userId) {
-  const cols = 5, tile = 170, gap = 18, W = cols * tile + (cols + 1) * gap + 40, rows = Math.ceil(EMOTES.length / cols);
-  const H = 170 + rows * (tile + 52) + 30;
+  const cols = 7, tile = 132, gap = 14, W = cols * tile + (cols + 1) * gap + 40;
+  const sections = EMOTE_CATS.map(([k, label]) => [label, EMOTES.filter((e) => e.cat === k)]).filter(([, l]) => l.length);
+  const H = 160 + sections.reduce((a, [, l]) => a + 52 + Math.ceil(l.length / cols) * (tile + 44), 0) + 20;
   const c = createCanvas(W, H), ctx = c.getContext("2d");
   const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, "#1e1b4b");
@@ -396,26 +567,35 @@ async function drawEmoteCollection(userId) {
   ctx.font = "16px CardItalic";
   ctx.fillStyle = "#c4b5fd";
   ctx.fillText(`${owned} / ${EMOTES.length} débloquées · les étoiles marquent vos ${EMOTE_DECK} favorites en combat`, W / 2, 138);
-  for (const [i, e] of EMOTES.entries()) {
-    const x = 20 + gap + (i % cols) * (tile + gap), y = 165 + Math.floor(i / cols) * (tile + 52), has = emoteUnlocked(userId, e);
-    const face = await emoteFace(e);
-    const fr = await emoteFrame(e, 0.3, face);
-    ctx.save();
-    if (!has) ctx.globalAlpha = 0.35;
-    ctx.drawImage(fr, x, y, tile, tile);
-    ctx.restore();
-    if (deck.includes(e.id)) {
+  let y = 160;
+  for (const [label, list] of sections) {
+    ctx.textAlign = "left";
+    ctx.font = "24px CardTitle";
+    ctx.fillStyle = "#fde68a";
+    ctx.fillText(label, 20 + gap, y + 32);
+    ctx.fillStyle = "rgba(253,230,138,0.25)";
+    ctx.fillRect(20 + gap + ctx.measureText(label).width + 14, y + 24, W - 80 - ctx.measureText(label).width, 2);
+    y += 52;
+    for (const [i, e] of list.entries()) {
+      const x = 20 + gap + (i % cols) * (tile + gap), ty = y + Math.floor(i / cols) * (tile + 44), has = emoteUnlocked(userId, e);
       ctx.save();
-      star5(ctx, x + tile - 18, y + 18, 13, "#facc15");
+      if (!has) ctx.globalAlpha = 0.35;
+      ctx.drawImage(await emoteTile(e), x, ty, tile, tile);
       ctx.restore();
+      if (deck.includes(e.id)) {
+        ctx.save();
+        star5(ctx, x + tile - 15, ty + 15, 11, "#facc15");
+        ctx.restore();
+      }
+      ctx.textAlign = "center";
+      ctx.font = "13px CardBold";
+      ctx.fillStyle = has ? "#ffffff" : "#94a3b8";
+      ctx.fillText(e.name, x + tile / 2, ty + tile + 18);
+      ctx.font = "11px CardText";
+      ctx.fillStyle = has ? "#86efac" : e.exclusive ? "#fbbf24" : "#c4b5fd";
+      ctx.fillText(has ? "débloquée" : e.exclusive ? "exclusive" : `${e.price.toLocaleString("fr-FR")} poussières`, x + tile / 2, ty + tile + 33);
     }
-    ctx.textAlign = "center";
-    ctx.font = "16px CardBold";
-    ctx.fillStyle = has ? "#ffffff" : "#94a3b8";
-    ctx.fillText(e.name, x + tile / 2, y + tile + 22);
-    ctx.font = "12px CardText";
-    ctx.fillStyle = has ? "#86efac" : e.exclusive ? "#fbbf24" : "#c4b5fd";
-    ctx.fillText(has ? "débloquée" : e.exclusive ? "exclusive" : `${e.price.toLocaleString("fr-FR")} poussières`, x + tile / 2, y + tile + 40);
+    y += Math.ceil(list.length / cols) * (tile + 44);
   }
   return c;
 }
@@ -438,21 +618,23 @@ async function emoteCollectionPayload(userId, note = "") {
     ],
     files: [new AttachmentBuilder(img, { name: "emotes.jpg" })],
     attachments: [],
-    components: [
+    components: EMOTE_CATS.filter(([k]) => EMOTES.some((e) => e.cat === k)).map(([k, label, emoji]) =>
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId("emote_view")
-          .setPlaceholder("Voir une emote…")
+          .setCustomId(`emote_view_${k}`)
+          .setPlaceholder(`${emoji} ${label}…`)
           .addOptions(
-            EMOTES.map((e) => ({
-              label: e.name,
-              value: e.id,
-              emoji: e.emoji,
-              description: (emoteUnlocked(userId, e) ? (deck.includes(e.id) ? "★ Favorite" : "Débloquée") : e.exclusive ?? `${e.price} poussières d'étoile`).slice(0, 100),
-            }))
+            EMOTES.filter((e) => e.cat === k)
+              .slice(0, 25)
+              .map((e) => ({
+                label: e.name,
+                value: e.id,
+                emoji: e.emoji,
+                description: (emoteUnlocked(userId, e) ? (deck.includes(e.id) ? "★ Favorite" : "Débloquée") : e.exclusive ?? `${e.price} poussières d'étoile`).slice(0, 100),
+              }))
           )
-      ),
-    ],
+      )
+    ),
   };
 }
 async function emoteDetailPayload(userId, e, note = "") {
@@ -487,6 +669,8 @@ function emotePicker(b, userId) {
   const deck = emoteDeck(userId), rows = [];
   for (let i = 0; i < deck.length; i += 4)
     rows.push(new ActionRowBuilder().addComponents(...deck.slice(i, i + 4).map((id) => new ButtonBuilder().setCustomId(`emote_send_${b.id}_${id}`).setLabel(emoteOf(id).name).setEmoji(emoteOf(id).emoji).setStyle(ButtonStyle.Secondary))));
+  const muted = b.emoteMute?.[userId];
+  rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`emote_mute_${b.id}`).setLabel(muted ? "Réactiver les emotes de l'adversaire" : "Couper les emotes de l'adversaire").setEmoji(muted ? "🔊" : "🔇").setStyle(ButtonStyle.Secondary)));
   return { content: "😄 **Vos emotes** — un clic pour l'envoyer à votre adversaire. (`/emotes` pour changer vos favorites)", components: rows, ephemeral: true };
 }
 async function sendEmote(b, who, e) {
@@ -509,7 +693,7 @@ async function handleEmoteInteraction(interaction) {
     await show(emoteCollectionPayload(userId));
     return true;
   }
-  if (id === "emote_view") {
+  if (id.startsWith("emote_view")) {
     const e = emoteOf(interaction.values[0]);
     if (e) await show(emoteDetailPayload(userId, e));
     return true;
@@ -552,6 +736,15 @@ async function handleEmoteInteraction(interaction) {
     await interaction.reply(emotePicker(b, userId));
     return true;
   }
+  const mute = /^emote_mute_(\w+)$/.exec(id);
+  if (mute) {
+    const b = battles.get(mute[1]);
+    if (!b || !b.players.some((p) => p.id === userId)) return void (await interaction.update({ content: "😶 Ce combat est terminé.", components: [] }).catch(() => null)) || true;
+    b.emoteMute ??= {};
+    b.emoteMute[userId] = !b.emoteMute[userId];
+    await interaction.update(emotePicker(b, userId));
+    return true;
+  }
   const send = /^emote_send_(\w+)_(\w+)$/.exec(id);
   if (send) {
     const b = battles.get(send[1]), e = emoteOf(send[2]);
@@ -562,12 +755,15 @@ async function handleEmoteInteraction(interaction) {
     if (now < (emoteCooldown.get(key) ?? 0)) return void (await interaction.reply({ content: `⏳ Encore un instant avant la prochaine emote.`, ephemeral: true })) || true;
     emoteCooldown.set(key, now + EMOTE_COOLDOWN);
     await interaction.deferUpdate();
-    await sendEmote(b, me.name, e);
+    // l'adversaire a coupé les emotes : elle ne s'affiche pas (comme dans Clash Royale, on ne le sait pas)
+    const foe = b.players.find((p) => p.id !== userId);
+    if (!b.emoteMute?.[foe?.id]) await sendEmote(b, me.name, e);
     // la Maison répond parfois à vos emotes
     const ai = b.players.find((p) => p.isAI);
     if (ai && Math.random() < 0.5) {
-      const reply = emoteOf(["rire", "cool", "colere", "gg", "clown", "reflechit"][Math.floor(Math.random() * 6)]);
-      setTimeout(() => (b.phase !== "over" ? sendEmote(b, ai.name, reply).catch(() => null) : null), 2200 + Math.random() * 1500);
+      const pool = ["rire", "cool", "colere", "gg", "clown", "reflechit", "cheh", "ez", "popcorn", "dors", "ptdr", "goat"];
+      const reply = emoteOf(pool[Math.floor(Math.random() * pool.length)]);
+      setTimeout(() => (b.phase !== "over" && !b.emoteMute?.[userId] ? sendEmote(b, ai.name, reply).catch(() => null) : null), 2200 + Math.random() * 1500);
     }
     return true;
   }
