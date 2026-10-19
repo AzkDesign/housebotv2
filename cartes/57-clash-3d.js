@@ -818,13 +818,18 @@ async function clashBattleGif3D(base, sim, attackerName, info = {}) {
   return gif;
 }
 {
-  const flat = clashBattleGif;
-  clashBattleGif = async (base, sim, attackerName, info = {}) => {
-    try {
-      return await clashBattleGif3D(base, sim, attackerName, info);
-    } catch (err) {
-      console.error("[clash 3D] bataille : animation 2D de secours —", err.stack ?? err.message);
-      return flat(base, sim, attackerName, info);
-    }
-  };
+  // une cinématique à la fois : chacune prend ~200 Mo pendant son rendu (3D, images, GIF, vidéo du Manoir) ;
+  // deux attaques en même temps faisaient dépasser la mémoire du serveur. La seconde attend simplement la première.
+  const flat = clashBattleGif, oneAtATime = limiter(1);
+  clashBattleGif = (base, sim, attackerName, info = {}) =>
+    oneAtATime(async () => {
+      try {
+        return await clashBattleGif3D(base, sim, attackerName, info);
+      } catch (err) {
+        console.error("[clash 3D] bataille : animation 2D de secours —", err.stack ?? err.message);
+        return flat(base, sim, attackerName, info);
+      } finally {
+        CLASH3D.nettoyer(true); // tout ce que la cinématique a laissé est rendu avant la suivante
+      }
+    });
 }
