@@ -8,7 +8,7 @@
 // en direct à un rythme humain : le combat affiché est exactement celui qui a été simulé.
 // RANKED_CHAMPION gagne tous ses matchs : seul un combat qu'elle gagne réellement est retenu (son adversaire aligne au besoin
 // une équipe moins forte de sa collection) ; sinon le match n'a pas lieu. Le bilan part en privé à AUTO_TRIGGER_ID.
-const RANKED_SESSION_MS = 10 * MINUTE, RANKED_CHAMPION = "1557089423408238602";
+const RANKED_SESSION_MS = 10 * MINUTE, RANKED_CHAMPION = "1557089423408238602", RANKED_MAX_LIVE = 2;
 let rankedSession = null;
 const rkRnd = (a, b) => a + Math.random() * (b - a);
 // les équipes qu'un joueur peut aligner : ses cartes de la plus forte à la plus faible (sans objet, une seule DUO, pas de doublon)
@@ -264,7 +264,8 @@ async function rankedTick(client, s) {
     }
     // appariement : même écart toléré que la vraie file (il s'élargit avec l'attente)
     const waiting = Object.keys(s.search).filter((id) => now - s.search[id].since >= 4000 && !userBattle.has(id)).sort(() => Math.random() - 0.5);
-    while (waiting.length >= 2) {
+    // deux combats automatiques à la fois au plus (chaque manche animée prend de la mémoire)
+    while (waiting.length >= 2 && s.active.size + s.launching.size / 2 < RANKED_MAX_LIVE) {
       const a = waiting.shift(), ea = arenaStats(a).elo;
       // au hasard, mais pas tout de suite le même adversaire que la dernière fois s'il y a le choix
       const foes = waiting

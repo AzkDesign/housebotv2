@@ -214,3 +214,9 @@ setInterval(() => {
   const m = process.memoryUsage();
   console.log(`Mémoire : ${Math.round(m.rss / 1048576)} Mo (tas ${Math.round(m.heapUsed / 1048576)} Mo, tampons ${Math.round(m.arrayBuffers / 1048576)} Mo) · ${battles.size} combat(s) en cours`);
 }, 10 * MINUTE).unref?.();
+// Pendant les combats, chaque panneau et chaque animation crée des images dont la mémoire (hors JavaScript) n'est rendue
+// qu'au passage du ramasse-miettes ; le tas JavaScript restant petit, il ne passe presque jamais et la mémoire grimpe
+// (plusieurs centaines de Mo en une session de combats). Un nettoyage complet toutes les 15 s tant qu'un combat tourne.
+setInterval(() => {
+  if (battles.size) CLASH3D.nettoyer(true);
+}, 15000).unref?.();

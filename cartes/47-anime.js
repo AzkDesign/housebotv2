@@ -1706,7 +1706,7 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
   // chaque scène part à l'encodeur (une palette par scène)
   const flush = () => {
     if (!scene.length) return;
-    encoder.scene(scene);
+    encoder.scene(scene, true); // les images partent au worker sans copie
     wrote += scene.length;
     scene = [];
   };
@@ -1985,7 +1985,10 @@ async function animeClashGif(b, res, hp0, pre, bg, scale = 1) {
       else v.lag = v.lag.map((l, k) => (l > v.hp[k] ? Math.max(v.hp[k], l - Math.max(2, (l - v.hp[k]) * 0.2)) : v.hp[k]));
     }
     if (anDebug) anDebug(c, frameNo, delay);
-    scene.push({ data: ctx.getImageData(0, 0, OW, OH).data, delay });
+    // copie dans un tampon suivi par V8 puis petit nettoyage : la mémoire native du canvas est rendue aussitôt
+    // (sinon elle s'accumule image après image, le tas JavaScript restant trop petit pour déclencher le ramasse-miettes)
+    scene.push({ data: new Uint8ClampedArray(ctx.getImageData(0, 0, OW, OH).data), delay });
+    CLASH3D.nettoyer();
     duration += delay;
     frameNo++;
     if (scene.length >= 26) flush();

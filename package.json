@@ -4,7 +4,7 @@
   "description": "Bot Discord - accueil et rôle automatique",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "MALLOC_ARENA_MAX=2 node index.js"
   },
   "engines": {
     "node": ">=18.0.0"
