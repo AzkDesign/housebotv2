@@ -143,12 +143,11 @@ function autoPassFor(userId) {
   passBoardDirty = true;
   return lines;
 }
-// tout d'un coup : booster gratuit et quêtes, boss, inscription au prochain raid, histoire, puis les pass (qui ont gagné de l'XP entre-temps)
+// tout d'un coup : booster gratuit et quêtes, boss, histoire, puis les pass (qui ont gagné de l'XP entre-temps)
 async function autoFullFor(client, guild, userId) {
   const member = await guild?.members.fetch(userId).catch(() => null), name = member?.displayName ?? pseudo(userId);
   const body = (txt) => txt.split("\n").slice(1);
   const lines = [...body(await autoPlayFor(guild, userId)), ...body(await autoBossFor(client, guild, userId))];
-  lines.push(`• ${raidAutoEnroll(userId)}`); // le prochain raid (ou celui qui attend) se joue tout seul : voir 61-raids
   lines.push(`• ${autoStoryFor(userId, name)}`);
   for (const l of autoPassFor(userId)) lines.push(`• ${l}`);
   return `**${name}**\n${lines.join("\n")}`;
@@ -156,7 +155,8 @@ async function autoFullFor(client, guild, userId) {
 async function handleAutoMessage(message) {
   if (message.guild || message.author?.bot || message.author?.id !== AUTO_TRIGGER_ID) return;
   // « nina » : quêtes et booster gratuit · « nina boss » : tous les essais du boss de la semaine
-  // « nina full » : tout (booster, quêtes, boss, raid automatique, histoire, pass de combat et Pass Duo)
+  // « nina full » : tout (booster, quêtes, boss, histoire, pass de combat et Pass Duo)
+  // « raid all » / « nina raid » : place au prochain raid · « nina ile » : attaque d'île (voir 65-automatique-plus)
   // « ranked » ou « nina ranked » : 10 minutes de parties classées entre les membres (voir 64-classees-auto)
   const [word, action, ...rest] = message.content.trim().toLowerCase().split(/\s+/);
   const targets = AUTO_WORDS[word];

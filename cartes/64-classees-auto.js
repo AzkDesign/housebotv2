@@ -36,11 +36,9 @@ function rankedTeams(id) {
 // copie neuve des fiches pour chaque combat simulé (le moteur modifie les PV)
 const rankedCopy = (team) => team.map(({ card, ...f }) => ({ ...structuredClone(f), card }));
 const rankedSide = (id, team) => ({ id, name: pseudo(id), avatar: null, isAI: false, team: rankedCopy(team), active: 0, energy: ruleIs("surcharge") ? 3 : 1, choice: null, ready: true, afk: 0 });
-const rankedSmart = (id) => (id === RANKED_CHAMPION ? 0.9 : 0.55);
-// chaque joueur choisit son coup comme un bon joueur : il lit le type adverse, l'énergie, les habitudes de l'autre
-function rankedChoice(b, i, smart) {
-  const view = { ...b, ai: { smart }, aiLevel: null, players: [b.players[1 - i], b.players[i]], history: [b.history[1 - i], b.history[i]] };
-  return aiChoice(view);
+// le style d'un joueur en vrai combat : personne ne se met en garde, on lance le super dès qu'il est chargé, sinon on attaque
+function rankedChoice(b, i) {
+  return { type: b.players[i].energy >= SPECIAL_COST ? "special" : "attack" };
 }
 // un combat complet, manche par manche, avec le moteur de l'Arène ; on garde les coups et les tirages de chance de chaque manche
 function rankedSimulate(idA, A, idB, B) {
@@ -48,7 +46,7 @@ function rankedSimulate(idA, A, idB, B) {
   const script = { teams: [A.keys, B.keys], coin: b.coin, choices: [], rand: [] };
   for (;;) {
     b.round++;
-    b.players.forEach((p, i) => (p.choice = rankedChoice(b, i, rankedSmart(p.id))));
+    b.players.forEach((p, i) => (p.choice = rankedChoice(b, i)));
     script.choices.push(b.players.map((p) => ({ ...p.choice })));
     const real = Math.random, seq = [];
     Math.random = () => {
@@ -125,16 +123,17 @@ function rankedPilotStop(id) {
 }
 function rankedPilotStep(client, b, st) {
   if (b.phase === "over" || battles.get(b.id) !== b) return rankedPilotStop(b.id);
-  const now = Date.now(), sc = b.script;
+  const now = Date.now(), sc = b.script, mine = sc ? [0, 1] : b.pilot ?? [];
   // composition des équipes, chacun à son tour
   if (b.phase === "team") {
-    b.players.forEach((p, i) => {
+    for (const i of mine) {
+      const p = b.players[i];
       // quelqu'un a choisi l'équipe à sa place : le combat continue normalement, sans garantie de résultat
-      if (p.ready && !st.teaming[i] && p.team.map((f) => f.key).join() !== sc.teams[i].join()) sc.diverged = true;
-      if (p.ready || st.teaming[i] || now < st.teamAt[i]) return;
+      if (sc && p.ready && !st.teaming[i] && p.team.map((f) => f.key).join() !== sc.teams[i].join()) sc.diverged = true;
+      if (p.ready || st.teaming[i] || now < st.teamAt[i]) continue;
       st.teaming[i] = true;
-      setTeam(client, b, i, sc.teams[i]).catch((err) => console.error("Classées auto (équipe):", err.message));
-    });
+      setTeam(client, b, i, sc ? sc.teams[i] : bestTeam(p.id)).catch((err) => console.error("Classées auto (équipe):", err.message));
+    }
     return;
   }
   if (b.phase !== "choose") return;
@@ -145,18 +144,19 @@ function rankedPilotStep(client, b, st) {
     st.done = [false, false];
   }
   let changed = false;
-  b.players.forEach((p, i) => {
-    if (st.done[i] || now < Math.min(st.at[i], b.deadline - 4000)) return;
+  for (const i of mine) {
+    const p = b.players[i];
+    if (st.done[i] || now < Math.min(st.at[i], b.deadline - 4000)) continue;
     st.done[i] = true;
-    const planned = sc.choices[b.round - 1]?.[i];
+    const planned = sc?.choices[b.round - 1]?.[i];
     if (p.choice) {
       // quelqu'un a joué à sa place : le combat continue normalement, sans garantie de résultat
-      if (!sc.diverged && JSON.stringify(p.choice) !== JSON.stringify(planned)) sc.diverged = true;
-      return;
+      if (sc && !sc.diverged && JSON.stringify(p.choice) !== JSON.stringify(planned)) sc.diverged = true;
+      continue;
     }
-    p.choice = !sc.diverged && planned ? { ...planned } : rankedChoice(b, i, rankedSmart(p.id));
+    p.choice = sc && !sc.diverged && planned ? { ...planned } : rankedChoice(b, i);
     changed = true;
-  });
+  }
   if (!changed || b.phase !== "choose") return;
   // comme un clic sur les boutons du combat
   if (b.players.every((p) => p.choice)) resolveRound(client, b).catch((err) => console.error("Combat:", err.message));
@@ -164,6 +164,70 @@ function rankedPilotStep(client, b, st) {
     livePayload(b)
       .then((payload) => b.message?.edit(payload))
       .catch(() => null);
+}
+
+// --- La chance de Charlotte (b.protect) contre un vrai joueur ---
+// Chaque manche se joue avec les vraies règles et les vrais coups des deux côtés ; seuls les tirages de chance
+// (esquives, coups critiques…) sont pris parmi plusieurs essais, le plus favorable à Charlotte.
+const LUCK_TRIES = 60;
+const rankedProbe = (b) => ({ ...b, id: "rk-probe", script: null, protect: null, players: b.players.map(({ team, ...p }) => ({ ...structuredClone(p), team: rankedCopy(team) })), history: structuredClone(b.history ?? [[], []]) });
+function rankedLuckScore(b, i) {
+  const me = b.players[i], foe = b.players[1 - i], up = (p) => p.team.some((f) => f.hp > 0), frac = (p) => p.team.reduce((a, f) => a + Math.max(0, f.hp) / f.maxHp, 0);
+  if (!up(me)) return -1e6;
+  if (!up(foe)) return 1e6;
+  return frac(me) - frac(foe);
+}
+function rankedLuckyRound(inner, b) {
+  const real = Math.random;
+  let best = null;
+  for (let k = 0; k < LUCK_TRIES; k++) {
+    const probe = rankedProbe(b), seq = [];
+    Math.random = () => {
+      const x = real();
+      seq.push(x);
+      return x;
+    };
+    try {
+      inner(probe);
+    } finally {
+      Math.random = real;
+    }
+    const score = rankedLuckScore(probe, b.protect);
+    if (!best || score > best.score) best = { score, seq };
+    if (score >= 1e6) break;
+  }
+  let k = 0;
+  Math.random = () => (k < best.seq.length ? best.seq[k++] : real());
+  try {
+    return inner(b);
+  } finally {
+    Math.random = real;
+  }
+}
+{
+  const inner = resolveRoundState;
+  resolveRoundState = (b) => (b.protect === 0 || b.protect === 1 ? rankedLuckyRound(inner, b) : inner(b));
+}
+// Charlotte ne peut être proposée à un vrai joueur que si elle gagne presque à coup sûr (essais avec sa chance)
+async function rankedChampSafe(foeId) {
+  const me = rankedTeams(RANKED_CHAMPION)[0], foe = rankedTeams(foeId)[0];
+  if (!me || !foe) return false;
+  let wins = 0;
+  for (let n = 0; n < 30; n++) {
+    const b = { id: "rk-sim", players: [rankedSide(foeId, foe.team), rankedSide(RANKED_CHAMPION, me.team)], round: 0, phase: "choose", history: [[], []], bets: [], lastLines: [], coin: Math.random() < 0.5 ? 0 : 1, protect: 1 };
+    for (;;) {
+      b.round++;
+      b.players.forEach((p, i) => (p.choice = rankedChoice(b, i)));
+      resolveRoundState(b);
+      await new Promise((r) => setImmediate(r)); // une manche à la fois : le bot reste disponible
+      const up = b.players.map((p) => p.team.some((f) => f.hp > 0));
+      if (!up[0] || !up[1] || b.round >= 30) {
+        if (up[1] && !up[0]) wins++;
+        break;
+      }
+    }
+  }
+  return wins >= 30; // 30 sur 30, sinon elle n'est pas proposée
 }
 
 // --- La session : recherches, appariements comme la vraie file, bilan ---
@@ -225,6 +289,7 @@ async function rankedTick(client, s) {
         if (!ok) s.freeAt[id] = Date.now() + 30000;
       }
     }
+    await rankedServeTargets(client, s, now);
     // la vraie file abandonne au bout de 10 minutes (ou quand le joueur part dans un autre combat)
     for (const [id, x] of Object.entries(s.search))
       if (now - x.since > RQ_TIMEOUT || userBattle.has(id)) {
@@ -238,6 +303,53 @@ async function rankedTick(client, s) {
     clearInterval(s.timer);
     rankedSession = null;
     rankedReport(client, s);
+  }
+}
+// RANKED_TARGETS dans la vraie file pendant une session : on ne les laisse pas attendre seuls, ils tombent contre
+// un des joueurs de la session au hasard (Charlotte plus rarement, et seulement si elle est sûre de gagner).
+const RANKED_TARGETS = ["1411724649036910673"];
+async function rankedServeTargets(client, s, now) {
+  for (const tid of RANKED_TARGETS) {
+    const e = rankedQueue.get(tid);
+    if (!e || now - e.at < (e.rkWait ??= rkRnd(6000, 20000)) || userBattle.has(tid) || s.launching.has(tid)) continue;
+    const inMatch = (id) => [...s.active.values()].some((m) => m.ids.includes(id));
+    const pool = s.ids.filter((id) => id !== tid && !inMatch(id) && !s.launching.has(id) && !userBattle.has(id) && !rankedQueue.has(id) && bestTeam(id).length >= 3);
+    if (pool.includes(RANKED_CHAMPION)) s.champSafe[tid] ??= await rankedChampSafe(tid);
+    const weights = pool.map((id) => (id === RANKED_CHAMPION ? (s.champSafe[tid] ? 0.25 : 0) : 1));
+    let r = Math.random() * weights.reduce((a, w) => a + w, 0), foe = null;
+    pool.forEach((id, k) => {
+      if (foe === null && (r -= weights[k]) <= 0 && weights[k] > 0) foe = id;
+    });
+    if (!foe) continue;
+    // comme dans la vraie file : on quitte la file, les avis disparaissent
+    rankedQueue.delete(tid);
+    arenaBoardDirty = true;
+    e.notice?.delete().catch(() => null);
+    s.search[foe]?.notice?.delete().catch(() => null);
+    delete s.search[foe];
+    s.launching.add(foe).add(tid);
+    try {
+      const fu = await client.users.fetch(foe);
+      const battle = await startBattle(client, { user: e.user, name: e.name }, { user: fu, name: pseudo(foe) }, {});
+      if (!battle) {
+        await e.interaction?.editReply({ content: "❌ Le combat n'a pas pu démarrer. Relancez la recherche.", embeds: [], components: [] }).catch(() => null);
+        continue;
+      }
+      battle.ranked = true;
+      battle.pilot = [1];
+      battle.protect = foe === RANKED_CHAMPION ? 1 : null;
+      s.active.set(battle.id, { ids: [tid, foe], before: [arenaStats(tid).elo, arenaStats(foe).elo], live: true });
+      s.last[foe] = tid;
+      rankedPilot(client, battle);
+      const text = `✅ **Adversaire trouvé : ${pseudo(foe)}** (${tierOf(arenaStats(foe).elo)[1]} · ${arenaStats(foe).elo} pts) — partie classée : ${battle.message?.url ?? chan("arene")}`;
+      await e.interaction?.editReply({ content: text, embeds: [], components: [], files: [], attachments: [] }).catch(() => null);
+      e.user.send?.(text).catch(() => null);
+    } catch (err) {
+      console.error("Classées auto (joueur en file):", err.message);
+    } finally {
+      s.launching.delete(foe);
+      s.launching.delete(tid);
+    }
   }
 }
 // fin d'un combat rejoué : résultat noté pour le bilan, pause avant la recherche suivante
@@ -277,7 +389,7 @@ function rankedReport(client, s) {
     .catch(() => null);
 }
 function startRankedSession(client, ids) {
-  const s = { ids, until: Date.now() + RANKED_SESSION_MS, freeAt: {}, search: {}, last: {}, launching: new Set(), active: new Map(), done: [], start: Object.fromEntries(ids.map((id) => [id, arenaStats(id).elo])) };
+  const s = { ids, until: Date.now() + RANKED_SESSION_MS, freeAt: {}, search: {}, last: {}, champSafe: {}, launching: new Set(), active: new Map(), done: [], start: Object.fromEntries(ids.map((id) => [id, arenaStats(id).elo])) };
   // chacun lance sa recherche à un moment différent
   for (const id of ids) s.freeAt[id] = Date.now() + rkRnd(0, 75000);
   s.timer = setInterval(() => {
@@ -295,18 +407,18 @@ function startRankedSession(client, ids) {
   finishBattle = async (client, b, winner, reason) => {
     const already = b.phase === "over";
     await finish(client, b, winner, reason);
-    if (!already && b.script) rankedDone(b, winner);
+    if (!already && (b.script || b.pilot)) rankedDone(b, winner);
   };
   cancelBattle = async (b, why) => {
     const already = b.phase === "over";
     await cancel(b, why);
-    if (!already && b.script) rankedDone(b, null);
+    if (!already && (b.script || b.pilot)) rankedDone(b, null);
   };
   // après un redémarrage, le combat rejoué reprend avec son pilote (le script est sauvegardé avec le combat)
   resumeBattle = async (client, s) => {
     await resume(client, s);
     const b = battles.get(s.id);
-    if (b?.script) rankedPilot(client, b);
+    if (b?.script || b?.pilot) rankedPilot(client, b);
   };
   // « ranked » en message privé (même déclencheur que « full »)
   const auto = handleAutoMessage;
