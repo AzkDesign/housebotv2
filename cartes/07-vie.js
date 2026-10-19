@@ -199,10 +199,15 @@ function claimQuests(userId) {
 }
 
 // --- Carte de la semaine : trois fois plus fréquente dans les boosters ---
+// gardée 30 s : la règle de la semaine la consulte plusieurs fois par manche, et chaque calcul crée un formateur de date
+let mondayCache = null;
 function mondayKey() {
+  if (mondayCache && Math.abs(Date.now() - mondayCache.at) < 30000) return mondayCache.key;
   const paris = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" }));
   paris.setDate(paris.getDate() - ((paris.getDay() + 6) % 7));
-  return `${paris.getFullYear()}-${String(paris.getMonth() + 1).padStart(2, "0")}-${String(paris.getDate()).padStart(2, "0")}`;
+  const key = `${paris.getFullYear()}-${String(paris.getMonth() + 1).padStart(2, "0")}-${String(paris.getDate()).padStart(2, "0")}`;
+  mondayCache = { at: Date.now(), key };
+  return key;
 }
 const weeklyCard = () => (load().weeklyCard?.week === mondayKey() ? findCard(load().weeklyCard.id) : null);
 async function pickWeeklyCard() {

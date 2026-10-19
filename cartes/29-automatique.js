@@ -157,6 +157,7 @@ async function handleAutoMessage(message) {
   if (message.guild || message.author?.bot || message.author?.id !== AUTO_TRIGGER_ID) return;
   // « nina » : quêtes et booster gratuit · « nina boss » : tous les essais du boss de la semaine
   // « nina full » : tout (booster, quêtes, boss, raid automatique, histoire, pass de combat et Pass Duo)
+  // « ranked » ou « nina ranked » : 10 minutes de parties classées entre les membres (voir 64-classees-auto)
   const [word, action, ...rest] = message.content.trim().toLowerCase().split(/\s+/);
   const targets = AUTO_WORDS[word];
   if (!targets || rest.length || (action && action !== "boss" && action !== "full")) return;
