@@ -1,9 +1,9 @@
 // --- Raids : un boss gigantesque sort des abysses, tout le monde l'attaque ensemble, puis chacun tente de le capturer ---
 // 1. Le raid apparaît (salon 🐉・raids) : 5 minutes pour rejoindre et choisir ses 3 cartes (les cartes Étoile
 //    sont redoutables : le boss est d'astre Ombre).
-// 2. Le combat dure 2 min 30 en direct : chaque joueur a son poste de combat (message privé qui se met à jour) :
-//    attaque rapide (recharge l'énergie), coup spécial (3 énergies), esquive, changement de carte.
-//    Le boss frappe tout le monde régulièrement et prépare un souffle dévastateur qu'il faut esquiver.
+// 2. Le combat se joue en équipe, tour par tour (12 tours au plus) : le dragon annonce son coup, chacun choisit son
+//    action en secret dans son poste de combat (attaque, super, protéger l'équipe, soigner, changer de carte),
+//    puis tout se résout ensemble (voir « Le combat d'équipe » plus bas).
 // 3. S'il tombe : chaque participant reçoit des cartes de capture selon ses dégâts, et tente sa chance.
 //    S'il n'est pas vaincu à temps, il s'enfuit.
 const RAID_BOSS = {
@@ -18,16 +18,15 @@ const RAID_BOSS = {
 };
 const RAID = {
   lobbyMs: 5 * MINUTE,
-  fightMs: 150 * 1000,
+  turnMs: 18000, // temps pour choisir son action à chaque tour
+  maxTurns: 12, // sinon le dragon s'enfuit
+  pauseMs: 4000, // le résultat d'un tour reste affiché avant le suivant
   catchMs: 3 * MINUTE,
-  hpPerPlayer: 2600,
+  hpPerPlayer: 600,
   maxPlayers: 20,
   hours: [13, 17, 21], // heures de Paris (plus 0 à 25 minutes au hasard)
   ballChance: 0.14, // chance de capture par carte lancée
   holoChance: 1 / 12, // version brillante
-  hitEvery: 9000,
-  chargeEvery: 28000,
-  chargeWarn: 4000,
 };
 EVENTS[RAID_BOSS.id] = { ...C(RAID_BOSS.id, `${RAID_BOSS.name}, ${RAID_BOSS.title}`, "🐉", "mythique", RAID_BOSS.text), raidBoss: true, fixedStats: RAID_BOSS.stats };
 ASTRE_BY_ID[RAID_BOSS.id] = RAID_BOSS.astre;
@@ -422,6 +421,7 @@ function raidLobbyPayload(img) {
     .setDescription(
       `Une silhouette gigantesque remue sous la Maison… **Elle éclot ${`<t:${Math.floor(raid.hatchAt / 1000)}:R>`}.**\n\n` +
         `⚔️ Rejoignez le raid et choisissez **3 cartes** : le boss est d'astre **🌑 Ombre**, les cartes **⭐ Étoile** lui infligent **double dégâts**.\n` +
+        `🧑‍🤝‍🧑 Le combat se joue **en équipe, tour par tour** : attaquez, protégez, soignez… et lancez vos supers ensemble.\n` +
         `🎯 S'il tombe, chaque dresseur tente de le **capturer** : plus vous infligez de dégâts, plus vous avez de cartes de capture.`
     )
     .addFields({ name: `🧑‍🤝‍🧑 Dresseurs (${ps.length}/${RAID.maxPlayers})`, value: ps.map((p) => `• **${p.name}** — ${p.team.map((f) => f.name).join(", ")}`).join("\n").slice(0, 1000) || "*Personne pour l'instant : soyez le premier !*" });
@@ -437,21 +437,21 @@ function raidLobbyPayload(img) {
   };
 }
 function raidBoardPayload() {
-  const ps = [...raid.players.values()].sort((a, b) => b.dmg - a.dmg), frac = raid.boss.hp / raid.boss.max;
-  const top = ps.slice(0, 10).map((p, i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} ${p.name} — **${p.dmg.toLocaleString("fr-FR")}**${p.out ? " 💀" : ""}${p.caught ? (p.holo ? " ✨🌈" : " ✨") : ""}`);
+  const ps = [...raid.players.values()].sort((a, b) => b.dmg + (b.support ?? 0) - (a.dmg + (a.support ?? 0))), frac = raid.boss.hp / raid.boss.max;
+  const top = ps.slice(0, 10).map((p, i) => `${["🥇", "🥈", "🥉"][i] ?? `**${i + 1}.**`} ${p.name} — **${p.dmg.toLocaleString("fr-FR")}**${p.support ? ` · 🛡️💚 ${p.support.toLocaleString("fr-FR")}` : ""}${p.out ? " 💀" : ""}${p.caught ? (p.holo ? " ✨🌈" : " ✨") : ""}`);
   let title, desc, color = 0x7e22ce;
   if (raid.phase === "fight") {
-    title = `🐉 RAID — ${RAID_BOSS.name}, ${RAID_BOSS.title}`;
+    title = `🐉 RAID — ${RAID_BOSS.name}, ${RAID_BOSS.title}${raid.raged ? " · 🔥 EN RAGE" : ""}`;
     desc =
       `\`${bar(frac)}\` **${Math.max(0, Math.ceil(raid.boss.hp)).toLocaleString("fr-FR")} / ${raid.boss.max.toLocaleString("fr-FR")} PV** (${Math.ceil(frac * 100)} %)\n` +
-      `⏱️ Fin du combat <t:${Math.floor(raid.endAt / 1000)}:R>` +
-      (raid.charge ? `\n\n⚠️ **${RAID_BOSS.name.toUpperCase()} PRÉPARE LE ${RAID_BOSS.charged.toUpperCase()} — ESQUIVEZ !**` : "") +
-      `\n\n*Votre poste de combat est dans votre message privé du raid (bouton ci-dessous si vous l'avez perdu).*`;
-    if (raid.charge) color = 0xdc2626;
+      `⚔️ **Tour ${raid.turn} / ${RAID.maxTurns}**${raid.stage === "choose" ? ` · choix jusqu'à <t:${Math.ceil(raid.turnEnd / 1000)}:R>` : " · résolution…"}\n\n` +
+      (raid.stage === "choose" ? raidIntentText() : "📜 Le tour vient de se jouer : le suivant commence dans un instant.") +
+      `\n\n*Votre poste de combat est dans votre message du raid (bouton ci-dessous si vous l'avez perdu).*`;
+    if (raid.intent?.kind === "souffle" && raid.stage === "choose") color = 0xdc2626;
   } else if (raid.phase === "catch") {
     title = `🎉 ${RAID_BOSS.name} est à terre !`;
     color = 0x22c55e;
-    desc = `Le dragon est vaincu ! Chaque dresseur a reçu des **cartes de capture** selon ses dégâts : lancez-les avant <t:${Math.floor(raid.catchEnd / 1000)}:t> pour tenter de le capturer.`;
+    desc = `Le dragon est vaincu ! Chaque dresseur a reçu des **cartes de capture** selon ses dégâts, ses soins et ses protections : lancez-les avant <t:${Math.floor(raid.catchEnd / 1000)}:t> pour tenter de le capturer.`;
   } else if (raid.phase === "fled") {
     title = `💨 ${RAID_BOSS.name} s'enfuit dans les abysses…`;
     color = 0x475569;
@@ -462,9 +462,12 @@ function raidBoardPayload() {
     const caught = ps.filter((p) => p.caught);
     desc = `${caught.length ? `✨ **Capturé par** : ${caught.map((p) => `${p.name}${p.holo ? " (brillant !)" : ""}`).join(", ")}` : "Personne n'a réussi à le capturer cette fois."}\n\nProchain raid <t:${Math.floor(load().raidNext / 1000)}:R>.`;
   }
-  const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(desc).setImage("attachment://raid.png");
-  if (top.length) embed.addFields({ name: "⚔️ Dégâts infligés", value: top.join("\n").slice(0, 1000) });
-  if (raid.phase === "fight" && raid.log.length) embed.addFields({ name: "📜 Combat", value: raid.log.join("\n").slice(0, 1000) });
+  const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(desc).setImage(`attachment://${raid.imgName ?? "raid.png"}`);
+  if (raid.phase === "fight") {
+    const team = [...raid.players.values()].map((p) => (p.out ? `💀 ~~${p.name}~~` : `${raid.stage === "choose" ? (p.choice ? "✅" : "⌛") : p.guarding ? "🛡️" : "▫️"} **${p.name}** — ${activeF(p).name} ${activeF(p).hp}/${activeF(p).maxHp} · ${"⚡".repeat(p.energy) || "·"}`));
+    embed.addFields({ name: `🧑‍🤝‍🧑 L'équipe (${raidUp().length} debout sur ${raid.players.size})`, value: team.join("\n").slice(0, 1000) });
+    if (raid.turnLog?.length) embed.addFields({ name: `📜 Tour ${raid.stage === "choose" ? raid.turn - 1 : raid.turn}`, value: raid.turnLog.join("\n").slice(0, 1000) });
+  } else if (top.length) embed.addFields({ name: "⚔️ Dégâts (🛡️💚 soins et protections)", value: top.join("\n").slice(0, 1000) });
   const row = new ActionRowBuilder();
   if (raid.phase === "fight") row.addComponents(new ButtonBuilder().setCustomId("raid_open").setLabel("Ouvrir mon poste de combat").setEmoji("⚔️").setStyle(ButtonStyle.Danger));
   if (raid.phase === "catch") row.addComponents(new ButtonBuilder().setCustomId("raid_open").setLabel("Tenter la capture").setEmoji("🎯").setStyle(ButtonStyle.Success));
@@ -484,7 +487,7 @@ function cockpitPayload(p, note = "") {
           (p.caught
             ? `Il a rejoint votre collection${p.holo ? " en version **brillante** 🌈" : ""}. Bravo !`
             : p.balls > 0
-              ? `Vous avez **${p.balls} carte${p.balls > 1 ? "s" : ""} de capture** (vous avez infligé **${p.dmg.toLocaleString("fr-FR")}** dégâts).\nChaque lancer : ${Math.round(RAID.ballChance * 100)} % de chance · avec tout ce qui vous reste : **${chance} %**.`
+              ? `Vous avez **${p.balls} carte${p.balls > 1 ? "s" : ""} de capture** (${p.dmg.toLocaleString("fr-FR")} dégâts${p.support ? `, ${p.support.toLocaleString("fr-FR")} en soins et protections` : ""}).\nChaque lancer : ${Math.round(RAID.ballChance * 100)} % de chance · avec tout ce qui vous reste : **${chance} %**.`
               : raid.phase === "done"
                 ? "Le raid est terminé."
                 : "Vous n'avez plus de carte de capture… le dragon vous a échappé.")
@@ -493,31 +496,35 @@ function cockpitPayload(p, note = "") {
     return { content: null, embeds: [embed], components: can ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`raid_a_${id}_t`).setLabel(`Lancer une carte de capture (${p.balls})`).setEmoji("🎯").setStyle(ButtonStyle.Success))] : [] };
   }
   if (raid.phase === "fled") return { content: `💨 **${RAID_BOSS.name} s'est enfui.** Vous avez infligé ${p.dmg.toLocaleString("fr-FR")} dégâts. Prochain raid <t:${Math.floor(load().raidNext / 1000)}:R>.`, embeds: [], components: [] };
-  const f = activeF(p), now = Date.now(), frac = raid.boss.hp / raid.boss.max;
-  const mult = raidMult(f), rank = [...raid.players.values()].sort((a, b) => b.dmg - a.dmg).indexOf(p) + 1;
+  const f = activeF(p), frac = raid.boss.hp / raid.boss.max, mult = raidMult(f), choosing = raid.stage === "choose";
+  const allies = [...raid.players.values()].filter((x) => x !== p).map((x) => `${x.out ? "💀" : raidFrac(x) < 0.35 ? "🩸" : "•"} ${x.name} ${x.out ? "K.O." : `${Math.round(raidFrac(x) * 100)} %`}`);
   const embed = new EmbedBuilder()
-    .setColor(raid.charge ? 0xdc2626 : p.out ? 0x475569 : 0x7e22ce)
-    .setTitle(`🐉 ${RAID_BOSS.name} — ${Math.ceil(frac * 100)} % PV`)
+    .setColor(raid.intent?.kind === "souffle" && choosing ? 0xdc2626 : p.out ? 0x475569 : 0x7e22ce)
+    .setTitle(`🐉 Tour ${raid.turn} / ${RAID.maxTurns} — ${RAID_BOSS.name} ${Math.ceil(frac * 100)} % PV${raid.raged ? " · 🔥 rage" : ""}`)
     .setDescription(
-      `\`${bar(frac, 16)}\` · fin <t:${Math.floor(raid.endAt / 1000)}:R>\n` +
-        (raid.charge ? `\n⚠️ **LE ${RAID_BOSS.charged.toUpperCase()} ARRIVE — ESQUIVEZ !**\n` : "") +
+      `\`${bar(frac, 16)}\`${choosing ? ` · fin du tour <t:${Math.ceil(raid.turnEnd / 1000)}:R>` : ""}\n\n` +
+        (choosing ? `${raidIntentText(p)}\n` : "⏳ **Le tour se résout…**\n") +
         (note ? `\n${note}\n` : "") +
         (p.out
-          ? `\n💀 **Toutes vos cartes sont K.O.**${p.revived ? "" : now >= p.outAt + 6000 ? " Vous pouvez vous relever une fois (50 % des PV)." : ` Vous pourrez vous relever <t:${Math.floor((p.outAt + 6000) / 1000)}:R>.`}`
-          : `\n🃏 **${f.name}** — ${f.hp} / ${f.maxHp} PV \`${bar(f.hp / f.maxHp, 10)}\`${mult > 1 ? " · ⭐ super efficace" : mult < 1 ? " · peu efficace" : ""}\n⚡ Énergie : ${"●".repeat(p.energy)}${"○".repeat(SPECIAL_COST - p.energy)}`) +
-        `\n\n⚔️ Vos dégâts : **${p.dmg.toLocaleString("fr-FR")}** · rang **${rank}** / ${raid.players.size}`
+          ? "\n💀 **Toutes vos cartes sont K.O.** Un allié peut vous relever avec 💚 Soigner."
+          : `\n🃏 **${f.name}** — ${f.hp} / ${f.maxHp} PV \`${bar(f.hp / f.maxHp, 10)}\`${mult > 1 ? " · ⭐ super efficace" : mult < 1 ? " · peu efficace" : ""}\n⚡ Énergie : ${"●".repeat(p.energy)}${"○".repeat(SPECIAL_COST - p.energy)}` +
+            (choosing ? `\n${p.choice ? `🔒 Votre action : **${RAID_LABEL[p.choice.kind]}**` : "⌛ **Choisissez votre action**"}` : "")) +
+        (allies.length ? `\n\n🧑‍🤝‍🧑 ${allies.slice(0, 12).join(" · ")}` : "")
     );
   const rows = [];
-  if (!p.out)
+  if (!p.out && choosing) {
+    const style = (k, base) => (p.choice?.kind === k ? ButtonStyle.Success : base);
+    const needHeal = [...raid.players.values()].some((x) => x.out || (activeF(x).hp < activeF(x).maxHp && !x.out));
     rows.push(
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`raid_a_${id}_q`).setLabel(`${f.attackName ?? "Attaque"} (${Math.round(f.attackDmg * mult)})`.slice(0, 80)).setEmoji("⚔️").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`raid_a_${id}_s`).setLabel(`${f.special ?? "Spécial"} (${Math.round(f.specialDmg * mult)})`.slice(0, 80)).setEmoji("💥").setStyle(ButtonStyle.Danger).setDisabled(p.energy < SPECIAL_COST),
-        new ButtonBuilder().setCustomId(`raid_a_${id}_d`).setLabel("Esquiver").setEmoji("🛡️").setStyle(raid.charge ? ButtonStyle.Success : ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`raid_a_${id}_w`).setLabel("Changer").setEmoji("🔄").setStyle(ButtonStyle.Secondary).setDisabled(p.team.filter((x) => x.hp > 0).length < 2)
+        new ButtonBuilder().setCustomId(`raid_a_${id}_q`).setLabel(`${f.attackName ?? "Attaque"} (${Math.round(f.attackDmg * mult)})`.slice(0, 80)).setEmoji("⚔️").setStyle(style("attaque", ButtonStyle.Primary)),
+        new ButtonBuilder().setCustomId(`raid_a_${id}_s`).setLabel(`${f.special ?? "Super"} (${Math.round(f.specialDmg * mult)})`.slice(0, 80)).setEmoji("💥").setStyle(style("super", ButtonStyle.Danger)).setDisabled(p.energy < SPECIAL_COST),
+        new ButtonBuilder().setCustomId(`raid_a_${id}_d`).setLabel("Protéger l'équipe").setEmoji("🛡️").setStyle(style("protect", ButtonStyle.Secondary)),
+        new ButtonBuilder().setCustomId(`raid_a_${id}_r`).setLabel("Soigner").setEmoji("💚").setStyle(style("heal", ButtonStyle.Secondary)).setDisabled(!needHeal),
+        new ButtonBuilder().setCustomId(`raid_a_${id}_w`).setLabel("Changer").setEmoji("🔄").setStyle(style("switch", ButtonStyle.Secondary)).setDisabled(p.team.filter((x) => x.hp > 0).length < 2)
       )
     );
-  else if (!p.revived) rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`raid_a_${id}_r`).setLabel("Se relever").setEmoji("🩹").setStyle(ButtonStyle.Success).setDisabled(now < p.outAt + 6000)));
+  }
   return { content: null, embeds: [embed], components: rows };
 }
 // met à jour le poste d'un joueur sans attendre qu'il clique (au plus toutes les 1,2 s)
@@ -536,7 +543,13 @@ async function raidBoard(force = false) {
   if (!force && (!raid.dirty || now - (raid.boardAt ?? 0) < 1500)) return;
   raid.dirty = false;
   raid.boardAt = now;
-  await raid.msg.edit(raid.phase === "lobby" ? raidLobbyPayload(true) : raidBoardPayload()).catch(() => null);
+  const payload = raid.phase === "lobby" ? raidLobbyPayload(true) : raidBoardPayload();
+  if (raid.newImg) {
+    payload.files = [new AttachmentBuilder(raid.newImg, { name: raid.imgName })];
+    payload.attachments = [];
+    raid.newImg = null;
+  }
+  await raid.msg.edit(payload).catch(() => null);
 }
 
 // --- Déroulement ---
@@ -554,6 +567,140 @@ async function startRaid(lobbyMs = RAID.lobbyMs) {
   raidAutoArrivals(lobbyMs);
   return raid;
 }
+// --- Le combat d'équipe, tour par tour ---
+// Chaque tour, le dragon annonce son prochain coup : une griffe sur un dresseur (souvent celui qui l'a le plus blessé),
+// ou le souffle sur toute l'équipe. Chacun choisit son action en secret, puis tout se résout en même temps :
+//   ⚔️ Attaque (+1 ⚡) · 💥 Super (3 ⚡) · 🛡️ Protéger l'équipe (+1 ⚡) · 💚 Soigner (l'allié le plus blessé, ou relever un K.O.) · 🔄 Changer.
+// Travail d'équipe : un protecteur s'interpose devant la griffe et n'en prend que la moitié ; chaque protecteur réduit
+// le souffle de 25 % pour tous (75 % au plus). Plusieurs supers le même tour : ASSAUT COMBINÉ, +50 %.
+// À 50 % de ses PV, le dragon entre en rage : coups plus forts, souffle un tour sur deux.
+const RAID_ACTIONS = { q: "attaque", s: "super", d: "protect", r: "heal", w: "switch" };
+const RAID_LABEL = { attaque: "Attaque", super: "Super", protect: "Protéger l'équipe", heal: "Soigner", switch: "Changer de carte" };
+const raidUp = () => [...raid.players.values()].filter((p) => !p.out);
+const raidFrac = (p) => (p.out ? 0 : activeF(p).hp / activeF(p).maxHp);
+// les polices du canvas n'ont pas d'emoji : on les retire des pseudos
+const raidPlain = (s, n = 16) => String(s ?? "").replace(/[\p{Extended_Pictographic}️‍]/gu, "").trim().slice(0, n);
+function raidIntent() {
+  const breath = raid.turn % (raid.raged ? 2 : 3) === 0;
+  if (breath) return { kind: "souffle" };
+  const up = raidUp();
+  const top = up.slice().sort((a, b) => (b.lastDmg ?? 0) - (a.lastDmg ?? 0))[0];
+  const target = top && (top.lastDmg ?? 0) > 0 && Math.random() < 0.6 ? top : up[Math.floor(Math.random() * up.length)];
+  return { kind: "griffe", target: target?.id ?? null };
+}
+function raidIntentText(p = null) {
+  const it = raid.intent;
+  if (!it) return "";
+  if (it.kind === "souffle") return `🌑 **${RAID_BOSS.name} inspire profondément** : le **${RAID_BOSS.charged}** va frapper **toute l'équipe** ! Plus il y a de protecteurs, moins il fait mal.`;
+  const t = raid.players.get(it.target);
+  if (p && t === p) return `🎯 **${RAID_BOSS.name} vous fixe** : sa **${RAID_BOSS.quick}** va s'abattre sur vous ! Protégez-vous, changez de carte… ou comptez sur un protecteur.`;
+  return `🎯 **${RAID_BOSS.name} fixe ${t?.name ?? "un dresseur"}** : sa **${RAID_BOSS.quick}** va s'abattre sur ce dresseur. Un protecteur peut s'interposer.`;
+}
+// l'image de la scène : le dragon, son prochain coup, et toute l'équipe
+async function raidScene(results = false) {
+  const W = 1100, H = 580, c = createCanvas(W, H), ctx = c.getContext("2d");
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, "#1e0b3a");
+  bg.addColorStop(0.6, "#0d0618");
+  bg.addColorStop(1, "#05010a");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  glow(ctx, 210, 320, 300, raid.raged ? "#ef4444" : "#a855f7", 0.45);
+  const art = await raidArt().catch(() => null);
+  if (art) ctx.drawImage(art, 0, 70, 420, 490);
+  // PV du dragon
+  const frac = Math.max(0, raid.boss.hp / raid.boss.max);
+  ctx.textAlign = "left";
+  ctx.font = "34px CardTitle";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(`${RAID_BOSS.name.toUpperCase()}${raid.raged ? " · EN RAGE" : ""}`, 30, 50);
+  ctx.textAlign = "right";
+  ctx.font = "20px CardBold";
+  ctx.fillStyle = "#e9d5ff";
+  ctx.fillText(`TOUR ${raid.turn} / ${RAID.maxTurns}`, W - 30, 46);
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.beginPath();
+  ctx.roundRect(440, 64, W - 470, 26, 13);
+  ctx.fill();
+  const hb = ctx.createLinearGradient(440, 0, W - 30, 0);
+  hb.addColorStop(0, raid.raged ? "#dc2626" : "#7e22ce");
+  hb.addColorStop(1, raid.raged ? "#f97316" : "#c026d3");
+  ctx.fillStyle = hb;
+  ctx.beginPath();
+  ctx.roundRect(442, 66, Math.max(0, (W - 474) * frac), 22, 11);
+  ctx.fill();
+  ctx.textAlign = "center";
+  ctx.font = "15px CardBold";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(`${Math.max(0, Math.ceil(raid.boss.hp)).toLocaleString("fr-FR")} / ${raid.boss.max.toLocaleString("fr-FR")} PV`, 440 + (W - 470) / 2, 83);
+  // le prochain coup (ou le résultat du tour)
+  const it = raid.intent, t = it?.kind === "griffe" ? raid.players.get(it.target) : null;
+  const banner = results ? "RÉSULTAT DU TOUR" : it?.kind === "souffle" ? `${RAID_BOSS.charged.toUpperCase()} : TOUTE L'ÉQUIPE !` : `${RAID_BOSS.quick.toUpperCase()} SUR ${raidPlain(t?.name ?? "?", 18).toUpperCase()}`;
+  ctx.fillStyle = results ? "rgba(34,197,94,0.25)" : it?.kind === "souffle" ? "rgba(220,38,38,0.35)" : "rgba(249,115,22,0.3)";
+  ctx.beginPath();
+  ctx.roundRect(440, 104, W - 470, 40, 10);
+  ctx.fill();
+  ctx.font = "20px CardTitle";
+  ctx.fillStyle = "#fff7ed";
+  ctx.fillText(banner, 440 + (W - 470) / 2, 131);
+  // l'équipe (deux colonnes)
+  const ps = [...raid.players.values()], col = ps.length > 9 ? 2 : 1, rowH = Math.min(46, Math.floor(410 / Math.ceil(ps.length / col))), cw = (W - 470) / col;
+  ps.forEach((p, k) => {
+    const x = 440 + Math.floor(k / Math.ceil(ps.length / col)) * cw, y = 160 + (k % Math.ceil(ps.length / col)) * rowH, f = activeF(p);
+    ctx.textAlign = "left";
+    ctx.fillStyle = p.out ? "rgba(148,163,184,0.15)" : "rgba(255,255,255,0.06)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, cw - 10, rowH - 6, 8);
+    ctx.fill();
+    // a choisi / protège / est visé
+    const dot = p.out ? "#475569" : results ? (p.guarding ? "#38bdf8" : "#22c55e") : p.choice ? "#22c55e" : "#f59e0b";
+    ctx.fillStyle = dot;
+    ctx.beginPath();
+    ctx.arc(x + 14, y + (rowH - 6) / 2, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = `${Math.min(17, rowH * 0.4)}px CardBold`;
+    ctx.fillStyle = p.out ? "#94a3b8" : t === p && !results ? "#fdba74" : "#ffffff";
+    ctx.fillText(`${raidPlain(p.name)}${p.out ? " · K.O." : ""}`, x + 28, y + rowH * 0.38);
+    ctx.font = `${Math.min(13, rowH * 0.3)}px CardText`;
+    ctx.fillStyle = "#cbd5e1";
+    if (!p.out) ctx.fillText(`${raidPlain(f.name, 22)} · ${f.hp}/${f.maxHp}`, x + 28, y + rowH * 0.72);
+    // PV de la carte et énergie
+    const bw = Math.min(150, cw * 0.32), bx = x + cw - bw - 22;
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(bx, y + rowH * 0.3, bw, 8);
+    const fr = raidFrac(p);
+    ctx.fillStyle = fr > 0.5 ? "#22c55e" : fr > 0.25 ? "#f59e0b" : "#ef4444";
+    ctx.fillRect(bx, y + rowH * 0.3, bw * fr, 8);
+    for (let e = 0; e < SPECIAL_COST; e++) {
+      ctx.fillStyle = e < p.energy ? "#facc15" : "rgba(255,255,255,0.18)";
+      ctx.beginPath();
+      ctx.arc(bx + 6 + e * 14, y + rowH * 0.66, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  raid.newImg = await c.encode("jpeg", 86);
+  raid.imgName = `raid-${raid.turn}${results ? "r" : ""}.jpg`;
+  CLASH3D.nettoyer(true);
+}
+async function raidStartTurn() {
+  raid.turn++;
+  raid.stage = "choose";
+  raid.turnEnd = Date.now() + RAID.turnMs;
+  if (!raid.raged && raid.boss.hp <= raid.boss.max / 2) {
+    raid.raged = true;
+    raidLog(`🔥 ${RAID_BOSS.name} entre en rage !`);
+  }
+  for (const p of raid.players.values()) {
+    p.choice = null;
+    p.guarding = false;
+    p.autoAt = Date.now() + raidRnd(2500, 9000); // le temps de réflexion d'un joueur automatique
+  }
+  raid.intent = raidIntent();
+  await raidScene();
+  raid.dirty = true;
+  await raidBoard(true);
+  for (const p of raid.players.values()) pushCockpit(p, raid.turn === 1 ? "🐉 **Le dragon éclot ! Choisissez votre action pour ce tour.**" : "", true);
+}
 async function hatchRaid() {
   if (!raid || raid.phase !== "lobby") return;
   const n = raid.players.size;
@@ -568,79 +715,177 @@ async function hatchRaid() {
   }
   raid.phase = "fight";
   raid.boss = { hp: RAID.hpPerPlayer * n, max: RAID.hpPerPlayer * n };
+  raid.turn = 0;
+  raid.turnLog = [];
   raid.startAt = Date.now();
-  raid.endAt = raid.startAt + RAID.fightMs;
-  raid.nextHit = raid.startAt + 6000;
-  raid.nextCharge = raid.startAt + 20000;
-  raidImg = await (await drawRaidBossCard(raidBossCard(), false, 0.3)).encode("png");
-  await raid.msg.edit({ ...raidBoardPayload(), files: [new AttachmentBuilder(raidImg, { name: "raid.png" })], attachments: [] }).catch(() => null);
-  for (const p of raid.players.values()) pushCockpit(p, "🐉 **Le dragon éclot ! À l'attaque !**", true);
-  raid.timer = setInterval(() => raidStep().catch((err) => console.error("Raid:", err.message)), 400);
+  await raidStartTurn();
+  raid.timer = setInterval(() => raidTurnStep().catch((err) => console.error("Raid:", err.message)), 500);
 }
-// coup du boss sur tous les dresseurs encore debout
-function bossHits(min, max, label) {
-  const now = Date.now();
-  for (const p of raid.players.values()) {
-    if (p.out) continue;
-    const f = activeF(p);
-    if (now < p.dodgeUntil) {
-      pushCockpit(p, `🛡️ Vous esquivez **${label}** !`, true);
+async function raidTurnStep() {
+  if (!raid || raid.phase !== "fight" || raid.busy || raid.stage !== "choose") return;
+  raidAutoChoose(Date.now());
+  // tout le monde a choisi (ou le temps est écoulé) : le tour se résout
+  if (Date.now() >= raid.turnEnd || raidUp().every((p) => p.choice)) {
+    raid.busy = true;
+    try {
+      await raidResolveTurn();
+    } finally {
+      if (raid) raid.busy = false;
+    }
+  } else await raidBoard();
+}
+// une carte touchée : K.O. → la suivante entre ; plus aucune → le dresseur est à terre (un allié peut le relever)
+function raidHurt(p, dmg, label, lines) {
+  const f = activeF(p);
+  f.hp = Math.max(0, f.hp - dmg);
+  p.note += `\n🩸 **${label}** : −${dmg} PV à ${f.name}.`;
+  if (f.hp > 0) return;
+  const next = p.team.findIndex((x) => x.hp > 0);
+  if (next >= 0) {
+    p.active = next;
+    p.note += ` **K.O. !** ${p.team[next].name} prend la relève.`;
+  } else {
+    p.out = true;
+    p.note += " **Toutes vos cartes sont K.O. !** Un allié peut vous relever avec 💚 Soigner.";
+    lines.push(`💀 **${p.name}** est à terre !`);
+  }
+}
+async function raidResolveTurn() {
+  raid.stage = "resolve";
+  const ps = [...raid.players.values()], up = raidUp(), lines = [];
+  for (const p of ps) p.note = "";
+  for (const p of up) p.choice ??= { kind: "attaque", auto: true }; // sans choix : une attaque simple
+  // 1. changements de carte et protections
+  for (const p of up) {
+    p.lastDmg = 0;
+    if (p.choice.kind === "switch") {
+      const order = p.team.map((_, i) => (p.active + 1 + i) % p.team.length).filter((i) => p.team[i].hp > 0 && i !== p.active);
+      if (order.length) {
+        p.active = order[0];
+        p.note += `\n🔄 **${activeF(p).name}** entre dans le combat.`;
+      }
+    } else if (p.choice.kind === "protect") {
+      p.guarding = true;
+      p.energy = Math.min(SPECIAL_COST, p.energy + 1);
+      p.note += "\n🛡️ Vous protégez l'équipe.";
+    }
+  }
+  const guards = up.filter((p) => p.guarding);
+  if (guards.length) lines.push(`🛡️ ${guards.map((p) => `**${p.name}**`).join(", ")} protège${guards.length > 1 ? "nt" : ""} l'équipe`);
+  // 2. les attaques (assaut combiné si plusieurs supers)
+  const supers = up.filter((p) => p.choice.kind === "super" && p.energy >= SPECIAL_COST).length, combo = supers >= Math.max(2, Math.ceil(up.length / 3));
+  if (combo) lines.push(`⚡ **ASSAUT COMBINÉ !** ${supers} supers en même temps : **+50 %** de dégâts.`);
+  let total = 0;
+  for (const p of up) {
+    const kind = p.choice.kind;
+    if (kind !== "attaque" && kind !== "super") continue;
+    const f = activeF(p), mult = raidMult(f), sup = kind === "super" && p.energy >= SPECIAL_COST;
+    const dmg = Math.max(1, Math.round((sup ? f.specialDmg : f.attackDmg) * mult * (0.9 + Math.random() * 0.2) * (sup && combo ? 1.5 : 1)));
+    raid.boss.hp -= dmg;
+    p.dmg += dmg;
+    p.lastDmg = dmg;
+    total += dmg;
+    p.energy = sup ? 0 : Math.min(SPECIAL_COST, p.energy + 1);
+    p.note += `\n${sup ? "💥" : "⚔️"} **${sup ? f.special ?? "Super" : f.attackName ?? "Attaque"}** : −${dmg}${mult > 1 ? " · ⭐ super efficace" : mult < 1 ? " · peu efficace" : ""}`;
+    if (sup) lines.push(`💥 **${p.name}** : ${f.special ?? "Super"} −${dmg}${mult > 1 ? " ⭐" : ""}`);
+  }
+  if (total) lines.unshift(`⚔️ L'équipe inflige **${total.toLocaleString("fr-FR")}** dégâts`);
+  // 3. les soins : relever un allié à terre d'abord, sinon soigner le plus blessé
+  for (const p of up.filter((x) => x.choice.kind === "heal")) {
+    const down = ps.find((x) => x.out && !x.healedThisTurn);
+    if (down) {
+      for (const f of down.team) f.hp = Math.max(f.hp, Math.ceil(f.maxHp * 0.3));
+      down.out = false;
+      down.active = down.team.findIndex((f) => f.hp > 0);
+      down.healedThisTurn = true;
+      p.support = (p.support ?? 0) + 60;
+      p.note += `\n💚 Vous relevez **${down.name}** !`;
+      down.note += `\n💚 **${p.name}** vous relève : vos cartes reviennent à 30 % de leurs PV.`;
+      lines.push(`💚 **${p.name}** relève **${down.name}** !`);
       continue;
     }
-    const dmg = Math.round(min + Math.random() * (max - min));
-    f.hp = Math.max(0, f.hp - dmg);
-    let note = `🩸 **${label}** : −${dmg} PV à ${f.name}.`;
-    if (f.hp <= 0) {
-      const next = p.team.findIndex((x) => x.hp > 0);
-      if (next >= 0) {
-        p.active = next;
-        p.energy = 0;
-        note += ` **K.O. !** ${p.team[next].name} prend la relève.`;
-      } else {
-        p.out = true;
-        p.outAt = now;
-        note += " **Toutes vos cartes sont K.O. !**";
-        raidLog(`💀 ${p.name} est à terre`);
-      }
+    const target = up.filter((x) => activeF(x).hp < activeF(x).maxHp).sort((a, b) => raidFrac(a) - raidFrac(b))[0];
+    if (!target) {
+      p.note += "\n💚 Personne n'avait besoin de soins.";
+      continue;
     }
-    pushCockpit(p, note, true);
+    const f = activeF(target), heal = Math.min(f.maxHp - f.hp, Math.ceil(f.maxHp * 0.3));
+    f.hp += heal;
+    p.support = (p.support ?? 0) + heal;
+    p.note += `\n💚 Vous soignez **${target.name}** : +${heal} PV.`;
+    if (target !== p) target.note += `\n💚 **${p.name}** vous soigne : +${heal} PV.`;
+    lines.push(`💚 **${p.name}** soigne **${target.name}** (+${heal})`);
   }
+  for (const p of ps) p.healedThisTurn = false;
+  // 4. le dragon frappe (s'il est encore debout)
+  if (raid.boss.hp > 0) {
+    const rage = raid.raged ? 1.3 : 1, alive = raidUp();
+    if (raid.intent.kind === "souffle") {
+      const red = Math.min(0.75, 0.25 * guards.length);
+      lines.push(`🌑 **${RAID_BOSS.charged}** sur toute l'équipe${red ? ` (−${Math.round(red * 100)} % grâce aux protecteurs)` : " : personne ne protège !"}`);
+      for (const p of alive) {
+        const base = raidRnd(55, 70) * rage;
+        if (!p.guarding) for (const g of guards) g.support = (g.support ?? 0) + Math.round(base * 0.25);
+        raidHurt(p, Math.round(base * (p.guarding ? 0.5 : 1 - red)), RAID_BOSS.charged, lines);
+      }
+    } else if (alive.length) {
+      let t = raid.players.get(raid.intent.target);
+      if (!t || t.out) t = alive[Math.floor(Math.random() * alive.length)];
+      // à peu de dresseurs, la griffe frappe moins fort (seul, on la prend à chaque tour)
+      const base = raidRnd(42, 56) * rage * Math.min(1, 0.55 + 0.15 * raid.players.size), others = guards.filter((g) => g !== t && !g.out);
+      let who = t, k = 1;
+      if (t.guarding) k = 0.5;
+      else if (others.length) {
+        who = others[Math.floor(Math.random() * others.length)];
+        k = 0.5;
+        who.support = (who.support ?? 0) + Math.round(base);
+        t.note += `\n🛡️ **${who.name}** s'interpose devant vous !`;
+        lines.push(`🛡️ **${who.name}** s'interpose devant **${t.name}** !`);
+      }
+      const dmg = Math.round(base * k);
+      lines.push(`🐉 **${RAID_BOSS.quick}** sur **${who.name}** : −${dmg}`);
+      raidHurt(who, dmg, RAID_BOSS.quick, lines);
+    }
+  }
+  raid.turnLog = lines;
+  if (raid.boss.hp <= 0) {
+    raid.boss.hp = 0;
+    return raidVictory();
+  }
+  if (!raidUp().length || raid.turn >= RAID.maxTurns) return raidFlee();
+  // le résultat reste affiché quelques secondes, puis le tour suivant
+  await raidScene(true);
   raid.dirty = true;
+  await raidBoard(true);
+  for (const p of ps) pushCockpit(p, p.note.trim(), true);
+  await sleep(RAID.pauseMs);
+  if (raid?.phase === "fight") await raidStartTurn();
 }
-async function raidStep() {
-  if (!raid || raid.phase !== "fight") return;
-  const now = Date.now();
-  if (raid.boss.hp <= 0) return raidVictory();
-  if (now >= raid.endAt) return raidFlee();
-  if (raid.charge && now >= raid.charge.landsAt) {
-    raid.charge = null;
-    raidLog(`🌑 ${RAID_BOSS.charged} !`);
-    bossHits(95, 125, RAID_BOSS.charged);
-    raid.nextHit = Math.max(raid.nextHit, now + 4000);
-  } else if (!raid.charge && now >= raid.nextCharge) {
-    raid.charge = { landsAt: now + RAID.chargeWarn };
-    raid.nextCharge = now + RAID.chargeEvery;
-    raidLog(`⚠️ ${RAID_BOSS.name} inspire profondément…`);
-    for (const p of raid.players.values()) if (!p.out) pushCockpit(p, "", true);
-    raid.dirty = true;
-  } else if (!raid.charge && now >= raid.nextHit) {
-    raid.nextHit = now + RAID.hitEvery;
-    bossHits(24, 40, RAID_BOSS.quick);
+// les dresseurs automatiques jouent en équipe : protéger contre le souffle, soigner les blessés, super dès que possible
+function raidAutoChoose(now) {
+  for (const p of raid.players.values()) {
+    if (!p.auto || p.out || p.choice || now < (p.autoAt ?? 0)) continue;
+    const f = activeF(p), mine = f.hp / f.maxHp;
+    const guards = raidUp().filter((x) => x.choice?.kind === "protect").length;
+    const hurt = [...raid.players.values()].filter((x) => x !== p && (x.out || raidFrac(x) < 0.35));
+    let k;
+    if (raid.intent.kind === "souffle" && guards < 2 && mine > 0.5 && Math.random() < 0.45) k = "d";
+    else if (raid.intent.kind === "griffe" && raid.intent.target === p.id && mine < 0.4) k = p.team.filter((x) => x.hp > 0).length > 1 && Math.random() < 0.5 ? "w" : "d";
+    else if (hurt.length && Math.random() < 0.5) k = "r";
+    else k = p.energy >= SPECIAL_COST ? "s" : "q";
+    raidAct(p, k);
   }
-  raidAutoPlay(now);
-  if (raid.boss.hp <= 0) return raidVictory();
-  // les notes en attente des postes partent dès que possible
-  for (const p of raid.players.values()) if (p.pendingNote) pushCockpit(p);
-  await raidBoard();
 }
 async function raidVictory() {
   clearInterval(raid.timer);
   raid.phase = "catch";
   raid.catchEnd = Date.now() + RAID.catchMs;
-  const ps = [...raid.players.values()], fair = raid.boss.max / ps.length, best = Math.max(...ps.map((p) => p.dmg));
+  // les soins et les protections comptent aussi (le travail d'équipe est récompensé)
+  const score = (p) => p.dmg + 0.8 * (p.support ?? 0);
+  const ps = [...raid.players.values()], fair = raid.boss.max / ps.length, best = Math.max(...ps.map(score));
   for (const p of ps) {
-    const ratio = p.dmg / fair;
-    p.balls = p.dmg > 0 ? Math.min(7, 2 + Math.floor(ratio * 2.5)) + (p.dmg === best ? 1 : 0) : 0;
+    const ratio = score(p) / fair;
+    p.balls = score(p) > 0 ? Math.min(7, 2 + Math.floor(ratio * 2.5)) + (score(p) === best ? 1 : 0) : 0;
     ustat(p.id, "raids");
   }
   raidLog(`🎉 ${RAID_BOSS.name} est vaincu !`);
@@ -700,47 +945,17 @@ async function raidThrow(interaction, p) {
   } else await interaction.editReply(cockpitPayload(p, p.balls ? "💨 **Le dragon s'est libéré !** Relancez vite !" : "💨 **Le dragon s'est libéré…** C'était votre dernière carte.")).catch(() => null);
 }
 
-// une action du poste de combat (bouton d'un joueur, ou raid automatique) : renvoie le message à afficher
-function raidAct(p, kind, now = Date.now()) {
-  let note = "";
-  if (kind === "r") {
-    if (p.out && !p.revived && now >= p.outAt + 6000) {
-      for (const f of p.team) f.hp = Math.ceil(f.maxHp / 2);
-      p.out = false;
-      p.revived = true;
-      p.active = 0;
-      p.energy = 0;
-      note = "🩹 **Vous vous relevez !** Vos cartes reviennent avec la moitié de leurs PV.";
-      raidLog(`🩹 ${p.name} se relève`);
-    }
-  } else if (p.out) note = "💀 Vos cartes sont K.O.";
-  else if (kind === "w") {
-    const order = p.team.map((_, i) => (p.active + 1 + i) % p.team.length).filter((i) => p.team[i].hp > 0 && i !== p.active);
-    if (order.length) {
-      p.active = order[0];
-      p.readyAt = now + 600;
-      note = `🔄 **${activeF(p).name}** entre dans le combat.`;
-    }
-  } else if (kind === "d") {
-    p.dodgeUntil = now + 2200;
-    p.readyAt = now + 1800;
-    note = "🛡️ Vous esquivez…";
-  } else if (now < p.readyAt) note = "⏳ Pas si vite… votre carte reprend son souffle.";
-  else {
-    const f = activeF(p), mult = raidMult(f), special = kind === "s";
-    if (special && p.energy < SPECIAL_COST) note = `⚡ Il faut ${SPECIAL_COST} énergies pour le coup spécial.`;
-    else {
-      const dmg = Math.max(1, Math.round((special ? f.specialDmg : f.attackDmg) * mult * (0.9 + Math.random() * 0.2)));
-      raid.boss.hp -= dmg;
-      p.dmg += dmg;
-      p.energy = special ? 0 : Math.min(SPECIAL_COST, p.energy + 1);
-      p.readyAt = now + (special ? 1600 : 1100);
-      note = `${special ? "💥" : "⚔️"} **${special ? f.special ?? "Spécial" : f.attackName ?? "Attaque"}** : −${dmg}${mult > 1 ? " · ⭐ **super efficace !**" : mult < 1 ? " · peu efficace" : ""}`;
-      if (special) raidLog(`💥 ${p.name} : ${f.special ?? "Spécial"} −${dmg}`);
-      raid.dirty = true;
-    }
-  }
-  return note;
+// un clic sur le poste de combat : l'action du tour (on peut changer d'avis jusqu'à la résolution)
+function raidAct(p, kind) {
+  if (raid.stage !== "choose") return "⏳ Le tour se résout…";
+  if (p.out) return "💀 Vos cartes sont K.O. : un allié peut vous relever avec 💚 Soigner.";
+  const c = RAID_ACTIONS[kind];
+  if (!c) return "";
+  if (c === "super" && p.energy < SPECIAL_COST) return `⚡ Il faut ${SPECIAL_COST} énergies pour le super (vous en avez ${p.energy}).`;
+  if (c === "switch" && p.team.filter((x) => x.hp > 0).length < 2) return "🔄 Aucune autre carte debout.";
+  p.choice = { kind: c };
+  raid.dirty = true;
+  return `🔒 Votre action : **${RAID_LABEL[c]}**. Vous pouvez encore changer d'avis avant la fin du tour.`;
 }
 
 // ============================================================
@@ -781,39 +996,6 @@ function raidAutoEnroll(userId) {
   }
   st.raidNext ??= nextRaidTime();
   return `🐉 prochain raid (<t:${Math.floor(st.raidNext / 1000)}:R>) : place réservée · ${auto}${raid?.phase === "fight" ? " (un raid est déjà en plein combat)" : ""}`;
-}
-// le combat : attaque, spécial dès que l'énergie est là, esquive du souffle (presque toujours au bon moment),
-// changement de carte quand la sienne faiblit, et on se relève après un K.O.
-function raidAutoPlay(now) {
-  for (const p of raid.players.values()) {
-    if (!p.auto) continue;
-    p.nextAutoAt ??= raid.startAt + raidRnd(2000, 7000); // le temps de voir que le dragon a éclos
-    if (raid.charge && p.dodgeFor !== raid.charge.landsAt) {
-      // l'esquive protège 2,2 s : il faut la lancer dans les 2 dernières secondes ; parfois trop tôt, comme tout le monde
-      p.dodgeFor = raid.charge.landsAt;
-      p.dodgeAt = Math.random() < 0.85 ? raid.charge.landsAt - raidRnd(300, 1900) : raid.charge.landsAt - raidRnd(3000, 3700);
-    }
-    let kind = null;
-    if (p.out) {
-      p.reviveAt ??= p.outAt + 6000 + raidRnd(500, 2500);
-      if (p.revived || now < p.reviveAt) continue;
-      kind = "r";
-    } else if (raid.charge && p.dodgeAt && now >= p.dodgeAt) {
-      p.dodgeAt = 0;
-      kind = "d";
-    } else if (now < p.nextAutoAt) continue;
-    else {
-      const f = activeF(p), better = p.team.some((x, i) => i !== p.active && x.hp > Math.max(f.hp * 2, x.maxHp * 0.4));
-      if (f.hp < f.maxHp * 0.25 && better && Math.random() < 0.5) kind = "w";
-      else if (now < p.readyAt) {
-        p.nextAutoAt = p.readyAt + raidRnd(150, 900);
-        continue;
-      } else kind = p.energy >= SPECIAL_COST ? "s" : "q";
-    }
-    raidAct(p, kind, now);
-    // rythme d'un joueur : la recharge, un temps de clic, et de temps en temps une petite pause
-    p.nextAutoAt = now + (kind === "s" ? 1600 : kind === "q" ? 1100 : 700) + raidRnd(250, 1500) + (Math.random() < 0.08 ? raidRnd(2000, 5000) : 0);
-  }
 }
 // le verdict d'un lancer de carte de capture (joueurs et raid automatique)
 function raidCatchRoll(p) {
@@ -891,9 +1073,10 @@ async function handleRaidInteraction(interaction) {
           .setTitle("📖 Les raids")
           .setDescription(
             `1️⃣ **Rejoindre** : choisissez 3 cartes avant l'éclosion. Le boss **${RAID_BOSS.name}** est d'astre 🌑 Ombre : les cartes ⭐ **Étoile** font **×2**, les cartes 🌙 Lune seulement ×0,5.\n` +
-              `2️⃣ **Combattre** (2 min 30) : dans votre poste de combat, **⚔️ Attaque** (recharge 1 ⚡), **💥 Spécial** (3 ⚡, gros dégâts), **🛡️ Esquiver**, **🔄 Changer** de carte.\n` +
-              `Le dragon frappe tout le monde régulièrement. Quand il **inspire** (⚠️), esquivez : son **${RAID_BOSS.charged}** est dévastateur. Carte K.O. : la suivante entre. Tout K.O. : vous pouvez vous relever une fois.\n` +
-              `3️⃣ **Capturer** : s'il tombe à temps, chacun reçoit **2 à 8 cartes de capture** selon ses dégâts (bonus pour le meilleur). Chaque lancer : ${Math.round(RAID.ballChance * 100)} % de chance. Parfois… il est **brillant** 🌈.\n\n` +
+              `2️⃣ **Combattre en équipe, tour par tour** (12 tours) : à chaque tour, le dragon **annonce son coup** — sa **${RAID_BOSS.quick}** sur un dresseur, ou son **${RAID_BOSS.charged}** sur toute l'équipe. Chacun choisit en secret :\n` +
+              `⚔️ **Attaque** (+1 ⚡) · 💥 **Super** (3 ⚡) · 🛡️ **Protéger l'équipe** (s'interpose devant la griffe, chaque protecteur réduit le souffle de 25 %) · 💚 **Soigner** (l'allié le plus blessé, ou relever un allié K.O.) · 🔄 **Changer** de carte.\n` +
+              `Plusieurs supers le même tour : **assaut combiné, +50 %**. À 50 % de ses PV, le dragon **entre en rage**. Une carte K.O. : la suivante entre.\n` +
+              `3️⃣ **Capturer** : s'il tombe à temps, chacun reçoit **2 à 8 cartes de capture** selon ses dégâts, ses soins et ses protections. Chaque lancer : ${Math.round(RAID.ballChance * 100)} % de chance. Parfois… il est **brillant** 🌈.\n\n` +
               `Raids vers ${RAID.hours.map((h) => `${h} h`).join(", ")} chaque jour.`
           ),
       ],
