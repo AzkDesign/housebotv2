@@ -433,6 +433,7 @@ function startRankedSession(client, ids, reserve = null) {
     const named = words.slice(0, -1);
     let ids = [...new Set((named.length ? named : Object.keys(AUTO_WORDS)).flatMap((w) => AUTO_WORDS[w]))];
     if (ids.length < 2) ids = [...new Set(Object.values(AUTO_WORDS).flat())]; // seul : contre les autres membres
+    ids = ids.filter((id) => !AUTO_EXCLUDE.has(id));
     const ready = ids.filter((id) => bestTeam(id).length >= 3), out = ids.filter((id) => !ready.includes(id));
     if (ready.length < 2) return void (await message.reply("❌ Il faut au moins deux joueurs avec 3 cartes pour des parties classées.").catch(() => null));
     // « rankedsee » : un joueur tiré au hasard ne joue pas avec les autres, il reste libre pour RANKED_TARGETS

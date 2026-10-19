@@ -10,6 +10,8 @@ const AUTO_WORDS = {
   fondation: ["1363979726418608148", "1445816241116807238"], // Azk et Ryuk
   charlotte: ["1557089423408238602"],
 };
+// jamais dans les combats ni les raids automatiques (« ranked », « rankedsee », « raid », « ile ») ; « full » reste possible
+const AUTO_EXCLUDE = new Set(["1445816241116807238"]); // Ryuk
 
 async function autoPlayFor(guild, userId) {
   const st = load(), lines = [];

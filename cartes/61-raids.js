@@ -762,13 +762,14 @@ function raidAutoJoin(userId) {
 // pendant l'attente, chaque inscrit rejoint à un moment différent (comme quelqu'un qui voit passer le raid)
 function raidAutoArrivals(lobbyMs) {
   const rid = raid?.id;
-  for (const id of Object.keys(load().raidAuto ?? {})) {
+  for (const id of Object.keys(load().raidAuto ?? {}).filter((x) => !AUTO_EXCLUDE.has(x))) {
     const at = Math.min(lobbyMs - 15000, raidRnd(12000, Math.max(20000, lobbyMs * 0.75)));
     setTimeout(() => raid?.id === rid && raidAutoJoin(id), Math.max(3000, at));
   }
 }
 // inscription par « … full » : le raid en attente tout de suite, sinon le prochain
 function raidAutoEnroll(userId) {
+  if (AUTO_EXCLUDE.has(userId)) return "🐉 raid : exclu du raid automatique";
   if (!raidBestTeam(userId).length) return "🐉 raid : aucune carte pour combattre";
   const st = load();
   (st.raidAuto ??= {})[userId] = Date.now();

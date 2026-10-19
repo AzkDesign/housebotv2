@@ -63,7 +63,7 @@ async function autoIslandFor(client, userId) {
     const all = word === "raid" && action === "all" && words.length === 2;
     const group = words.length === 2 && AUTO_WORDS[word] && (action === "raid" || action === "ile" || action === "île");
     if (!all && !group) return auto(message);
-    const ids = all ? [...new Set(Object.values(AUTO_WORDS).flat())] : AUTO_WORDS[word];
+    const ids = (all ? [...new Set(Object.values(AUTO_WORDS).flat())] : AUTO_WORDS[word]).filter((id) => !AUTO_EXCLUDE.has(id));
     const lines = [];
     if (all || action === "raid") for (const id of ids) lines.push(`**${pseudo(id)}** — ${raidAutoEnroll(id)}`);
     else for (const id of ids) lines.push(await autoIslandFor(message.client, id).catch((err) => `🏝️ **${pseudo(id)}** : erreur (${err.message})`));
