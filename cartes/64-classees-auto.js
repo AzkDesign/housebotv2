@@ -307,7 +307,7 @@ async function rankedTick(client, s) {
   }
 }
 // RANKED_TARGETS dans la vraie file pendant une session : on ne les laisse pas attendre seuls, ils tombent contre
-// un des joueurs de la session au hasard (Charlotte plus rarement, et seulement si elle est sûre de gagner).
+// un des joueurs de la session au hasard (Charlotte autant que les autres, mais seulement si elle est sûre de gagner).
 const RANKED_TARGETS = ["1411724649036910673"];
 async function rankedServeTargets(client, s, now) {
   for (const tid of RANKED_TARGETS) {
@@ -316,7 +316,7 @@ async function rankedServeTargets(client, s, now) {
     const inMatch = (id) => [...s.active.values()].some((m) => m.ids.includes(id));
     const pool = s.ids.filter((id) => id !== tid && !inMatch(id) && !s.launching.has(id) && !userBattle.has(id) && !rankedQueue.has(id) && bestTeam(id).length >= 3);
     if (pool.includes(RANKED_CHAMPION)) s.champSafe[tid] ??= await rankedChampSafe(tid);
-    const weights = pool.map((id) => (id === RANKED_CHAMPION ? (s.champSafe[tid] ? 0.25 : 0) : 1));
+    const weights = pool.map((id) => (id === RANKED_CHAMPION ? (s.champSafe[tid] ? 1 : 0) : 1));
     let r = Math.random() * weights.reduce((a, w) => a + w, 0), foe = null;
     pool.forEach((id, k) => {
       if (foe === null && (r -= weights[k]) <= 0 && weights[k] > 0) foe = id;
