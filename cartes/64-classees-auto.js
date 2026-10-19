@@ -258,7 +258,7 @@ async function rankedTick(client, s) {
     // ceux qui lancent leur recherche : l'avis apparaît dans l'Arène
     const inMatch = (id) => [...s.active.values()].some((m) => m.ids.includes(id)); // jusqu'au résultat affiché
     for (const id of s.ids) {
-      if (s.search[id] || s.launching.has(id) || inMatch(id) || (s.freeAt[id] ?? 0) > now || userBattle.has(id) || rankedQueue.has(id) || bestTeam(id).length < 3) continue;
+      if (id === s.reserve || s.search[id] || s.launching.has(id) || inMatch(id) || (s.freeAt[id] ?? 0) > now || userBattle.has(id) || rankedQueue.has(id) || bestTeam(id).length < 3) continue;
       s.search[id] = { since: now, notice: null };
       s.search[id].notice = await rankedNotice(id);
     }
@@ -321,6 +321,8 @@ async function rankedServeTargets(client, s, now) {
     pool.forEach((id, k) => {
       if (foe === null && (r -= weights[k]) <= 0 && weights[k] > 0) foe = id;
     });
+    // « rankedsee » : la place gardée pour lui passe avant tout le monde
+    if (s.reserve && pool.includes(s.reserve)) foe = s.reserve;
     if (!foe) continue;
     // comme dans la vraie file : on quitte la file, les avis disparaissent
     rankedQueue.delete(tid);
@@ -389,8 +391,8 @@ function rankedReport(client, s) {
     })
     .catch(() => null);
 }
-function startRankedSession(client, ids) {
-  const s = { ids, until: Date.now() + RANKED_SESSION_MS, freeAt: {}, search: {}, last: {}, champSafe: {}, launching: new Set(), active: new Map(), done: [], start: Object.fromEntries(ids.map((id) => [id, arenaStats(id).elo])) };
+function startRankedSession(client, ids, reserve = null) {
+  const s = { reserve, ids, until: Date.now() + RANKED_SESSION_MS, freeAt: {}, search: {}, last: {}, champSafe: {}, launching: new Set(), active: new Map(), done: [], start: Object.fromEntries(ids.map((id) => [id, arenaStats(id).elo])) };
   // chacun lance sa recherche à un moment différent
   for (const id of ids) s.freeAt[id] = Date.now() + rkRnd(0, 75000);
   s.timer = setInterval(() => {
@@ -425,19 +427,25 @@ function startRankedSession(client, ids) {
   const auto = handleAutoMessage;
   handleAutoMessage = async (message) => {
     const words = message.guild || message.author?.bot || message.author?.id !== AUTO_TRIGGER_ID ? [] : message.content.trim().toLowerCase().split(/\s+/);
-    if (words.at(-1) !== "ranked" || words.slice(0, -1).some((w) => !AUTO_WORDS[w])) return auto(message);
+    const cmd = words.at(-1);
+    if ((cmd !== "ranked" && cmd !== "rankedsee") || words.slice(0, -1).some((w) => !AUTO_WORDS[w])) return auto(message);
     if (rankedSession) return void (await message.reply(`⏳ Des parties classées automatiques sont déjà en cours (fin des recherches <t:${Math.floor(rankedSession.until / 1000)}:R>).`).catch(() => null));
     const named = words.slice(0, -1);
     let ids = [...new Set((named.length ? named : Object.keys(AUTO_WORDS)).flatMap((w) => AUTO_WORDS[w]))];
     if (ids.length < 2) ids = [...new Set(Object.values(AUTO_WORDS).flat())]; // seul : contre les autres membres
     const ready = ids.filter((id) => bestTeam(id).length >= 3), out = ids.filter((id) => !ready.includes(id));
     if (ready.length < 2) return void (await message.reply("❌ Il faut au moins deux joueurs avec 3 cartes pour des parties classées.").catch(() => null));
-    const s = startRankedSession(message.client, ready);
+    // « rankedsee » : un joueur tiré au hasard ne joue pas avec les autres, il reste libre pour RANKED_TARGETS
+    // (jamais Charlotte : sa place doit toujours pouvoir être prise)
+    const spare = ready.filter((id) => !RANKED_TARGETS.includes(id) && id !== RANKED_CHAMPION);
+    const reserve = cmd === "rankedsee" && spare.length ? spare[Math.floor(Math.random() * spare.length)] : null;
+    const s = startRankedSession(message.client, ready, reserve);
     await message
       .reply(
         `🏆 **Parties classées lancées pour 10 minutes** (recherches jusqu'à <t:${Math.floor(s.until / 1000)}:t>) entre ${ready.map((id) => `**${pseudo(id)}** (${arenaStats(id).elo})`).join(", ")}.\n` +
           `Chacun lance sa recherche dans l'Arène, les matchs se font comme dans la vraie file et se jouent en direct dans leur fil. Bilan ici à la fin.\n` +
           `⚠️ Ne touchez pas aux boutons de ces combats : un clic change le combat prévu.` +
+          (reserve ? `\n👁️ Place gardée pour ${RANKED_TARGETS.map((id) => pseudo(id)).join(", ")} : **${pseudo(reserve)}** ne joue pas avec les autres et l'attend.` : "") +
           (out.length ? `\n⚠️ Pas assez de cartes (3 au moins) : ${out.map((id) => pseudo(id)).join(", ")}.` : "")
       )
       .catch(() => null);
