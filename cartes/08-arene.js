@@ -1480,7 +1480,7 @@ async function startBattle(client, a, bUser, opts) {
     players[1].ready = true;
   }
   // pile ou face : tiré tout de suite, l'animation se calcule pendant le choix des équipes
-  b.coin = Math.random() < 0.5 ? 0 : 1;
+  b.coin = opts.coin === 0 || opts.coin === 1 ? opts.coin : Math.random() < 0.5 ? 0 : 1; // opts.coin : rejouer un combat déjà tiré
   b.coinGif = coinTossGif(b).catch((err) => {
     console.error("Pile ou face (animation):", err.message);
     return null;
