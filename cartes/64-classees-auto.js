@@ -183,7 +183,8 @@ const rankedNotice = (id) =>
   chan("arene")
     ?.send({
       content: `🔎 **${pseudo(id)}** (${tierOf(arenaStats(id).elo)[1]} · ${arenaStats(id).elo} pts) cherche un adversaire en **partie classée** !`,
-      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("carte_rk_join").setLabel("Rejoindre la file").setEmoji("🏆").setStyle(ButtonStyle.Success))],
+      // même bouton en apparence, mais il ne fait entrer personne dans la file (voir plus bas)
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`carte_rk_seek_${id}`).setLabel("Rejoindre la file").setEmoji("🏆").setStyle(ButtonStyle.Success))],
       allowedMentions: { parse: [] },
     })
     .catch(() => null);
@@ -327,5 +328,27 @@ function startRankedSession(client, ids) {
           (out.length ? `\n⚠️ Pas assez de cartes (3 au moins) : ${out.map((id) => pseudo(id)).join(", ")}.` : "")
       )
       .catch(() => null);
+  };
+}
+{
+  // sécurité : personne d'autre ne peut se mêler de ces parties
+  const shop = handleShopInteraction;
+  handleShopInteraction = async (interaction) => {
+    const id = interaction.customId;
+    if (typeof id === "string") {
+      // l'avis de recherche : le joueur a « déjà trouvé » son adversaire
+      const seek = /^carte_rk_seek_(\d+)$/.exec(id);
+      if (seek) {
+        await interaction.reply({ content: `⏳ Trop tard : **${pseudo(seek[1])}** vient de trouver un adversaire. Lancez votre propre recherche depuis le menu de l'Arène !`, ephemeral: true }).catch(() => null);
+        return true;
+      }
+      // pas de paris (avec de vraies pièces) sur un combat rejoué
+      const bet = /^carte_bt_(bet|bf)_([a-z0-9]+)/.exec(id);
+      if (bet && battles.get(bet[2])?.script) {
+        await interaction.reply({ content: "🔒 Les paris sont fermés pour ce combat.", ephemeral: true }).catch(() => null);
+        return true;
+      }
+    }
+    return shop(interaction);
   };
 }
