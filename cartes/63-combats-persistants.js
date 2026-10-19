@@ -55,6 +55,7 @@ function persistAllBattles() {
   };
   nextRound = async (client, b) => {
     await next(client, b);
+    delete b.resumeTries; // le combat avance : la reprise a réussi
     persistBattle(b);
   };
   // la manche vient d'être jouée : l'état est gardé avant l'animation (rien n'est rejoué au hasard après un redémarrage)
@@ -174,7 +175,17 @@ async function resumeBattle(client, s) {
 }
 async function resumeLiveBattles(client) {
   const live = Object.values(load().arenaLive ?? {});
-  for (const s of live) {
+  for (const [k, s] of live.entries()) {
+    // un combat dont la reprise a déjà échoué deux fois (le bot est tombé pendant) est annulé : jamais de boucle de plantages
+    s.resumeTries = (s.resumeTries ?? 0) + 1;
+    save();
+    if (s.resumeTries > 2) {
+      console.error(`Combat ${s.id} : reprise abandonnée après deux redémarrages.`);
+      await dropLiveBattle(client, s, "reprise impossible").catch(() => null);
+      continue;
+    }
+    // un combat à la fois, pour ne pas tout charger d'un coup au démarrage
+    if (k) await sleep(8000);
     try {
       await resumeBattle(client, s);
       console.log(`Combat ${s.id} repris (${s.players.map((p) => p.name).join(" contre ")}, ${s.phase}, manche ${s.round}).`);
@@ -194,6 +205,12 @@ async function resumeLiveBattles(client) {
     refund();
     Object.assign(st.arenaEscrow, keep);
     save();
-    if (Object.keys(live).length) resumeLiveBattles(cardClient).catch((err) => console.error("Reprise des combats:", err.message));
+    // la reprise attend que le démarrage du bot soit passé (images, salons…) : moins de mémoire d'un coup
+    if (Object.keys(live).length) setTimeout(() => resumeLiveBattles(cardClient).catch((err) => console.error("Reprise des combats:", err.message)), 25000);
   };
 }
+// la mémoire du bot dans les logs (Railway arrête le bot s'il en prend trop) : utile pour comprendre un « Killed »
+setInterval(() => {
+  const m = process.memoryUsage();
+  console.log(`Mémoire : ${Math.round(m.rss / 1048576)} Mo (tas ${Math.round(m.heapUsed / 1048576)} Mo, tampons ${Math.round(m.arrayBuffers / 1048576)} Mo) · ${battles.size} combat(s) en cours`);
+}, 10 * MINUTE).unref?.();
