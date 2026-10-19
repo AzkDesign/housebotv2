@@ -246,7 +246,7 @@ function clashCanAttack(userId) {
   if (me.res.essence < army.length * CLASH_TROOP_COST) return `❌ Il faut ${army.length * CLASH_TROOP_COST} essence pour lancer cette attaque.`;
   return null;
 }
-async function clashAttack(client, userId, t, war = null) {
+async function clashAttack(client, userId, t, war = null, opts = {}) {
   const me = clashState()[userId], target = targetBase(t);
   const army = clashArmy(me, userId), cost = army.length * CLASH_TROOP_COST;
   me.res.essence -= cost;
@@ -290,7 +290,8 @@ async function clashAttack(client, userId, t, war = null) {
   pushLog(me, `⚔️ Attaque${war ? " de guerre" : ""} sur ${target.name} : ${sim.pct} %, ${"⭐".repeat(sim.stars) || "0 étoile"} · +${loot.or} or +${loot.essence} essence${trophies ? ` · ${trophies > 0 ? "+" : ""}${trophies} 🏆` : ""}`);
   clashDirty = true;
   save();
-  const gif = await clashBattleGif(target, sim, me.name, { loot, trophies, war: !!war });
+  // opts.quiet : attaque automatique, sans cinématique (personne ne la regarde)
+  const gif = opts.quiet ? null : await clashBattleGif(target, sim, me.name, { loot, trophies, war: !!war });
   if (sim.stars === 3) setTimeout(() => clashNotice(`💥 **${me.name}** rase entièrement ${target.ghost ? "une Maison fantôme" : `la Maison de **${target.name}**`} : ⭐⭐⭐ !`).catch(() => null), gif?.duration ?? 0);
   if (sim.stars) ustat(userId, "clashStars", sim.stars);
   clashDirty = true;
