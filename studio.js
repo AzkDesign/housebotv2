@@ -66,7 +66,6 @@ const PRODUCTS = [
   ["📸 Photo exclusive", 40, 90],
   ["🎬 Vidéo personnalisée", 120, 300],
   ["📦 Pack du week-end", 80, 180],
-  ["💌 Message vocal dédicacé", 50, 110],
   ["🌙 Album privé", 60, 140],
 ];
 const REVIEWS = {
