@@ -232,7 +232,7 @@ async function registerSlashCommands(client, token) {
       .toJSON(),
     new SlashCommandBuilder()
       .setName("studio")
-      .setDescription("Administration : ouvrir le studio 🔞 (jeu de rôle) d'un membre")
+      .setDescription("Administration : ouvrir le studio 🔞 d'un membre")
       .addUserOption((o) => o.setName("membre").setDescription("La créatrice").setRequired(true))
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
       .toJSON(),

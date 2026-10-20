@@ -114,7 +114,7 @@ function panelPayload(userId) {
             `⭐ Note moyenne : **${avg ? avg.toFixed(1) : "—"}** / 5 (${s.ratings.length} avis)\n` +
             `💬 Messages en attente de réponse : **${pending}** · réponses envoyées : **${s.replies}**\n` +
             `⏱️ Rythme : **${s.rhythm}**\n\n` +
-            "*Jeu de rôle : tout est fictif, les revenus sont en € du jeu. Répondre aux clients améliore les avis et attire les pourboires.*"
+            "*Répondre aux clients améliore les avis et attire les pourboires.*"
         )
         .setFooter({ text: "Les boutons de réglage sont réservés à l'administration." }),
     ],
