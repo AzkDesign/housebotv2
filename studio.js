@@ -230,6 +230,7 @@ async function handleStudioInteraction(interaction) {
   const isCmd = interaction.isChatInputCommand?.() && interaction.commandName === "studio";
   const id = interaction.customId;
   if (!isCmd && (typeof id !== "string" || !id.startsWith("studio_"))) return false;
+  client ??= interaction.client; // une commande peut arriver avant la fin du démarrage du bot
   const admin = isGerant(interaction.member);
   if (isCmd) {
     if (!admin) return void (await interaction.reply({ content: "❌ Réservé à l'administration.", ephemeral: true })) || true;
