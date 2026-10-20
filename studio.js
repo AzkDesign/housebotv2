@@ -13,6 +13,7 @@ const {
   TextInputStyle,
   PermissionFlagsBits,
   ChannelType,
+  AttachmentBuilder,
 } = require("discord.js");
 const fs = require("fs");
 const { isGerant, GERANTS_ROLE_ID, changeBalance, formatEuro } = require("./economie");
@@ -116,17 +117,9 @@ function panelPayload(userId) {
             `💬 Messages en attente de réponse : **${pending}** · réponses envoyées : **${s.replies}**\n` +
             `⏱️ Rythme : **${s.rhythm}**\n\n` +
             "*Répondre aux clients améliore les avis et attire les pourboires.*"
-        )
-        .setFooter({ text: "Les boutons de réglage sont réservés à l'administration." }),
+        ),
     ],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`studio_pause_${userId}`).setLabel(s.active ? "Mettre en pause" : "Remettre en ligne").setEmoji(s.active ? "⏸️" : "▶️").setStyle(s.active ? ButtonStyle.Secondary : ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`studio_rythme_${userId}`).setLabel(`Rythme : ${s.rhythm}`).setEmoji("⏩").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`studio_prix_${userId}`).setLabel("Prix de l'abonnement").setEmoji("💶").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`studio_fermer_${userId}`).setLabel("Fermer le studio").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
-      ),
-    ],
+    components: [],
   };
 }
 async function refreshPanel(userId) {
@@ -154,29 +147,12 @@ function earn(userId, s, amount, label) {
   s.revenue += paid;
   return paid;
 }
-const client_ = () => ({ name: pick(NAMES), color: Math.floor(Math.random() * 0xffffff) });
 async function event(userId) {
   const s = load().studios[userId];
   const replyRate = s.replies / Math.max(1, s.replies + s.pending.length + s.ignored);
   const roll = Math.random();
-  if (roll < 0.4) {
-    // un message de client, avec le bouton pour répondre
-    const c = client_(), text = pick(MESSAGES), ch = await chanOf(s, "messages");
-    const id = Date.now().toString(36);
-    const sent = await ch
-      ?.send({
-        embeds: [new EmbedBuilder().setColor(c.color).setAuthor({ name: `💬 ${c.name}` }).setDescription(text).setTimestamp()],
-        components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`studio_rep_${userId}_${id}`).setLabel("Répondre").setEmoji("💌").setStyle(ButtonStyle.Primary))],
-      })
-      .catch(() => null);
-    if (sent) {
-      s.pending.push({ id, msgId: sent.id, client: c.name, at: Date.now() });
-      // un message laissé sans réponse plus de 3 h compte comme ignoré
-      const old = s.pending.filter((p) => Date.now() - p.at > 3 * 60 * MINUTE);
-      s.ignored += old.length;
-      s.pending = s.pending.filter((p) => !old.includes(p)).slice(-25);
-    }
-  } else if (roll < 0.6) {
+  if (roll < 0.4) await postClientMessage(userId, pick(NAMES), pick(MESSAGES));
+  else if (roll < 0.6) {
     s.subs++;
     const paid = earn(userId, s, s.price, "nouvel abonné");
     await (await chanOf(s, "ventes"))?.send(`🆕 **${pick(NAMES)}** s'abonne au studio — **+${formatEuro(paid)}**`).catch(() => null);
@@ -199,6 +175,26 @@ async function event(userId) {
   }
   save();
   await refreshPanel(userId).catch(() => null);
+}
+// un message de client (tiré au hasard, ou écrit par l'administration en message privé), avec le bouton pour répondre
+async function postClientMessage(userId, name, text) {
+  const s = load().studios[userId];
+  const color = Math.floor(Math.random() * 0xffffff), ch = await chanOf(s, "messages");
+  const id = Date.now().toString(36);
+  const sent = await ch
+    ?.send({
+      embeds: [new EmbedBuilder().setColor(color).setAuthor({ name: `💬 ${name}` }).setDescription(text).setTimestamp()],
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`studio_rep_${userId}_${id}`).setLabel("Répondre").setEmoji("💌").setStyle(ButtonStyle.Primary))],
+    })
+    .catch(() => null);
+  if (!sent) return false;
+  s.pending.push({ id, msgId: sent.id, client: name, at: Date.now() });
+  // un message laissé sans réponse plus de 3 h compte comme ignoré
+  const old = s.pending.filter((p) => Date.now() - p.at > 3 * 60 * MINUTE);
+  s.ignored += old.length;
+  s.pending = s.pending.filter((p) => !old.includes(p)).slice(-25);
+  save();
+  return true;
 }
 function schedule(userId) {
   const s = load().studios[userId];
@@ -224,6 +220,9 @@ async function setupStudio(c) {
       const ch = await client.channels.fetch(cid).catch(() => null);
       if (ch?.nsfw) await ch.setNSFW(false).catch(() => null);
     }
+  // les tableaux de bord perdent leurs anciens boutons de réglage
+  for (const uid of Object.keys(state.studios)) await refreshPanel(uid).catch(() => null);
+  client.on("messageCreate", (msg) => onStudioMessage(msg).catch((err) => console.error("Studio (message):", err.message)));
   setInterval(tick, MINUTE).unref?.();
 }
 
@@ -249,7 +248,7 @@ async function handleStudioInteraction(interaction) {
     save();
     schedule(target.id);
     await refreshPanel(target.id);
-    await interaction.editReply(`🔞 Studio de **${pseudo(target.id)}** créé : <#${made.channels.tableau}>. Seuls elle et l'administration le voient ; les salons sont soumis à une limite d'âge.`);
+    await interaction.editReply(`🔞 Studio de **${pseudo(target.id)}** créé : <#${made.channels.tableau}>. Seuls elle et l'administration le voient. Réglages en message privé au bot : « studio aide ».`);
     return true;
   }
   // répondre à un client (elle, ou l'administration)
@@ -295,50 +294,152 @@ async function handleStudioInteraction(interaction) {
     await refreshPanel(uid).catch(() => null);
     return true;
   }
-  // réglages : administration seulement
-  const m = /^studio_(pause|rythme|prix|fermer|prixok|fermerok)_(\d+)$/.exec(id);
-  if (!m) return false;
-  if (!admin) return void (await interaction.reply({ content: "❌ Réglages réservés à l'administration.", ephemeral: true })) || true;
-  const [, what, uid] = m, s = load().studios[uid];
-  if (!s) return void (await interaction.reply({ content: "Ce studio n'existe plus.", ephemeral: true })) || true;
-  if (what === "pause") {
-    s.active = !s.active;
+  return false;
+}
+
+// --- Publications : la créatrice poste ses photos dans 📸・publications, le bot les met en page ---
+const COMMENTS = ["Magnifique 😍", "Wow… 🔥", "La plus belle publication de la semaine", "J'attendais ça depuis hier !", "T'es incroyable ✨", "Ce sourire 😳", "Encore, encore 🙏", "Top comme toujours", "J'adore la lumière sur celle-là", "Abonné à vie 💖"];
+async function createMedia(s, userId) {
+  const cat = await client.channels.fetch(s.categoryId).catch(() => null);
+  if (!cat) return null;
+  const ow = overwrites(cat.guild, userId).map((o) => (o.id === userId ? { id: userId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] } : o));
+  const ch = await cat.guild.channels.create({ name: "📸・publications", type: ChannelType.GuildText, parent: cat.id, permissionOverwrites: ow });
+  s.channels.media = ch.id;
+  save();
+  await ch.send({ embeds: [new EmbedBuilder().setColor(0xec4899).setTitle("📸 Vos publications").setDescription("Postez ici vos photos (avec une légende si vous voulez) : elles sont mises en page pour vos abonnés, qui réagissent et commentent.")] }).catch(() => null);
+  return ch;
+}
+async function onMediaPost(msg, userId, s) {
+  const imgs = [...msg.attachments.values()].filter((a) => a.contentType?.startsWith("image/")).slice(0, 4);
+  if (!imgs.length) return;
+  const files = imgs.map((a, k) => new AttachmentBuilder(a.url, { name: `photo-${k}.${(a.name.split(".").pop() || "png").toLowerCase()}` }));
+  const post = (likes, comments) => [
+    new EmbedBuilder()
+      .setColor(0xec4899)
+      .setAuthor({ name: `📸 ${pseudo(userId)} · nouvelle publication` })
+      .setDescription(msg.content?.slice(0, 1000) || null)
+      .setImage(`attachment://${files[0].name}`)
+      .setFooter({ text: `❤️ ${likes} · 💬 ${comments}` })
+      .setTimestamp(),
+    ...files.slice(1).map((f) => new EmbedBuilder().setColor(0xec4899).setImage(`attachment://${f.name}`)),
+  ];
+  const sent = await msg.channel.send({ embeds: post(0, 0), files }).catch((err) => (console.error("Studio (publication):", err.message), null));
+  if (!sent) return;
+  await msg.delete().catch(() => null);
+  s.posts = (s.posts ?? 0) + 1;
+  save();
+  // les abonnés réagissent pendant quelques minutes : likes, commentaires, parfois un déblocage payant
+  let likes = 0, comments = 0;
+  const target = Math.round(rnd(12, 45) + s.subs * 0.8);
+  for (let step = 1; step <= 4; step++)
+    setTimeout(async () => {
+      likes = Math.round((target * step) / 4 + rnd(-2, 2));
+      if (Math.random() < 0.6) {
+        comments++;
+        await sent.reply({ content: `💬 **${pick(NAMES)}** : ${pick(COMMENTS)}`, allowedMentions: { parse: [], repliedUser: false } }).catch(() => null);
+      }
+      await sent.edit({ embeds: post(Math.max(0, likes), comments), attachments: sent.attachments.map((a) => a) }).catch(() => null);
+      if (step === 4 && Math.random() < 0.5) {
+        const st = load().studios[userId];
+        if (!st) return;
+        const paid = earn(userId, st, Math.round(rnd(20, 60)), "publication débloquée");
+        save();
+        await (await chanOf(st, "ventes"))?.send(`🔓 **${pick(NAMES)}** débloque la dernière publication — **+${formatEuro(paid)}**`).catch(() => null);
+        await refreshPanel(userId).catch(() => null);
+      }
+    }, step * rnd(0.6, 1.6) * MINUTE);
+}
+
+// --- Réglages en message privé au bot (ADMIN_DM, ou un gérant) ---
+const ADMIN_DM = "320348102055690241";
+const HELP =
+  "🔞 **Studio — commandes en message privé**\n" +
+  "• `studio` : le bilan\n" +
+  "• `studio pause` / `studio reprendre`\n" +
+  "• `studio rythme lent|normal|rapide`\n" +
+  "• `studio prix 20` : prix de l'abonnement (1 à 200 €)\n" +
+  "• `studio client Ton message` : un client écrit (pseudo au hasard)\n" +
+  "• `studio client Pseudo: Ton message` : un client précis écrit\n" +
+  "• `studio exemples` : des exemples de messages de clients\n" +
+  "• `studio media` : crée le salon 📸・publications\n" +
+  "• `studio fermer confirmer` : supprime le studio\n" +
+  "S'il y a plusieurs studios, ajoutez l'ID de la créatrice : `studio 1557089423408238602 pause`.";
+async function canControl(msg) {
+  if (msg.author.id === ADMIN_DM) return true;
+  for (const g of client.guilds.cache.values()) {
+    const m = await g.members.fetch(msg.author.id).catch(() => null);
+    if (m && isGerant(m)) return true;
+  }
+  return false;
+}
+function studioReport(uid) {
+  const s = load().studios[uid], avg = s.ratings.length ? (s.ratings.reduce((a, x) => a + x, 0) / s.ratings.length).toFixed(1) : "—";
+  return `🔞 **Studio de ${pseudo(uid)}** — ${s.active ? "en ligne" : "en pause"} · rythme ${s.rhythm} · abonnement ${formatEuro(s.price)}\n👥 ${s.subs} abonnés · 💰 aujourd'hui ${formatEuro(earnedToday(s))} / ${formatEuro(DAILY_CAP)} · total ${formatEuro(s.revenue)} · ⭐ ${avg} (${s.ratings.length} avis) · 💬 ${s.pending.length} en attente, ${s.replies} réponses · 📸 ${s.posts ?? 0} publications${s.channels.media ? "" : " (pas encore de salon : `studio media`)"}`;
+}
+async function onStudioMessage(msg) {
+  if (msg.author?.bot) return;
+  // une photo dans 📸・publications
+  if (msg.guild) {
+    for (const [uid, s] of Object.entries(load().studios)) if (s.channels?.media === msg.channelId && (msg.author.id === uid || isGerant(msg.member))) return onMediaPost(msg, uid, s);
+    return;
+  }
+  const words = msg.content.trim().split(/\s+/);
+  if (words[0]?.toLowerCase() !== "studio" || !(await canControl(msg))) return;
+  const say = (t) => msg.reply(t.slice(0, 1990)).catch(() => null);
+  const ids = Object.keys(load().studios);
+  let uid = /^\d{15,}$/.test(words[1] ?? "") ? words.splice(1, 1)[0] : ids.length === 1 ? ids[0] : null;
+  const cmd = (words[1] ?? "").toLowerCase();
+  if (cmd === "aide") return say(HELP);
+  if (cmd === "exemples") return say(`💬 **Exemples de messages de clients** (le bot en envoie tout seul, ou vous écrivez le vôtre avec \`studio client …\`) :\n${MESSAGES.map((m) => `• ${m}`).join("\n")}`);
+  if (!ids.length) return say("Aucun studio pour l'instant : `/studio membre:@…` sur le serveur.");
+  if (!uid || !load().studios[uid]) return say(`Plusieurs studios : précisez l'ID de la créatrice (${ids.map((id) => `${pseudo(id)} = \`${id}\``).join(", ")}).`);
+  const s = load().studios[uid];
+  if (!cmd || cmd === "bilan") return say(studioReport(uid));
+  if (cmd === "pause" || cmd === "reprendre") {
+    s.active = cmd === "reprendre";
     if (s.active) schedule(uid);
     save();
-    await interaction.update(panelPayload(uid));
-  } else if (what === "rythme") {
-    const order = Object.keys(RHYTHMS);
-    s.rhythm = order[(order.indexOf(s.rhythm) + 1) % order.length];
+    await refreshPanel(uid).catch(() => null);
+    return say(s.active ? "▶️ Studio remis en ligne." : "⏸️ Studio en pause : plus aucun événement jusqu'à `studio reprendre`.");
+  }
+  if (cmd === "rythme") {
+    const r = (words[2] ?? "").toLowerCase();
+    if (!RHYTHMS[r]) return say("Rythme : `lent` (40-80 min), `normal` (15-40 min) ou `rapide` (5-15 min).");
+    s.rhythm = r;
     schedule(uid);
-    await interaction.update(panelPayload(uid));
-  } else if (what === "prix") {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId(`studio_prixok_${uid}`)
-        .setTitle("Prix de l'abonnement")
-        .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("prix").setLabel("Prix en € du jeu (1 à 200)").setStyle(TextInputStyle.Short).setValue(String(s.price)).setRequired(true)))
-    );
-  } else if (what === "prixok") {
-    const v = Math.round(Number(interaction.fields.getTextInputValue("prix").replace(",", ".")));
-    if (!Number.isFinite(v) || v < 1 || v > 200) return void (await interaction.reply({ content: "❌ Prix entre 1 et 200.", ephemeral: true })) || true;
+    await refreshPanel(uid).catch(() => null);
+    return say(`⏩ Rythme : **${r}**.`);
+  }
+  if (cmd === "prix") {
+    const v = Math.round(Number(String(words[2] ?? "").replace(",", ".")));
+    if (!Number.isFinite(v) || v < 1 || v > 200) return say("❌ Prix entre 1 et 200 : `studio prix 20`.");
     s.price = v;
     save();
-    await interaction.deferUpdate().catch(() => null);
-    await refreshPanel(uid);
-  } else if (what === "fermer") {
-    await interaction.reply({
-      ephemeral: true,
-      content: "🗑️ Fermer le studio supprime la catégorie et ses salons. Les gains déjà versés restent. Confirmer ?",
-      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`studio_fermerok_${uid}`).setLabel("Oui, fermer").setStyle(ButtonStyle.Danger))],
-    });
-  } else if (what === "fermerok") {
-    await interaction.update({ content: "🗑️ Studio fermé.", components: [] }).catch(() => null);
+    await refreshPanel(uid).catch(() => null);
+    return say(`💶 Abonnement à **${formatEuro(v)}**.`);
+  }
+  if (cmd === "client") {
+    const body = msg.content.trim().replace(/^studio\s+(\d{15,}\s+)?client\s*/i, "");
+    if (!body) return say("Écrivez le message : `studio client Ton message` ou `studio client Pseudo: Ton message`.");
+    const named = /^([^:\s]{2,24}):\s*(.+)$/s.exec(body);
+    const ok = await postClientMessage(uid, named ? named[1] : pick(NAMES), (named ? named[2] : body).slice(0, 1500));
+    await refreshPanel(uid).catch(() => null);
+    return say(ok ? "💬 Message de client envoyé dans le studio." : "❌ Salon des messages introuvable.");
+  }
+  if (cmd === "media") {
+    if (s.channels.media && (await chanOf(s, "media"))) return say(`📸 Le salon existe déjà : <#${s.channels.media}>`);
+    const ch = await createMedia(s, uid).catch((err) => (console.error("Studio (media):", err.message), null));
+    return say(ch ? `📸 Salon créé : <#${ch.id}>. Elle y poste ses photos, le bot les met en page et les abonnés réagissent.` : "❌ Impossible de créer le salon.");
+  }
+  if (cmd === "fermer") {
+    if ((words[2] ?? "").toLowerCase() !== "confirmer") return say("🗑️ Pour supprimer le studio (catégorie et salons) : `studio fermer confirmer`. Les gains déjà versés restent.");
     for (const cid of Object.values(s.channels ?? {})) await (await client.channels.fetch(cid).catch(() => null))?.delete("Studio fermé").catch(() => null);
     await (await client.channels.fetch(s.categoryId).catch(() => null))?.delete("Studio fermé").catch(() => null);
     delete load().studios[uid];
     save();
+    return say("🗑️ Studio fermé.");
   }
-  return true;
+  return say(HELP);
 }
 
-module.exports = { setupStudio, handleStudioInteraction, _test: { event, load, panelPayload } };
+module.exports = { setupStudio, handleStudioInteraction, _test: { event, load, panelPayload, onStudioMessage, setClient: (c) => (client = c) } };
