@@ -152,8 +152,8 @@ async function event(userId) {
   const s = load().studios[userId];
   const replyRate = s.replies / Math.max(1, s.replies + s.pending.length + s.ignored);
   // un petit studio est souvent calme : parfois juste un nouvel abonné, parfois rien
-  if (Math.random() > 0.3 + 0.7 * audience(s)) {
-    if (Math.random() < 0.35) {
+  if (Math.random() > 0.2 + 0.8 * audience(s)) {
+    if (Math.random() < 0.15) {
       s.subs++;
       const paid = earn(userId, s, s.price, "nouvel abonné");
       await (await chanOf(s, "ventes"))?.send(`🆕 **${pick(NAMES)}** s'abonne au studio — **+${formatEuro(paid)}**`).catch(() => null);
@@ -319,7 +319,21 @@ async function createMedia(s, userId) {
   const ch = await cat.guild.channels.create({ name: "📸・publications", type: ChannelType.GuildText, parent: cat.id, permissionOverwrites: ow });
   s.channels.media = ch.id;
   save();
-  await ch.send({ embeds: [new EmbedBuilder().setColor(0xec4899).setTitle("📸 Vos publications").setDescription("Postez ici vos photos (avec une légende si vous voulez) : elles sont mises en page pour vos abonnés, qui réagissent et commentent.")] }).catch(() => null);
+  await commentsChannel(s, userId);
+  await ch.send({ embeds: [new EmbedBuilder().setColor(0xec4899).setTitle("📸 Vos publications").setDescription("Postez ici vos photos (avec une légende si vous voulez) : elles sont mises en page pour vos abonnés. Leurs commentaires arrivent dans 💬・commentaires.")] }).catch(() => null);
+  return ch;
+}
+// les commentaires des abonnés ont leur propre salon (sinon les publications se perdent au milieu)
+async function commentsChannel(s, userId) {
+  const have = await chanOf(s, "comments");
+  if (have) return have;
+  const cat = await client.channels.fetch(s.categoryId).catch(() => null);
+  if (!cat) return null;
+  const ch = await cat.guild.channels.create({ name: "💬・commentaires", type: ChannelType.GuildText, parent: cat.id, permissionOverwrites: overwrites(cat.guild, userId) }).catch(() => null);
+  if (ch) {
+    s.channels.comments = ch.id;
+    save();
+  }
   return ch;
 }
 async function onMediaPost(msg, userId, s) {
@@ -340,7 +354,16 @@ async function onMediaPost(msg, userId, s) {
   if (!sent) return;
   await msg.delete().catch(() => null);
   s.posts = (s.posts ?? 0) + 1;
+  const num = s.posts;
   save();
+  // pour mettre à jour le compteur : on garde les embeds envoyés (leurs images pointent vers les vraies pièces jointes)
+  // et on ne change que le pied ; reconstruire avec « attachment:// » faisait disparaître la photo
+  const counter = (likes, comments) => {
+    const embeds = sent.embeds.map((e) => EmbedBuilder.from(e));
+    embeds[0]?.setFooter({ text: `❤️ ${likes} · 💬 ${comments}` });
+    return embeds;
+  };
+  const commentsCh = await commentsChannel(s, userId);
   // Les abonnés découvrent la publication peu à peu : rien pendant 4 à 12 minutes, puis les réactions arrivent sur
   // une à trois heures. Tout dépend de l'audience : avec peu d'abonnés, quelques likes et presque pas de commentaires ;
   // le buzz grandit avec les abonnés, donc au fil des jours.
@@ -355,14 +378,14 @@ async function onMediaPost(msg, userId, s) {
       likes = Math.round(target * (1 - Math.pow(1 - step / steps, 2)) + rnd(-1, 1));
       if (Math.random() < Math.min(0.7, 0.08 + s.subs / 60)) {
         comments++;
-        await sent.reply({ content: `💬 **${pick(NAMES)}** : ${pick(COMMENTS)}`, allowedMentions: { parse: [], repliedUser: false } }).catch(() => null);
+        await commentsCh?.send({ content: `💬 **${pick(NAMES)}** sur [la publication n°${num}](${sent.url}) : ${pick(COMMENTS)}`, allowedMentions: { parse: [] } }).catch(() => null);
       }
-      await sent.edit({ embeds: post(Math.max(0, likes), comments), attachments: sent.attachments.map((x) => x) }).catch(() => null);
+      await sent.edit({ embeds: counter(Math.max(0, likes), comments) }).catch(() => null);
       if (step !== steps) return;
       const st = load().studios[userId];
       if (!st) return;
       // une belle publication fait venir des abonnés, et parfois quelqu'un la débloque
-      if (Math.random() < 0.15 + 0.6 * a) {
+      if (Math.random() < 0.08 + 0.6 * a) {
         const n = 1 + Math.floor(st.subs / 40);
         st.subs += n;
         const paid = earn(userId, st, st.price * n, "nouveaux abonnés après une publication");
