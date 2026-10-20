@@ -66,9 +66,11 @@ function replyTone(text) {
   const has = (list) => list.some((r) => r.test(t));
   if (has([/ta gueule/, /\bdegage/, /casse[- ]toi/, /\bconnard/, /\bcon\b/, /fous?[- ]moi la paix/, /\bfdp\b/, /\bntm\b/, /\btg\b/, /\bpervers/, /\bdebile/])) return "rude";
   const no = has([/\bnon+\b/, /\bnan+\b/, /\bnope\b/, /\bjamais\b/, /pas question/, /pas possible/, /je (ne )?(peux|pourrai) pas/, /\bdesolee?\b/, /\bpas envie\b/, /\bpas interess/, /\bbof\b/, /\bça va pas\b/, /\bca va pas\b/, /\bpas pour (le )?moment\b/, /\bpas maintenant\b/]);
-  const yes = has([/\boui+\b/, /\bouais\b/, /\bok\b/, /\bd'?accord\b/, /\bdac\b/, /bien sur/, /avec plaisir/, /\bmerci/, /\bpromis/, /\bbientot\b/, /\bcarrement\b/, /\bgrave\b/, /pourquoi pas/, /\bje vais\b/, /\bc'?est prevu\b/, /\bbisous?\b/, /❤|😘|🥰|😍|💕|😊|💖/]);
+  const yes = has([/\boui+\b/, /\bouais\b/, /\bok\b/, /\bd'?accord\b/, /\bdac\b/, /bien sur/, /avec plaisir/, /\bpromis/, /\bbientot\b/, /\bcarrement\b/, /\bgrave\b/, /pourquoi pas/, /\bje vais\b/, /\bc'?est prevu\b/, /\bbisous?\b/, /❤|😘|🥰|😍|💕|😊|💖/]);
+  // « merci » seul est positif, mais « non merci » reste un refus
   if (no && !yes) return "negative";
   if (yes && !no) return "positive";
+  if (!no && /\bmerci/.test(t)) return "positive";
   // « oui mais pas maintenant », « désolée, merci » : plutôt neutre
   return "neutral";
 }
