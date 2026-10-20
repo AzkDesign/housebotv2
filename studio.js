@@ -48,7 +48,7 @@ const MESSAGES = [
   "Coucou ! J'adore ton dernier post 😍",
   "Je viens de m'abonner, hâte de voir la suite !",
   "Tu fais des contenus personnalisés ? Je suis prêt à payer bien sûr",
-  "C'est quand ton prochain live ?",
+  "C'est quand ta prochaine publication ?",
   "Ton contenu vaut chaque centime 🔥",
   "Petit pourboire pour ta journée ☕",
   "Je suis fan depuis le début, continue comme ça",
@@ -67,11 +67,11 @@ const PRODUCTS = [
   ["🎬 Vidéo personnalisée", 120, 300],
   ["📦 Pack du week-end", 80, 180],
   ["💌 Message vocal dédicacé", 50, 110],
-  ["🌙 Accès au live privé", 60, 140],
+  ["🌙 Album privé", 60, 140],
 ];
 const REVIEWS = {
   5: ["Toujours au top, rien à dire 🔥", "Meilleur abonnement que j'ai pris", "Contenu de qualité et réponses rapides 😍", "Elle prend le temps de répondre à tout le monde, rare !"],
-  4: ["Très bien, un peu cher mais ça vaut le coup", "Super contenu, j'aimerais juste plus de lives", "Bonne surprise, je recommande"],
+  4: ["Très bien, un peu cher mais ça vaut le coup", "Super contenu, j'aimerais juste plus de publications", "Bonne surprise, je recommande"],
   3: ["Pas mal, mais les réponses mettent du temps", "Correct, j'attendais un peu plus de nouveautés"],
 };
 
