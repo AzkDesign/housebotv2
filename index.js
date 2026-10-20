@@ -86,6 +86,7 @@ const { setupParis, handleParisInteraction } = require("./paris");
 const { setupEncheres, handleEncheresInteraction } = require("./encheres");
 const { setupBourse, handleBourseInteraction } = require("./bourse");
 const { setupVoyage, handleVoyageInteraction } = require("./voyage");
+const { setupStudio, handleStudioInteraction } = require("./studio");
 const { setupLogs } = require("./logs");
 const { handleRelayMessage, handleRelayInteraction } = require("./relais");
 const { startInactivityWatcher } = require("./tickets");
@@ -583,6 +584,7 @@ client.once(Events.ClientReady, async () => {
   await step("Enchères", () => setupEncheres(client));
   await step("Bourse", () => setupBourse(client));
   await step("Voyage", () => setupVoyage(client));
+  await step("Studio", () => setupStudio(client));
   await step("Paris sportifs", () => setupParis(client));
   await step("annonce V3", () => publishV3Announcement(client));
   await step("vidéo V3", () => publishV3Video(client));
@@ -624,6 +626,7 @@ async function onInteraction(interaction) {
   if (await handleEncheresInteraction(interaction, client)) return;
   if (await handleBourseInteraction(interaction, client)) return;
   if (await handleVoyageInteraction(interaction, client)) return;
+  if (await handleStudioInteraction(interaction, client)) return;
   if (await handleStarInteraction(interaction, client)) return;
   if (await handleLoisInteraction(interaction, client)) return;
   if (await handleCartesInteraction(interaction, client)) return;

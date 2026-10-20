@@ -1,4 +1,4 @@
-const { REST, Routes, SlashCommandBuilder } = require("discord.js");
+const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 const { clearCommand } = require("./clear");
 
 async function registerSlashCommands(client, token) {
@@ -229,6 +229,12 @@ async function registerSlashCommands(client, token) {
     new SlashCommandBuilder()
       .setName("bourse")
       .setDescription("La Bourse de la Maison : acheter et vendre des parts des entreprises")
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName("studio")
+      .setDescription("Administration : ouvrir le studio 🔞 (jeu de rôle) d'un membre")
+      .addUserOption((o) => o.setName("membre").setDescription("La créatrice").setRequired(true))
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
       .toJSON(),
     new SlashCommandBuilder()
       .setName("casier")
