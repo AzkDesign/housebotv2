@@ -101,7 +101,13 @@ async function openDeposit(interaction) {
     return;
   }
   const state = loadState();
-  const pending = Object.values(state.deposits).find((d) => d.userId === member.id && ["open", "processing", "credited"].includes(d.status));
+  let pending = Object.values(state.deposits).find((d) => d.userId === member.id && ["open", "processing", "credited"].includes(d.status));
+  // un dépôt dont le ticket a été supprimé (et qui n'a rien crédité) ne bloque plus : il est annulé
+  if (pending && pending.status !== "credited" && !(await guild.channels.fetch(pending.channelId).catch(() => null))) {
+    pending.status = "cancelled";
+    saveState(state);
+    pending = null;
+  }
   if (pending) {
     await interaction.reply({ content: `📨 Vous avez déjà un dépôt en cours : <#${pending.channelId}>`, ephemeral: true });
     return;
@@ -307,6 +313,12 @@ async function setupDepot(client) {
   for (const d of Object.values(state.deposits)) {
     if (d.status !== "open" || !d.channelId || !d.messageId) continue;
     const channel = await client.channels.fetch(d.channelId).catch(() => null);
+    if (!channel) {
+      // ticket supprimé : le dépôt (rien crédité) est annulé, il ne bloque plus le membre
+      d.status = "cancelled";
+      saveState(state);
+      continue;
+    }
     const msg = await channel?.messages.fetch(d.messageId).catch(() => null);
     if (!msg) continue;
     const stuck = msg.components?.[0]?.components?.[0]?.disabled;
