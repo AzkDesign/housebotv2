@@ -285,13 +285,16 @@ async function handleDepotInteraction(interaction, client) {
   return true;
 }
 
-// au redémarrage : un dépôt coupé en plein traitement repasse en attente
-function setupDepot() {
+// au redémarrage : un dépôt coupé en plein traitement repasse en attente, et ses boutons (grisés pendant le traitement)
+// sont réactivés dans le ticket, sinon le membre ne peut plus ni recliquer ni ouvrir un autre dépôt
+async function setupDepot(client) {
   const state = loadState();
   let changed = false;
+  const interrupted = new Set();
   for (const d of Object.values(state.deposits)) {
     if (d.status === "processing") {
       d.status = "open";
+      interrupted.add(d.id);
       changed = true;
     }
     if (["confirmed", "refused", "cancelled"].includes(d.status) && Date.now() - d.at > 30 * 86400000) {
@@ -300,6 +303,23 @@ function setupDepot() {
     }
   }
   if (changed) saveState(state);
+  if (!client) return;
+  for (const d of Object.values(state.deposits)) {
+    if (d.status !== "open" || !d.channelId || !d.messageId) continue;
+    const channel = await client.channels.fetch(d.channelId).catch(() => null);
+    const msg = await channel?.messages.fetch(d.messageId).catch(() => null);
+    if (!msg) continue;
+    const stuck = msg.components?.[0]?.components?.[0]?.disabled;
+    if (!stuck && !interrupted.has(d.id)) continue;
+    const member = await channel.guild.members.fetch(d.userId).catch(() => null);
+    await msg
+      .edit({
+        embeds: [depositEmbed(d, member, { description: "⚠️ Le traitement a été interrompu par un redémarrage du bot : **rien n'a été crédité**.\nCliquez à nouveau sur **📤 J'ai envoyé l'argent** pour relancer le dépôt." })],
+        components: [memberButtons(d.id)],
+      })
+      .catch(() => null);
+    await channel.send({ content: `<@${d.userId}> le bot a redémarré pendant votre dépôt : rien n'a été crédité, vous pouvez **recliquer sur 📤 J'ai envoyé l'argent** ci-dessus.`, allowedMentions: { users: [d.userId] } }).catch(() => null);
+  }
 }
 
 module.exports = { handleDepotInteraction, setupDepot };
