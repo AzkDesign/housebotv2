@@ -39,40 +39,33 @@ function save() {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 const rnd = (a, b) => a + Math.random() * (b - a);
-const pick = (list) => list[Math.floor(Math.random() * list.length)];
+// tirage sans répétition récente : une phrase (ou un pseudo) ne revient qu'après une bonne partie de la liste
+const recent = new WeakMap();
+function pick(list) {
+  const seen = recent.get(list) ?? [];
+  const memory = Math.min(Math.floor(list.length * 0.6), 60);
+  const fresh = list.filter((x) => !seen.includes(x));
+  const choice = (fresh.length ? fresh : list)[Math.floor(Math.random() * (fresh.length || list.length))];
+  recent.set(list, [...seen, choice].slice(-memory));
+  return choice;
+}
+// petites variations d'écriture, comme quelqu'un qui tape vite (minuscule au début, ponctuation oubliée)
+function humanize(text) {
+  let t = text;
+  if (Math.random() < 0.25) t = t.charAt(0).toLowerCase() + t.slice(1);
+  if (Math.random() < 0.2) t = t.replace(/[.!]+$/, "");
+  return t;
+}
 const dayKey = () => new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" });
 
 // --- Les faux clients ---
-const NAMES = ["Lucas_92", "maxou.dlr", "Kev1n", "TheoB", "nathan.prv", "Romain_31", "jules.off", "Ethan_lvl", "Yanis.k", "Hugo_dsg", "Mehdi.75", "Sam_rx", "Axel.vibes", "Noah_fr", "Enzo.cpt", "Adam_wav", "Victor.lmn", "Leo_mtl", "Tom.zen", "Rayan_pdc"];
-const MESSAGES = [
-  "Coucou ! J'adore ton dernier post 😍",
-  "Je viens de m'abonner, hâte de voir la suite !",
-  "Tu fais des contenus personnalisés ? Je suis prêt à payer bien sûr",
-  "C'est quand ta prochaine publication ?",
-  "Ton contenu vaut chaque centime 🔥",
-  "Petit pourboire pour ta journée ☕",
-  "Je suis fan depuis le début, continue comme ça",
-  "Tu réponds toujours, j'apprécie trop 🙏",
-  "La tenue rouge de la semaine dernière… incroyable 😳",
-  "Tu pourrais faire une série photo à la plage ?",
-  "Merci pour ta réponse d'hier, t'es la meilleure",
-  "Je recommande ton compte à tous mes potes 😎",
-  "Combien pour une vidéo dédicacée à mon prénom ?",
-  "T'as un pack spécial pour le week-end ?",
-  "Bonne nuit, à demain pour la suite 🌙",
-];
-const THANKS = ["Merci pour ta réponse 😍", "Tu m'as fait ma journée !", "Trop gentille, je reste abonné à vie", "Ahh merci, j'attends la suite avec impatience 🔥"];
+const { NAMES, MESSAGES, COMMENTS, THANKS, REVIEWS } = require("./studio-textes");
 const PRODUCTS = [
   ["📸 Photo exclusive", 40, 90],
   ["🎬 Vidéo personnalisée", 120, 300],
   ["📦 Pack du week-end", 80, 180],
   ["🌙 Album privé", 60, 140],
 ];
-const REVIEWS = {
-  5: ["Toujours au top, rien à dire 🔥", "Meilleur abonnement que j'ai pris", "Contenu de qualité et réponses rapides 😍", "Elle prend le temps de répondre à tout le monde, rare !"],
-  4: ["Très bien, un peu cher mais ça vaut le coup", "Super contenu, j'aimerais juste plus de publications", "Bonne surprise, je recommande"],
-  3: ["Pas mal, mais les réponses mettent du temps", "Correct, j'attendais un peu plus de nouveautés"],
-};
 
 // --- Salons ---
 let client = null;
@@ -163,7 +156,7 @@ async function event(userId) {
     return;
   }
   const roll = Math.random();
-  if (roll < 0.4) await postClientMessage(userId, pick(NAMES), pick(MESSAGES));
+  if (roll < 0.4) await postClientMessage(userId, pick(NAMES), humanize(pick(MESSAGES)));
   else if (roll < 0.6) {
     s.subs++;
     const paid = earn(userId, s, s.price, "nouvel abonné");
@@ -182,7 +175,7 @@ async function event(userId) {
     const stars = Math.max(3, Math.min(5, Math.round(3.4 + replyRate * 1.8 + rnd(-0.6, 0.6))));
     s.ratings = [...s.ratings, stars].slice(-100);
     await (await chanOf(s, "avis"))
-      ?.send({ embeds: [new EmbedBuilder().setColor(0xfbbf24).setAuthor({ name: `⭐ ${pick(NAMES)}` }).setTitle("⭐".repeat(stars) + "☆".repeat(5 - stars)).setDescription(pick(REVIEWS[stars]))] })
+      ?.send({ embeds: [new EmbedBuilder().setColor(0xfbbf24).setAuthor({ name: `⭐ ${pick(NAMES)}` }).setTitle("⭐".repeat(stars) + "☆".repeat(5 - stars)).setDescription(humanize(pick(REVIEWS[stars])))] })
       .catch(() => null);
   }
   save();
@@ -299,7 +292,7 @@ async function handleStudioInteraction(interaction) {
           if (!st) return;
           const tip = Math.random() < 0.4 ? earn(uid, st, Math.round(rnd(15, 70)), "pourboire après une réponse") : 0;
           save();
-          await interaction.message?.reply(`💬 **${p.client}** : ${pick(THANKS)}${tip ? ` · ☕ pourboire **+${formatEuro(tip)}**` : ""}`).catch(() => null);
+          await interaction.message?.reply(`💬 **${p.client}** : ${humanize(pick(THANKS))}${tip ? ` · ☕ pourboire **+${formatEuro(tip)}**` : ""}`).catch(() => null);
           await refreshPanel(uid).catch(() => null);
         },
         rnd(1, 4) * MINUTE
@@ -311,7 +304,6 @@ async function handleStudioInteraction(interaction) {
 }
 
 // --- Publications : la créatrice poste ses photos dans 📸・publications, le bot les met en page ---
-const COMMENTS = ["Magnifique 😍", "Wow… 🔥", "La plus belle publication de la semaine", "J'attendais ça depuis hier !", "T'es incroyable ✨", "Ce sourire 😳", "Encore, encore 🙏", "Top comme toujours", "J'adore la lumière sur celle-là", "Abonné à vie 💖"];
 async function createMedia(s, userId) {
   const cat = await client.channels.fetch(s.categoryId).catch(() => null);
   if (!cat) return null;
@@ -378,7 +370,7 @@ async function onMediaPost(msg, userId, s) {
       likes = Math.round(target * (1 - Math.pow(1 - step / steps, 2)) + rnd(-1, 1));
       if (Math.random() < Math.min(0.7, 0.08 + s.subs / 60)) {
         comments++;
-        await commentsCh?.send({ content: `💬 **${pick(NAMES)}** sur [la publication n°${num}](${sent.url}) : ${pick(COMMENTS)}`, allowedMentions: { parse: [] } }).catch(() => null);
+        await commentsCh?.send({ content: `💬 **${pick(NAMES)}** sur [la publication n°${num}](${sent.url}) : ${humanize(pick(COMMENTS))}`, allowedMentions: { parse: [] } }).catch(() => null);
       }
       await sent.edit({ embeds: counter(Math.max(0, likes), comments) }).catch(() => null);
       if (step !== steps) return;
