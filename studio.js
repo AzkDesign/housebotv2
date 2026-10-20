@@ -1,7 +1,7 @@
 // Studio 🔞 (jeu de rôle entre adultes) : une catégorie réservée à l'administration et à la créatrice, où le bot fait vivre
 // son activité fictive — nouveaux abonnés, messages de clients (suggestifs, jamais explicites), pourboires, achats de
 // contenus et avis notés. Elle répond aux messages avec un bouton ; les revenus sont en € du jeu (plafonnés par jour).
-// Garde-fous : salons « soumis à une limite d'âge », invisibles pour tout le monde sauf elle et les gérants ;
+// Accès : catégorie invisible pour tout le monde sauf elle et les gérants (pas de limite d'âge Discord : rien d'explicite) ;
 // tout se règle depuis le tableau de bord (pause, rythme, prix, fermeture). Aucun contenu réel n'est échangé.
 const {
   EmbedBuilder,
@@ -90,7 +90,8 @@ async function createStudio(guild, userId) {
   const name = pseudo(userId);
   const ow = overwrites(guild, userId);
   const category = await guild.channels.create({ name: `🔞 Studio de ${name}`.slice(0, 100), type: ChannelType.GuildCategory, permissionOverwrites: ow });
-  const make = (n) => guild.channels.create({ name: n, type: ChannelType.GuildText, parent: category.id, nsfw: true, permissionOverwrites: ow }); // salons soumis à une limite d'âge
+  // pas de limite d'âge Discord (aucun contenu explicite) : l'accès est réservé par les permissions de la catégorie
+  const make = (n) => guild.channels.create({ name: n, type: ChannelType.GuildText, parent: category.id, permissionOverwrites: ow });
   const [tableau, messages, ventes, avis] = [await make("📊・tableau-de-bord"), await make("💬・messages-clients"), await make("💰・ventes"), await make("⭐・avis")];
   return { categoryId: category.id, channels: { tableau: tableau.id, messages: messages.id, ventes: ventes.id, avis: avis.id } };
 }
@@ -217,6 +218,12 @@ function tick() {
 async function setupStudio(c) {
   client = c;
   load();
+  // les studios déjà créés perdent aussi la limite d'âge
+  for (const s of Object.values(state.studios))
+    for (const cid of Object.values(s.channels ?? {})) {
+      const ch = await client.channels.fetch(cid).catch(() => null);
+      if (ch?.nsfw) await ch.setNSFW(false).catch(() => null);
+    }
   setInterval(tick, MINUTE).unref?.();
 }
 
