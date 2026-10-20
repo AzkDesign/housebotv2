@@ -59,7 +59,19 @@ function humanize(text) {
 const dayKey = () => new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" });
 
 // --- Les faux clients ---
-const { NAMES, MESSAGES, COMMENTS, THANKS, REVIEWS } = require("./studio-textes");
+const { NAMES, MESSAGES, COMMENTS, THANKS, NEUTRAL, SAD, UPSET, REVIEWS } = require("./studio-textes");
+// le ton d'une réponse de la créatrice : positive, neutre, négative ou désagréable (mots-clés, accents ignorés)
+function replyTone(text) {
+  const t = ` ${text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")} `;
+  const has = (list) => list.some((r) => r.test(t));
+  if (has([/ta gueule/, /\bdegage/, /casse[- ]toi/, /\bconnard/, /\bcon\b/, /fous?[- ]moi la paix/, /\bfdp\b/, /\bntm\b/, /\btg\b/, /\bpervers/, /\bdebile/])) return "rude";
+  const no = has([/\bnon+\b/, /\bnan+\b/, /\bnope\b/, /\bjamais\b/, /pas question/, /pas possible/, /je (ne )?(peux|pourrai) pas/, /\bdesolee?\b/, /\bpas envie\b/, /\bpas interess/, /\bbof\b/, /\bça va pas\b/, /\bca va pas\b/, /\bpas pour (le )?moment\b/, /\bpas maintenant\b/]);
+  const yes = has([/\boui+\b/, /\bouais\b/, /\bok\b/, /\bd'?accord\b/, /\bdac\b/, /bien sur/, /avec plaisir/, /\bmerci/, /\bpromis/, /\bbientot\b/, /\bcarrement\b/, /\bgrave\b/, /pourquoi pas/, /\bje vais\b/, /\bc'?est prevu\b/, /\bbisous?\b/, /❤|😘|🥰|😍|💕|😊|💖/]);
+  if (no && !yes) return "negative";
+  if (yes && !no) return "positive";
+  // « oui mais pas maintenant », « désolée, merci » : plutôt neutre
+  return "neutral";
+}
 // les gains : abonnements, déblocages de publications et pourboires (rien d'autre n'est vendu)
 
 // --- Salons ---
@@ -280,15 +292,22 @@ async function handleStudioInteraction(interaction) {
     await interaction.message
       ?.edit({ embeds: [...interaction.message.embeds.map((e) => EmbedBuilder.from(e)), new EmbedBuilder().setColor(0xec4899).setAuthor({ name: `💌 Réponse de ${pseudo(uid)}` }).setDescription(text)], components: [] })
       .catch(() => null);
-    // le client réagit un peu plus tard, parfois avec un pourboire
+    // le client réagit un peu plus tard, selon le ton de la réponse
     if (p)
       setTimeout(
         async () => {
           const st = load().studios[uid];
           if (!st) return;
-          const tip = Math.random() < 0.4 ? earn(uid, st, Math.round(rnd(15, 70)), "pourboire après une réponse") : 0;
+          const tone = replyTone(text);
+          const tipChance = { positive: 0.55, neutral: 0.2, negative: 0, rude: 0 }[tone];
+          const leaveChance = { positive: 0, neutral: 0, negative: 0.12, rude: 0.5 }[tone];
+          const tip = Math.random() < tipChance ? earn(uid, st, Math.round(rnd(15, 70)), "pourboire après une réponse") : 0;
+          const left = st.subs > 0 && Math.random() < leaveChance;
+          if (left) st.subs--;
+          if (tone === "rude") st.ignored++; // une réponse désagréable pèse sur les prochains avis
           save();
-          await interaction.message?.reply(`💬 **${p.client}** : ${humanize(pick(THANKS))}${tip ? ` · ☕ pourboire **+${formatEuro(tip)}**` : ""}`).catch(() => null);
+          const line = pick({ positive: THANKS, neutral: NEUTRAL, negative: SAD, rude: UPSET }[tone]);
+          await interaction.message?.reply(`💬 **${p.client}** : ${humanize(line)}${tip ? ` · ☕ pourboire **+${formatEuro(tip)}**` : ""}${left ? " · 🚪 *s'est désabonné*" : ""}`).catch(() => null);
           await refreshPanel(uid).catch(() => null);
         },
         rnd(1, 4) * MINUTE

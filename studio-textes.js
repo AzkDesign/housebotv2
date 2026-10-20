@@ -88,6 +88,22 @@ const THANKS = [
   "trop contente que tu répondes aussi vite", "merciii", "super, merci beaucoup", "ça fait plaisir 😊", "merci, bonne soirée à toi", "top merci",
 ];
 
+// réaction à une réponse neutre (ni oui ni non)
+const NEUTRAL = [
+  "ok merci de ta réponse", "d'accord, je vois", "ah ok", "ça marche", "ok ok", "bon à savoir", "merci d'avoir répondu en tout cas",
+  "je note", "ok je comprends", "ah d'accord", "ok, on verra alors", "ça roule", "pas de souci", "entendu",
+];
+// réaction à un refus poli
+const SAD = [
+  "ah dommage", "ok pas grave", "tant pis, une prochaine fois peut-être", "ah mince", "ok… je comprends", "dommage j'aurais trop aimé",
+  "ah bon ok", "bon tant pis", "snif 😢", "ok je respecte", "pas grave, je reste quand même", "ah zut", "ok ok, je demandais juste",
+  "dommage mais je comprends", "ahh ok, désolé d'avoir demandé", "ok pas de souci, désolé",
+];
+// réaction à une réponse désagréable
+const UPSET = [
+  "wow ok… calme toi", "pas besoin d'être aussi sèche", "ok bah je me désabonne alors", "c'était juste une question hein",
+  "sympa l'accueil…", "ok j'ai compris", "bon ben salut", "pas très gentil ça", "ok, pas la peine de mal le prendre", "je m'attendais pas à ça de ta part",
+];
 const REVIEWS = {
   5: [
     "Toujours au top, rien à dire", "Meilleur abonnement que j'ai pris", "Contenu de qualité et réponses rapides", "Elle prend le temps de répondre à tout le monde, rare !",
@@ -108,4 +124,4 @@ const REVIEWS = {
   ],
 };
 
-module.exports = { NAMES, MESSAGES, COMMENTS, THANKS, REVIEWS };
+module.exports = { NAMES, MESSAGES, COMMENTS, THANKS, NEUTRAL, SAD, UPSET, REVIEWS };
