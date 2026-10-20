@@ -146,9 +146,22 @@ function earn(userId, s, amount, label) {
   s.revenue += paid;
   return paid;
 }
+// l'audience (0 à 1) grandit avec les abonnés : elle règle le buzz (événements, likes, commentaires, achats)
+const audience = (s) => Math.min(1, s.subs / 60);
 async function event(userId) {
   const s = load().studios[userId];
   const replyRate = s.replies / Math.max(1, s.replies + s.pending.length + s.ignored);
+  // un petit studio est souvent calme : parfois juste un nouvel abonné, parfois rien
+  if (Math.random() > 0.3 + 0.7 * audience(s)) {
+    if (Math.random() < 0.35) {
+      s.subs++;
+      const paid = earn(userId, s, s.price, "nouvel abonné");
+      await (await chanOf(s, "ventes"))?.send(`🆕 **${pick(NAMES)}** s'abonne au studio — **+${formatEuro(paid)}**`).catch(() => null);
+      await refreshPanel(userId).catch(() => null);
+    }
+    save();
+    return;
+  }
   const roll = Math.random();
   if (roll < 0.4) await postClientMessage(userId, pick(NAMES), pick(MESSAGES));
   else if (roll < 0.6) {
@@ -328,26 +341,40 @@ async function onMediaPost(msg, userId, s) {
   await msg.delete().catch(() => null);
   s.posts = (s.posts ?? 0) + 1;
   save();
-  // les abonnés réagissent pendant quelques minutes : likes, commentaires, parfois un déblocage payant
+  // Les abonnés découvrent la publication peu à peu : rien pendant 4 à 12 minutes, puis les réactions arrivent sur
+  // une à trois heures. Tout dépend de l'audience : avec peu d'abonnés, quelques likes et presque pas de commentaires ;
+  // le buzz grandit avec les abonnés, donc au fil des jours.
+  const a = audience(s);
   let likes = 0, comments = 0;
-  const target = Math.round(rnd(12, 45) + s.subs * 0.8);
-  for (let step = 1; step <= 4; step++)
+  const target = Math.max(1, Math.round(s.subs * rnd(0.35, 0.8) + rnd(0, 3)));
+  const steps = 5;
+  let at = rnd(4, 12) * MINUTE;
+  for (let step = 1; step <= steps; step++, at += rnd(10, 35) * MINUTE)
     setTimeout(async () => {
-      likes = Math.round((target * step) / 4 + rnd(-2, 2));
-      if (Math.random() < 0.6) {
+      // les likes montent vite au début, puis ralentissent
+      likes = Math.round(target * (1 - Math.pow(1 - step / steps, 2)) + rnd(-1, 1));
+      if (Math.random() < Math.min(0.7, 0.08 + s.subs / 60)) {
         comments++;
         await sent.reply({ content: `💬 **${pick(NAMES)}** : ${pick(COMMENTS)}`, allowedMentions: { parse: [], repliedUser: false } }).catch(() => null);
       }
-      await sent.edit({ embeds: post(Math.max(0, likes), comments), attachments: sent.attachments.map((a) => a) }).catch(() => null);
-      if (step === 4 && Math.random() < 0.5) {
-        const st = load().studios[userId];
-        if (!st) return;
-        const paid = earn(userId, st, Math.round(rnd(20, 60)), "publication débloquée");
-        save();
-        await (await chanOf(st, "ventes"))?.send(`🔓 **${pick(NAMES)}** débloque la dernière publication — **+${formatEuro(paid)}**`).catch(() => null);
-        await refreshPanel(userId).catch(() => null);
+      await sent.edit({ embeds: post(Math.max(0, likes), comments), attachments: sent.attachments.map((x) => x) }).catch(() => null);
+      if (step !== steps) return;
+      const st = load().studios[userId];
+      if (!st) return;
+      // une belle publication fait venir des abonnés, et parfois quelqu'un la débloque
+      if (Math.random() < 0.15 + 0.6 * a) {
+        const n = 1 + Math.floor(st.subs / 40);
+        st.subs += n;
+        const paid = earn(userId, st, st.price * n, "nouveaux abonnés après une publication");
+        await (await chanOf(st, "ventes"))?.send(`🆕 ${n > 1 ? `**${n} nouveaux abonnés**` : `**${pick(NAMES)}** s'abonne`} grâce à la dernière publication — **+${formatEuro(paid)}**`).catch(() => null);
       }
-    }, step * rnd(0.6, 1.6) * MINUTE);
+      if (Math.random() < 0.1 + 0.5 * a) {
+        const paid = earn(userId, st, Math.round(rnd(20, 60) * (0.6 + a)), "publication débloquée");
+        await (await chanOf(st, "ventes"))?.send(`🔓 **${pick(NAMES)}** débloque la dernière publication — **+${formatEuro(paid)}**`).catch(() => null);
+      }
+      save();
+      await refreshPanel(userId).catch(() => null);
+    }, at);
 }
 
 // --- Réglages en message privé au bot (ADMIN_DM, ou un gérant) ---
