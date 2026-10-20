@@ -23,21 +23,21 @@ const MESSAGES = [
   "honnêtement t'es la meilleure créatrice que je suis", "j'ai montré ta photo à mon pote il était choqué mdr", "ta lumière naturelle elle rend trop bien",
   "c'est fou comme t'es photogénique", "t'as changé de coiffure ? ça te va trop bien", "Toujours aussi classe",
   // questions
-  "C'est quand ta prochaine publication ?", "tu postes ce soir ?", "Tu fais des contenus personnalisés ?", "t'as un pack pour le week-end ?",
-  "Combien pour une vidéo dédicacée à mon prénom ?", "tu prends les demandes perso ou pas du tout ?", "c'est toi qui fais tes photos toute seule ?",
+  "C'est quand ta prochaine publication ?", "tu postes ce soir ?", "tu postes combien de fois par semaine ?", "t'as prévu quoi ce week-end ?",
+  "tu prends les suggestions de thèmes ?", "t'aimes bien quand on te propose des idées ?", "c'est toi qui fais tes photos toute seule ?",
   "T'as un appareil photo pro ou c'est ton tel ?", "tu réponds à tout le monde ou j'ai de la chance ? 😅", "c'est quoi ta photo préférée de toutes ?",
-  "tu fais des promos de temps en temps ?", "Y'a moyen d'avoir l'album complet d'hier ?", "t'as une boutique pour les tenues que tu portes ?",
+  "tu fais des promos de temps en temps ?", "y'aura d'autres photos de la série d'hier ?", "elle vient d'où ta tenue d'hier ?",
   "tu ferais une série en tenue de soirée ?", "Tu pourrais faire une série photo à la plage ?", "tu partirais pas en vacances bientôt ? ça ferait de belles photos",
-  "c'est quand l'anniversaire de ton compte ?", "tu penses faire un pack spécial pour noël ?", "elle est où la photo avec la veste en jean ? je la retrouve plus",
+  "c'est quand l'anniversaire de ton compte ?", "tu feras une série spéciale pour noël ?", "elle est où la photo avec la veste en jean ? je la retrouve plus",
   "t'as combien d'abonnés maintenant ?", "le prix de l'abo il va augmenter ?", "tu fais un tarif pour les anciens abonnés ?",
   "Tu peux refaire le même genre que vendredi ?", "tu préfères la couleur ou le noir et blanc ?", "c'est quel filtre que t'utilises ?",
   "tu vis dans quelle ville ? (t'es pas obligée de répondre hein)", "tu dors jamais ou quoi ? t'as posté à 2h du mat 😂", "t'es plutôt matin ou soir pour les photos ?",
   "si je te propose un thème tu le fais ?", "t'aimes bien quand on te fait des suggestions ?",
   // demandes
-  "je veux bien une photo dédicacée pour mon anniv si c'est possible 🎂", "Est-ce que je peux avoir la version sans filtre de la dernière ?",
+  "c'est mon anniv aujourd'hui, une nouvelle photo ce serait le meilleur cadeau 🎂", "t'es encore plus belle sans filtre je suis sûr",
   "fais plus de photos en extérieur stp", "jveux trop une série avec la robe noire", "Refais celle avec le chapeau, elle était parfaite",
-  "un pack rétro années 80 ça serait ouf", "mets la suite de la série d'hier stp jsuis en manque", "tu peux me mettre de côté le prochain pack ?",
-  "je réserve la prochaine vidéo perso, dis moi le prix", "fais une story de ta journée ça serait cool",
+  "une série rétro années 80 ça serait ouf", "mets la suite de la série d'hier stp jsuis en manque", "j'ai débloqué ta dernière publication direct",
+  "je débloque tout ce que tu postes, t'inquiète", "fais une série sur ta journée ça serait cool",
   // vie, petites nouvelles
   "Je viens de m'abonner, hâte de voir la suite !", "re-abonné après une pause, tu m'avais manqué", "j'ai enfin eu ma paie donc je reprends l'abo 😂",
   "première fois que j'écris à quelqu'un sur un site comme ça, sois indulgente 😅", "mon pote m'a parlé de toi, il avait raison", "je suis là depuis le premier jour, fidèle au poste",
@@ -46,7 +46,7 @@ const MESSAGES = [
   "bonne nuit, à demain pour la suite 🌙", "Bonjour bonjour ☀️", "coucou toi", "hey ça va ?", "salut ! ça fait longtemps que je t'ai pas écrit",
   "désolé pour le message d'hier j'étais fatigué mdr", "je t'envoie un petit pourboire pour ton café ☕", "Petit pourboire pour ta journée",
   // remerciements, relances
-  "Merci pour ta réponse d'hier, t'es la meilleure", "tu réponds toujours, j'apprécie trop", "merci pour le pack du week-end, il valait le coup",
+  "Merci pour ta réponse d'hier, t'es la meilleure", "tu réponds toujours, j'apprécie trop", "merci pour la série du week-end, elle valait le coup",
   "t'as pas vu mon message d'avant-hier ?", "je relance au cas où 😇", "pas de souci si tu réponds pas tout de suite hein",
   "ton contenu vaut chaque centime", "je recommande ton compte à tous mes potes", "meilleur abonnement que j'ai jamais pris franchement",
   "jsuis content d'être abonné, voilà c'est tout", "j'aime bien ton humour dans les légendes", "ta légende d'hier m'a fait rire",
@@ -91,14 +91,14 @@ const THANKS = [
 const REVIEWS = {
   5: [
     "Toujours au top, rien à dire", "Meilleur abonnement que j'ai pris", "Contenu de qualité et réponses rapides", "Elle prend le temps de répondre à tout le monde, rare !",
-    "parfait, je recommande à 100%", "jamais déçu depuis que je suis abonné", "les packs valent vraiment leur prix", "créatrice adorable et contenu soigné",
+    "parfait, je recommande à 100%", "jamais déçu depuis que je suis abonné", "les publications valent vraiment le déblocage", "créatrice adorable et contenu soigné",
     "5 étoiles c'est pas assez", "le meilleur compte que je connaisse", "qualité pro, réponses gentilles, que demander de plus", "abonné depuis le début et toujours content",
     "photos magnifiques, publication régulière", "elle écoute les suggestions, j'adore", "excellent, foncez", "rien à redire, top",
   ],
   4: [
     "Très bien, un peu cher mais ça vaut le coup", "Super contenu, j'aimerais juste plus de publications", "Bonne surprise, je recommande",
     "très bon compte, les réponses mettent parfois un peu de temps", "contenu top, j'aimerais plus de séries à thème", "presque parfait, il manque juste un peu de régularité",
-    "bien, les packs sont chouettes", "je suis content de mon abonnement", "bon rapport qualité prix", "très sympa, quelques photos se ressemblent un peu",
+    "bien, les séries sont chouettes", "je suis content de mon abonnement", "bon rapport qualité prix", "très sympa, quelques photos se ressemblent un peu",
     "belle découverte", "j'attends les prochaines séries avec impatience",
   ],
   3: [

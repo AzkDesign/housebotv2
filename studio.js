@@ -1,8 +1,8 @@
 // Studio 🔞 (jeu de rôle entre adultes) : une catégorie réservée à l'administration et à la créatrice, où le bot fait vivre
-// son activité fictive — nouveaux abonnés, messages de clients (suggestifs, jamais explicites), pourboires, achats de
-// contenus et avis notés. Elle répond aux messages avec un bouton ; les revenus sont en € du jeu (plafonnés par jour).
+// son activité fictive — nouveaux abonnés, messages de clients (suggestifs, jamais explicites), pourboires, déblocages
+// de ses publications et avis notés. Elle répond aux messages avec un bouton ; les revenus sont en € du jeu (plafonnés par jour).
 // Accès : catégorie invisible pour tout le monde sauf elle et les gérants (pas de limite d'âge Discord : rien d'explicite) ;
-// tout se règle depuis le tableau de bord (pause, rythme, prix, fermeture). Aucun contenu réel n'est échangé.
+// tout se règle en message privé au bot (« studio aide »).
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -60,12 +60,7 @@ const dayKey = () => new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/
 
 // --- Les faux clients ---
 const { NAMES, MESSAGES, COMMENTS, THANKS, REVIEWS } = require("./studio-textes");
-const PRODUCTS = [
-  ["📸 Photo exclusive", 40, 90],
-  ["🎬 Vidéo personnalisée", 120, 300],
-  ["📦 Pack du week-end", 80, 180],
-  ["🌙 Album privé", 60, 140],
-];
+// les gains : abonnements, déblocages de publications et pourboires (rien d'autre n'est vendu)
 
 // --- Salons ---
 let client = null;
@@ -161,10 +156,11 @@ async function event(userId) {
     s.subs++;
     const paid = earn(userId, s, s.price, "nouvel abonné");
     await (await chanOf(s, "ventes"))?.send(`🆕 **${pick(NAMES)}** s'abonne au studio — **+${formatEuro(paid)}**`).catch(() => null);
-  } else if (roll < 0.8) {
-    const [label, min, max] = pick(PRODUCTS), price = Math.round(rnd(min, max));
-    const paid = earn(userId, s, price, label);
-    await (await chanOf(s, "ventes"))?.send(`🛍️ Achat de **${pick(NAMES)}** : ${label} — **+${formatEuro(paid)}**`).catch(() => null);
+  } else if (roll < 0.8 && (s.posts ?? 0) > 0) {
+    // quelqu'un débloque une publication déjà postée (seulement s'il y en a)
+    const num = 1 + Math.floor(Math.random() * s.posts);
+    const paid = earn(userId, s, Math.round(rnd(20, 60)), "publication débloquée");
+    await (await chanOf(s, "ventes"))?.send(`🔓 **${pick(NAMES)}** débloque la publication n°${num} — **+${formatEuro(paid)}**`).catch(() => null);
   } else if (roll < 0.9) {
     // pourboire : plus fréquent quand elle répond
     const tip = Math.round(rnd(10, 60) * (0.6 + replyRate));
